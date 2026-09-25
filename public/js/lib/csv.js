@@ -12,7 +12,11 @@ export function toCsv(kopfzeile, zeilen) {
 }
 
 export function downloadText(dateiname, text, mime = 'text/csv;charset=utf-8') {
-  const url = URL.createObjectURL(new Blob([text], { type: mime }));
+  downloadBlob(dateiname, new Blob([text], { type: mime }));
+}
+
+export function downloadBlob(dateiname, blob) {
+  const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
   a.download = dateiname;

@@ -15,6 +15,18 @@ export const ART_LABEL = {
   sonstiges: 'Sonstiges',
 };
 
+export const KATEGORIE_LABEL = {
+  kolumne: 'Kolumne',
+  ausserordentlich: 'Außerordentliches Honorar',
+};
+
+export const ROLLEN_LABEL = {
+  autor: 'Autor:in',
+  redaktion: 'Redaktion',
+  buchhaltung: 'Buchhaltung',
+  admin: 'Admin',
+};
+
 export const AKTION_LABEL = {
   eingereicht: 'Eingereicht',
   angenommen: 'Angenommen',
@@ -22,7 +34,18 @@ export const AKTION_LABEL = {
   betrag_korrigiert: 'Betrag korrigiert',
   kommentar: 'Interner Kommentar',
   bezahlt: 'Als bezahlt markiert',
+  zurueckgeholt: 'Leistungen zur Überarbeitung zurückgeholt',
 };
+
+const MONATE = ['Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August',
+  'September', 'Oktober', 'November', 'Dezember'];
+
+/** "2026-09" oder "2026-09-25" -> "September 2026" */
+export function formatMonat(iso) {
+  if (!iso) return '';
+  const [j, m] = String(iso).split('-');
+  return `${MONATE[Number(m) - 1]} ${j}`;
+}
 
 const eur = new Intl.NumberFormat('de-AT', { style: 'currency', currency: 'EUR' });
 const zahl = new Intl.NumberFormat('de-AT', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
@@ -35,6 +58,12 @@ export function formatEuro(betrag) {
 /** 1234.5 -> "1234,50" (für Banking-Apps und CSV) */
 export function formatBetragPlain(betrag) {
   return zahl.format(Number(betrag));
+}
+
+/** 1234.5 -> "1.234,50" (für die Honorarnote) */
+export function formatBetragDokument(betrag) {
+  const [ganz, komma] = Number(betrag).toFixed(2).split('.');
+  return `${ganz.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${komma}`;
 }
 
 /** "2026-09-01" -> "01.09.2026" */
@@ -51,6 +80,11 @@ export function formatZeitpunkt(iso) {
     timeZone: 'Europe/Vienna', day: '2-digit', month: '2-digit', year: 'numeric',
     hour: '2-digit', minute: '2-digit',
   });
+}
+
+/** Summe der Positionsbeträge, cent-genau */
+export function summe(positionen) {
+  return Math.round(positionen.reduce((s, p) => s + Math.round(Number(p.betrag) * 100), 0)) / 100;
 }
 
 /** Heutiges Datum in Wien als "JJJJ-MM-TT" */
@@ -77,8 +111,9 @@ export function parseBetrag(eingabe) {
 }
 
 /** Verwendungszweck, max. 140 Zeichen (SEPA-Grenze) */
-export function verwendungszweck(nummer, titel) {
-  const text = `Honorar ${nummer} - ${String(titel ?? '').replace(/\s+/g, ' ').trim()}`;
+export function verwendungszweck(nummer, zusatz) {
+  const z = String(zusatz ?? '').replace(/\s+/g, ' ').trim();
+  const text = z ? `Honorar ${nummer} - ${z}` : `Honorar ${nummer}`;
   return text.length > 140 ? text.slice(0, 139) + '…' : text;
 }
 

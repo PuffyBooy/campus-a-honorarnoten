@@ -44,6 +44,7 @@ export function meldung(text, typ = 'info') {
   el.setAttribute('role', typ === 'fehler' ? 'alert' : 'status');
   el.textContent = text;
   box.append(el);
+  while (box.children.length > 2) box.firstElementChild.remove();
   setTimeout(() => el.remove(), typ === 'fehler' ? 8000 : 4000);
 }
 
@@ -51,11 +52,8 @@ export function fehlerText(error) {
   if (!error) return 'Unbekannter Fehler.';
   const msg = error.message || String(error);
   if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
-    return 'Keine Verbindung zum Server. Bitte Internetverbindung prüfen.';
+    return 'Datei konnte nicht geladen werden. Bitte Seite neu laden.';
   }
-  // Meldungen aus unseren Datenbankfunktionen sind bereits deutsch
-  if (/permission denied|row-level security/i.test(msg)) return 'Dafür fehlt dir die Berechtigung.';
-  if (/JWT expired|invalid JWT/i.test(msg)) return 'Deine Sitzung ist abgelaufen. Bitte neu anmelden.';
   return msg;
 }
 

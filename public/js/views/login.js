@@ -1,91 +1,107 @@
-// Anmeldung per Magic Link (alternativ 6-stelliger Code aus derselben E-Mail)
+// Anmelden / Konto anlegen, dazu Schnellzugang zu den Demo-Konten
+import { DEMO_KONTEN, DEMO_PASSWORT } from '../demo.js';
 import { esc } from '../lib/format.js';
 import { fehlerText, mitSperre } from '../lib/ui.js';
 
-function fehlerAusUrl() {
-  const h = new URLSearchParams(location.hash.replace(/^#/, ''));
-  const q = new URLSearchParams(location.search);
-  const code = h.get('error_code') || q.get('error_code');
-  if (code === 'otp_expired') return 'Der Anmeldelink ist abgelaufen oder wurde schon verwendet. Bitte fordere einen neuen an.';
-  return h.get('error_description') || q.get('error_description');
-}
-
-export function render(el, { supabase }) {
-  const urlFehler = fehlerAusUrl();
+export function render(el, { store, nachAnmeldung }) {
   el.innerHTML = `
-    <section class="karte schmal">
-      <h1>Anmelden</h1>
-      <p>Gib deine E-Mail-Adresse ein. Du bekommst einen Anmeldelink per E-Mail – kein Passwort nötig.</p>
-      ${urlFehler ? `<p class="fehlerbox" role="alert">${esc(urlFehler)}</p>` : ''}
-      <form id="login-form" novalidate>
-        <label for="login-email">E-Mail-Adresse</label>
-        <input id="login-email" name="email" type="email" autocomplete="email" inputmode="email" required>
-        <p class="feldfehler" id="login-fehler" role="alert"></p>
-        <button class="btn btn-primaer btn-breit" type="submit">Anmeldelink senden</button>
-      </form>
-      <div id="login-gesendet" hidden>
-        <p class="erfolgbox">Link wurde gesendet an <strong id="login-adresse"></strong>.
-          Bitte öffne die E-Mail und tippe auf den Link. Schau auch im Spam-Ordner nach.</p>
-        <form id="code-form" novalidate>
-          <label for="login-code">Oder Code aus der E-Mail eingeben</label>
-          <input id="login-code" name="code" inputmode="numeric" autocomplete="one-time-code"
-                 pattern="[0-9]{6,10}" maxlength="10">
-          <p class="feldfehler" id="code-fehler" role="alert"></p>
-          <button class="btn btn-breit" type="submit">Mit Code anmelden</button>
+    <div class="login-raster">
+      <section class="karte">
+        <h1>Honorarnoten</h1>
+        <p class="einleitung">Leistungen laufend erfassen, einmal im Monat als Honorarnote abschicken.</p>
+        <div class="reiter" role="tablist">
+          <button type="button" role="tab" id="t-anmelden" aria-selected="true" aria-controls="p-anmelden">Anmelden</button>
+          <button type="button" role="tab" id="t-registrieren" aria-selected="false" aria-controls="p-registrieren">Konto anlegen</button>
+        </div>
+
+        <form id="p-anmelden" role="tabpanel" aria-labelledby="t-anmelden" novalidate>
+          <label for="a-email">E-Mail-Adresse</label>
+          <input id="a-email" name="email" type="email" autocomplete="username" inputmode="email" required>
+          <label for="a-pw">Passwort</label>
+          <input id="a-pw" name="passwort" type="password" autocomplete="current-password" required>
+          <p class="feldfehler" role="alert"></p>
+          <button class="btn btn-primaer btn-breit" type="submit">Anmelden</button>
         </form>
-        <p><button type="button" class="btn-link" id="login-zurueck">Andere E-Mail-Adresse verwenden</button></p>
-      </div>
-    </section>`;
 
-  const form = el.querySelector('#login-form');
-  const gesendet = el.querySelector('#login-gesendet');
-  let email = '';
+        <form id="p-registrieren" role="tabpanel" aria-labelledby="t-registrieren" hidden novalidate>
+          <div class="zeile">
+            <div class="feld"><label for="r-vorname">Vorname</label>
+              <input id="r-vorname" name="vorname" autocomplete="given-name" required></div>
+            <div class="feld"><label for="r-nachname">Nachname</label>
+              <input id="r-nachname" name="nachname" autocomplete="family-name" required></div>
+          </div>
+          <label for="r-email">E-Mail-Adresse</label>
+          <input id="r-email" name="email" type="email" autocomplete="email" inputmode="email" required>
+          <label for="r-pw">Passwort (mind. 8 Zeichen)</label>
+          <input id="r-pw" name="passwort" type="password" autocomplete="new-password" minlength="8" required>
+          <p class="feldfehler" role="alert"></p>
+          <button class="btn btn-primaer btn-breit" type="submit">Konto anlegen</button>
+          <p class="hinweis">Adresse und Bankverbindung trägst du danach einmal im Profil ein –
+            sie werden für jede Honorarnote automatisch übernommen.</p>
+        </form>
+      </section>
 
-  form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const fehler = el.querySelector('#login-fehler');
-    email = form.email.value.trim().toLowerCase();
-    fehler.textContent = '';
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
-      fehler.textContent = 'Bitte eine gültige E-Mail-Adresse eingeben.';
-      return;
-    }
-    await mitSperre(form.querySelector('button'), async () => {
-      const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: { emailRedirectTo: location.origin + location.pathname },
-      });
-      if (error) {
-        fehler.textContent = /rate limit|security purposes/i.test(error.message)
-          ? 'Bitte warte kurz, bevor du einen neuen Link anforderst.'
-          : fehlerText(error);
-        return;
+      <section class="karte demo">
+        <h2>Demo-Zugänge</h2>
+        <p class="hinweis">Zum Ausprobieren jeder Rolle. Passwort jeweils <code>${esc(DEMO_PASSWORT)}</code>.
+          Tipp: In zwei Browser-Tabs kann man gleichzeitig verschiedene Rollen nutzen.</p>
+        <ul class="demo-liste">
+          ${DEMO_KONTEN.map((k) => `
+            <li><button type="button" class="btn btn-breit demo-knopf" data-email="${esc(k.email)}">
+              <span><strong>${esc(k.rolle)}</strong><br><span class="klein">${esc(k.text)} · ${esc(k.email)}</span></span>
+              <span aria-hidden="true">→</span></button></li>`).join('')}
+        </ul>
+      </section>
+    </div>`;
+
+  const reiter = { anmelden: el.querySelector('#t-anmelden'), registrieren: el.querySelector('#t-registrieren') };
+  const panels = { anmelden: el.querySelector('#p-anmelden'), registrieren: el.querySelector('#p-registrieren') };
+  for (const [name, knopf] of Object.entries(reiter)) {
+    knopf.addEventListener('click', () => {
+      for (const k of Object.keys(reiter)) {
+        reiter[k].setAttribute('aria-selected', String(k === name));
+        panels[k].hidden = k !== name;
       }
-      el.querySelector('#login-adresse').textContent = email;
-      form.hidden = true;
-      gesendet.hidden = false;
+      panels[name].querySelector('input').focus();
     });
-  });
+  }
 
-  el.querySelector('#code-form').addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const codeForm = ev.currentTarget;
-    const fehler = el.querySelector('#code-fehler');
-    const token = codeForm.code.value.replace(/\s/g, '');
+  async function absenden(form, fn) {
+    const fehler = form.querySelector('.feldfehler');
     fehler.textContent = '';
-    if (!/^\d{6,10}$/.test(token)) {
-      fehler.textContent = 'Bitte den Code aus der E-Mail eingeben.';
-      return;
-    }
-    await mitSperre(codeForm.querySelector('button'), async () => {
-      const { error } = await supabase.auth.verifyOtp({ email, token, type: 'email' });
-      if (error) fehler.textContent = 'Der Code ist ungültig oder abgelaufen.';
-      // Bei Erfolg rendert app.js über onAuthStateChange neu
+    await mitSperre(form.querySelector('button[type=submit]'), async () => {
+      try {
+        nachAnmeldung(await fn());
+      } catch (e) {
+        fehler.textContent = fehlerText(e);
+      }
+    });
+  }
+
+  panels.anmelden.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const f = ev.currentTarget;
+    absenden(f, async () => { await store.anmelden(f.email.value, f.passwort.value); });
+  });
+
+  panels.registrieren.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const f = ev.currentTarget;
+    absenden(f, async () => {
+      await store.registrieren({
+        vorname: f.vorname.value, nachname: f.nachname.value, email: f.email.value, passwort: f.passwort.value,
+      });
+      return 'profil'; // neues Konto: zuerst Adresse und Bankverbindung eintragen
     });
   });
 
-  el.querySelector('#login-zurueck').addEventListener('click', () => {
-    gesendet.hidden = true;
-    form.hidden = false;
-  });
+  el.querySelectorAll('.demo-knopf').forEach((knopf) => knopf.addEventListener('click', () =>
+    mitSperre(knopf, async () => {
+      try {
+        await store.anmelden(knopf.dataset.email, DEMO_PASSWORT);
+        nachAnmeldung();
+      } catch (e) {
+        panels.anmelden.querySelector('.feldfehler').textContent = fehlerText(e);
+      }
+    })));
 }

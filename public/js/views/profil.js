@@ -1,0 +1,141 @@
+// Profil: Name, Adresse und Bankverbindung einmal speichern – wird für jede Honorarnote übernommen
+import { ROLLEN_LABEL, esc } from '../lib/format.js';
+import { formatIban, ibanFehler, bicIstGueltig } from '../lib/iban.js';
+import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
+
+function feld(name, label, wert, { typ = 'text', pflicht = true, attrs = '', hinweis = '' } = {}) {
+  return `
+    <div class="feld">
+      <label for="p-${name}">${esc(label)}${pflicht ? ' <span class="pflicht" aria-hidden="true">*</span>' : ' <span class="optional">(optional)</span>'}</label>
+      <input id="p-${name}" name="${name}" type="${typ}" value="${esc(wert)}" ${pflicht ? 'required' : ''} ${attrs}>
+      ${hinweis ? `<p class="hinweis">${hinweis}</p>` : ''}
+      <p class="feldfehler" id="pe-${name}"></p>
+    </div>`;
+}
+
+export function render(el, { store, nutzer, navigate, neuLaden }) {
+  const p = nutzer.profil;
+  const istAutor = nutzer.rollen.includes('autor');
+  const vollstaendig = store.profilVollstaendig(nutzer);
+  const kontakt = store.einstellungen().datenschutzKontakt;
+
+  el.innerHTML = `
+    <h1>Mein Profil</h1>
+    ${istAutor && !vollstaendig ? `<p class="hinweisbox" role="status">Bitte ergänze Adresse und Bankverbindung –
+      dann musst du sie bei deinen Honorarnoten nie wieder angeben.</p>` : ''}
+    <div class="spalten">
+      <form class="karte" id="profil-form" novalidate>
+        <fieldset>
+          <legend>Persönliche Daten</legend>
+          <div class="zeile">
+            ${feld('vorname', 'Vorname', nutzer.vorname, { attrs: 'autocomplete="given-name" maxlength="100"' })}
+            ${feld('nachname', 'Nachname', nutzer.nachname, { attrs: 'autocomplete="family-name" maxlength="100"' })}
+          </div>
+          ${feld('email', 'E-Mail', nutzer.email, { typ: 'email', attrs: 'autocomplete="email" inputmode="email"' })}
+          ${istAutor ? `
+          ${feld('strasse', 'Straße und Hausnummer', p.strasse, { attrs: 'autocomplete="address-line1" maxlength="150"' })}
+          ${feld('plz_ort', 'PLZ und Ort', p.plz_ort, { attrs: 'autocomplete="postal-code" maxlength="100" placeholder="1010 Wien"' })}` : ''}
+        </fieldset>
+        ${istAutor ? `
+        <fieldset>
+          <legend>Bankverbindung</legend>
+          ${feld('kontoinhaber', 'Kontoinhaber:in', p.kontoinhaber, { attrs: 'autocomplete="name" maxlength="70"' })}
+          ${feld('iban', 'IBAN', formatIban(p.iban), { attrs: 'autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="42" placeholder="AT.. .... .... .... ...."' })}
+          ${feld('bic', 'BIC', p.bic, { pflicht: false, attrs: 'autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="11"' })}
+        </fieldset>
+        <aside class="datenschutz" aria-label="Datenschutzhinweis">
+          <strong>Datenschutz:</strong> Deine Adresse und Bankverbindung werden ausschließlich für die
+          Abrechnung und Auszahlung deiner Honorare verwendet. Die Redaktion sieht sie nicht, nur die
+          Buchhaltung. Die Honorarnoten werden im Rahmen der gesetzlichen Aufbewahrungspflichten gespeichert.
+          ${kontakt ? `Fragen, Auskunft oder Löschung: <a href="mailto:${esc(kontakt)}">${esc(kontakt)}</a>.` : ''}
+        </aside>` : ''}
+        <p class="feldfehler" id="pe-formular" role="alert"></p>
+        <button class="btn btn-primaer" type="submit">Profil speichern</button>
+      </form>
+
+      <div>
+        <section class="karte">
+          <h2>Meine Rollen</h2>
+          <p>${nutzer.rollen.map((r) => `<span class="badge badge-rolle">${esc(ROLLEN_LABEL[r])}</span>`).join(' ') || '–'}</p>
+          <p class="hinweis">Rollen vergibt ein Admin.</p>
+        </section>
+        <form class="karte" id="pw-form" novalidate>
+          <h2>Passwort ändern</h2>
+          <input type="text" name="username" value="${esc(nutzer.email)}" autocomplete="username" hidden>
+          <label for="pw-alt">Bisheriges Passwort</label>
+          <input id="pw-alt" name="alt" type="password" autocomplete="current-password" required>
+          <label for="pw-neu">Neues Passwort (mind. 8 Zeichen)</label>
+          <input id="pw-neu" name="neu" type="password" autocomplete="new-password" minlength="8" required>
+          <p class="feldfehler" role="alert"></p>
+          <button class="btn" type="submit">Passwort ändern</button>
+        </form>
+      </div>
+    </div>`;
+
+  const form = el.querySelector('#profil-form');
+  const setFehler = (name, t) => {
+    const e = el.querySelector(`#pe-${name}`);
+    if (e) e.textContent = t || '';
+    form.elements[name]?.setAttribute?.('aria-invalid', t ? 'true' : 'false');
+  };
+  form.addEventListener('input', (ev) => ev.target.name && setFehler(ev.target.name, ''));
+
+  if (istAutor) {
+    form.iban.addEventListener('blur', () => {
+      if (!form.iban.value.trim()) return;
+      const f = ibanFehler(form.iban.value);
+      setFehler('iban', f);
+      if (!f) form.iban.value = formatIban(form.iban.value);
+    });
+  }
+
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    setFehler('formular', '');
+    const f = {};
+    for (const n of ['vorname', 'nachname', 'strasse', 'plz_ort', 'kontoinhaber']) {
+      if (form.elements[n] && !form.elements[n].value.trim()) f[n] = 'Bitte ausfüllen.';
+    }
+    if (istAutor) {
+      const ibanF = ibanFehler(form.iban.value);
+      if (ibanF) f.iban = ibanF;
+      if (!bicIstGueltig(form.bic.value)) f.bic = 'Der BIC hat 8 oder 11 Zeichen, z. B. BKAUATWW.';
+    }
+    if (Object.keys(f).length) {
+      Object.entries(f).forEach(([n, t]) => setFehler(n, t));
+      form.elements[Object.keys(f)[0]].focus();
+      return;
+    }
+    await mitSperre(form.querySelector('[type=submit]'), async () => {
+      try {
+        store.profilSpeichern({
+          vorname: form.vorname.value, nachname: form.nachname.value, email: form.email.value,
+          strasse: form.strasse?.value ?? p.strasse, plz_ort: form.plz_ort?.value ?? p.plz_ort,
+          kontoinhaber: form.kontoinhaber?.value ?? p.kontoinhaber, iban: form.iban?.value ?? p.iban,
+          bic: form.bic?.value ?? p.bic,
+        });
+        meldung('Profil gespeichert.', 'erfolg');
+        if (istAutor && !vollstaendig) navigate('leistungen');
+        else neuLaden();
+      } catch (e) {
+        setFehler('formular', fehlerText(e));
+      }
+    });
+  });
+
+  const pwForm = el.querySelector('#pw-form');
+  pwForm.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const fehler = pwForm.querySelector('.feldfehler');
+    fehler.textContent = '';
+    await mitSperre(pwForm.querySelector('[type=submit]'), async () => {
+      try {
+        await store.passwortAendern(pwForm.alt.value, pwForm.neu.value);
+        pwForm.reset();
+        meldung('Passwort geändert.', 'erfolg');
+      } catch (e) {
+        fehler.textContent = fehlerText(e);
+      }
+    });
+  });
+}

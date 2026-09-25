@@ -4,6 +4,9 @@ import { ibanFehler, ibanIstGueltig, formatIban, bicIstGueltig } from '../public
 import { parseBetrag, verwendungszweck, formatBetragPlain, formatDatum, esc } from '../public/js/lib/format.js';
 import { epcPayload, utf8BinaryString } from '../public/js/lib/epc.js';
 import { toCsv } from '../public/js/lib/csv.js';
+import { honorarnoteNummer, namensteil, initialen } from '../public/js/lib/nummer.js';
+import { summe, formatMonat, formatBetragDokument } from '../public/js/lib/format.js';
+import { ortAusPlzOrt } from '../public/js/lib/honorarnote-docx.js';
 
 test('IBAN-Prüfung', () => {
   assert.ok(ibanIstGueltig('AT61 1904 3002 3457 3201'));
@@ -41,8 +44,37 @@ test('Formatierung', () => {
 });
 
 test('Verwendungszweck', () => {
-  assert.equal(verwendungszweck('CC-2026-0042', 'Reportage  Schulball'), 'Honorar CC-2026-0042 - Reportage Schulball');
-  assert.equal(verwendungszweck('CC-2026-0042', 'x'.repeat(300)).length, 140);
+  assert.equal(verwendungszweck('MUSTERFRAU-MA-2026-01', 'Maria  Musterfrau September 2026'),
+    'Honorar MUSTERFRAU-MA-2026-01 - Maria Musterfrau September 2026');
+  assert.equal(verwendungszweck('MUSTERFRAU-MA-2026-01'), 'Honorar MUSTERFRAU-MA-2026-01');
+  assert.equal(verwendungszweck('X', 'x'.repeat(300)).length, 140);
+});
+
+test('Nummer laut Vorlage: NACHNAME-Initialen-Jahr-laufende Nummer', () => {
+  assert.equal(honorarnoteNummer({ vorname: 'Maria', nachname: 'Musterfrau', jahr: 2026, laufendeNummer: 1 }), 'MUSTERFRAU-MA-2026-01');
+  assert.equal(honorarnoteNummer({ vorname: 'Maria', nachname: 'Musterfrau', jahr: 2026, laufendeNummer: 2 }), 'MUSTERFRAU-MA-2026-02');
+  assert.equal(honorarnoteNummer({ vorname: 'Jonas', nachname: 'Weiß', jahr: 2026, laufendeNummer: 12 }), 'WEISS-JO-2026-12');
+  assert.equal(namensteil('Müller-Lüdenscheidt'), 'MUELLER-LUEDENSCHEIDT');
+  assert.equal(namensteil('van der Berg'), 'VAN-DER-BERG');
+  assert.equal(namensteil('Çelik'), 'CELIK');
+  assert.equal(initialen('Özlem'), 'OE');
+});
+
+test('Summe und Monat', () => {
+  assert.equal(summe([{ betrag: 0.1 }, { betrag: 0.2 }]), 0.3);
+  assert.equal(summe([]), 0);
+  assert.equal(formatMonat('2026-03-15'), 'März 2026');
+  assert.equal(formatMonat('2026-01'), 'Jänner 2026');
+  assert.equal(formatBetragDokument(1000), '1.000,00');
+  assert.equal(formatBetragDokument(1234567.5), '1.234.567,50');
+  assert.equal(formatBetragDokument(15), '15,00');
+});
+
+test('Ort aus PLZ und Ort', () => {
+  assert.equal(ortAusPlzOrt('1010 Wien'), 'Wien');
+  assert.equal(ortAusPlzOrt('8010 Graz'), 'Graz');
+  assert.equal(ortAusPlzOrt('D-80331 München'), 'München');
+  assert.equal(ortAusPlzOrt(''), 'Wien');
 });
 
 test('EPC-QR-Payload', () => {
