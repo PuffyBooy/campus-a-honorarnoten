@@ -1,0 +1,10 @@
+{
+  "name": "campus-a-honorarnoten",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "test:db": "bash tests/db/run.sh",
+    "dev": "npx --yes serve public -l 5173"
+  }
+}

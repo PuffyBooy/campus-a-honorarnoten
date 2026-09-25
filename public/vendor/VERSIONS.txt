@@ -1,0 +1,3 @@
+@supabase/supabase-js 2.117.2 (MIT)
+qrcode-generator 2.0.4 (MIT)
+Neu erzeugen: bash scripts/vendor.sh
