@@ -20,6 +20,9 @@ Auf der Startseite gibt es **Demo-Zugänge** für jede Rolle (Passwort jeweils `
 | Buchhaltung | `buchhaltung@demo.at` | Bezahl-Terminal |
 | Admin | `admin@demo.at` | Admin-Terminal + alles andere |
 
+In den Demo-Daten warten zwei offene Zugangsanfragen (Sophie Neumann, Emil Huber) darauf,
+vom Admin freigeschaltet zu werden.
+
 **Tipp zum Vorführen:** Die Anmeldung gilt pro Browser-Tab. In einem Tab als Autor:in, im
 zweiten als Redaktion anmelden. Änderungen erscheinen im anderen Tab automatisch.
 
@@ -28,8 +31,12 @@ Lokal starten: `npm run dev` → http://localhost:5173
 
 ## Ablauf
 
-1. **Konto anlegen** (Name, E-Mail, Passwort) und einmal im **Profil** Adresse und IBAN eintragen.
-   Diese Daten werden für jede Honorarnote automatisch übernommen.
+1. **Zugang anfragen:** Selbst registrieren geht nicht. Neue Personen schicken auf der Startseite
+   eine Anfrage (Name, E-Mail, optional eine Nachricht). Ein Admin schaltet sie im Reiter
+   „Anfragen“ frei, wählt die Rollen und bekommt ein **Startpasswort**. Das gibt er weiter, per
+   „E-Mail vorbereiten“ oder „Text kopieren“. Beim ersten Anmelden legt die Person ein eigenes
+   Passwort fest und trägt einmal im **Profil** Adresse und IBAN ein. Diese Daten werden für jede
+   Honorarnote automatisch übernommen.
 2. **Meine Leistungen:** Jeden Beitrag speichern, sobald er erschienen ist – als *Kolumne* oder
    *außerordentliches Honorar* (mit „Vereinbart mit“), jeweils mit Titel, Veröffentlichungsdatum
    und Betrag. Gespeicherte Leistungen kann man bearbeiten oder löschen.
@@ -46,8 +53,9 @@ Lokal starten: `npm run dev` → http://localhost:5173
    **„Als bezahlt markieren“ erzeugt automatisch die Honorarnote als Word-Datei** aus
    [`public/vorlage/honorarnote-vorlage.docx`](public/vorlage/honorarnote-vorlage.docx).
    Im Reiter „Bezahlt“ gibt es pro Monat den CSV-Export und alle Honorarnoten als ZIP.
-7. **Admin-Terminal:** Rollen vergeben (Checkboxen), Konten deaktivieren, löschen, Passwort
-   setzen. Honorarnoten löschen (mit Löschprotokoll), Rechnungsempfänger und
+7. **Admin-Terminal:** Zugangsanfragen freischalten oder ablehnen (offene Anfragen werden in der
+   Navigation gezählt), Personen direkt anlegen, Rollen vergeben (Checkboxen), Konten
+   deaktivieren oder löschen, Passwort zurücksetzen (neues Startpasswort). Honorarnoten löschen (mit Löschprotokoll), Rechnungsempfänger und
    Datenschutzkontakt einstellen, Sicherung herunterladen/einspielen, Demo zurücksetzen.
 
 Status: **Eingereicht → Angenommen / Abgelehnt → Bezahlt**

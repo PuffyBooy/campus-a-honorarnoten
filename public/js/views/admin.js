@@ -3,9 +3,110 @@ import {
   ROLLEN_LABEL, STATUS_LABEL, esc, formatEuro, formatMonat, formatZeitpunkt, vollerName,
 } from '../lib/format.js';
 import { downloadText } from '../lib/csv.js';
-import { fehlerText, meldung, statusBadge } from '../lib/ui.js';
+import { fehlerText, kopierenMitFeedback, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 
-const REITER = { benutzer: 'Benutzer', noten: 'Honorarnoten', einstellungen: 'Einstellungen', daten: 'Daten' };
+const REITER = {
+  anfragen: 'Anfragen', benutzer: 'Benutzer', noten: 'Honorarnoten', einstellungen: 'Einstellungen', daten: 'Daten',
+};
+
+// Zuletzt erzeugte Zugangsdaten – bleiben sichtbar, bis der Admin sie wegklickt
+let zugangsdaten = null;
+
+function zugangsText(z) {
+  const adresse = location.origin + location.pathname;
+  return `Hallo ${z.vorname},\n\ndein Zugang zu den Honorarnoten von campus a college ist bereit.\n\n`
+    + `Adresse: ${adresse}\nE-Mail: ${z.email}\nStartpasswort: ${z.passwort}\n\n`
+    + 'Beim ersten Anmelden legst du dein eigenes Passwort fest.\n\nLiebe Grüße\ndeine Redaktion';
+}
+
+function zugangsdatenHtml(z) {
+  const mailto = `mailto:${encodeURIComponent(z.email)}?subject=${encodeURIComponent('Dein Zugang zu den Honorarnoten')}`
+    + `&body=${encodeURIComponent(zugangsText(z))}`;
+  return `
+    <section class="karte zugangsdaten" role="status">
+      <h2>Zugangsdaten für ${esc(z.vorname)}</h2>
+      <p>Bitte gib diese Daten an die Person weiter. Das Startpasswort wird nur jetzt angezeigt
+        und muss beim ersten Anmelden geändert werden.</p>
+      <div class="kopierblock">
+        <div class="kopierzeile"><span class="kopier-label">E-Mail</span><span class="kopier-wert">${esc(z.email)}</span><span></span></div>
+        <div class="kopierzeile"><span class="kopier-label">Startpasswort</span>
+          <span class="kopier-wert mono">${esc(z.passwort)}</span>
+          <button type="button" class="btn btn-klein" data-z="pw">Kopieren</button></div>
+      </div>
+      <div class="aktionen">
+        <a class="btn btn-primaer" href="${esc(mailto)}">E-Mail vorbereiten</a>
+        <button type="button" class="btn" data-z="text">Text kopieren</button>
+        <button type="button" class="btn" data-z="fertig">Erledigt</button>
+      </div>
+    </section>`;
+}
+
+function zugangsdatenBinden(box, neuLaden) {
+  box.querySelector('.zugangsdaten')?.addEventListener('click', (ev) => {
+    const k = ev.target.closest('[data-z]');
+    if (!k || !zugangsdaten) return;
+    if (k.dataset.z === 'pw') kopierenMitFeedback(k, zugangsdaten.passwort);
+    if (k.dataset.z === 'text') kopierenMitFeedback(k, zugangsText(zugangsdaten));
+    if (k.dataset.z === 'fertig') { zugangsdaten = null; neuLaden(); }
+  });
+}
+
+function rollenAuswahl(vorauswahl = ['autor']) {
+  return `<span class="rollen-wahl">${Object.entries(ROLLEN_LABEL).map(([r, l]) => `
+    <label class="check"><input type="checkbox" data-rolle="${r}" ${vorauswahl.includes(r) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</span>`;
+}
+
+const gewaehlteRollen = (el) => Array.from(el.querySelectorAll('[data-rolle]:checked'), (x) => x.dataset.rolle);
+
+function anfragen(inhalt, { store, neuLaden }) {
+  const alle = store.anfragen();
+  const offen = alle.filter((a) => a.status === 'offen');
+  const erledigt = alle.filter((a) => a.status !== 'offen').slice(0, 30);
+  inhalt.innerHTML = `
+    ${offen.length ? `<ul class="liste">${offen.map((a) => `
+      <li class="karte anfrage" data-id="${esc(a.id)}">
+        <div class="note-kopf"><h2>${esc(a.vorname)} ${esc(a.nachname)}</h2>
+          <span class="klein">${esc(formatZeitpunkt(a.am))}</span></div>
+        <p><a href="mailto:${esc(a.email)}">${esc(a.email)}</a></p>
+        ${a.nachricht ? `<p class="notiz zitat">${esc(a.nachricht)}</p>` : ''}
+        <p class="klein">Rollen beim Freischalten:</p>
+        ${rollenAuswahl()}
+        <div class="aktionen">
+          <button type="button" class="btn btn-erfolg" data-freischalten>Freischalten</button>
+          <button type="button" class="btn btn-gefahr" data-ablehnen>Ablehnen</button>
+        </div>
+      </li>`).join('')}</ul>`
+    : '<section class="karte"><p>Keine offenen Zugangsanfragen.</p></section>'}
+    <p class="hinweis">Neue Personen können sich nicht selbst registrieren, sondern nur einen Zugang anfragen.
+      Beim Freischalten entsteht ein Startpasswort, das du weitergibst.</p>
+    ${erledigt.length ? `<section class="karte">
+      <h2>Bearbeitet</h2>
+      <ul class="verlauf">${erledigt.map((a) => `<li>${esc(a.vorname)} ${esc(a.nachname)} · ${esc(a.email)} –
+        <strong>${a.status === 'freigeschaltet' ? 'freigeschaltet' : 'abgelehnt'}</strong>
+        ${a.bearbeitet_am ? `<span class="klein">am ${esc(formatZeitpunkt(a.bearbeitet_am))}${a.bearbeitet_von ? ` von ${esc(a.bearbeitet_von)}` : ''}</span>` : ''}</li>`).join('')}
+      </ul></section>` : ''}`;
+
+  inhalt.querySelector('.liste')?.addEventListener('click', async (ev) => {
+    const karte = ev.target.closest('.anfrage');
+    const knopf = ev.target.closest('button');
+    if (!karte || !knopf) return;
+    const a = offen.find((x) => x.id === karte.dataset.id);
+    if ('freischalten' in knopf.dataset) {
+      await mitSperre(knopf, async () => {
+        try {
+          zugangsdaten = await store.anfrageFreischalten(a.id, gewaehlteRollen(karte));
+          meldung(`${a.vorname} ${a.nachname} ist freigeschaltet.`, 'erfolg');
+          neuLaden();
+        } catch (e) {
+          meldung(fehlerText(e), 'fehler');
+        }
+      });
+    } else if ('ablehnen' in knopf.dataset) {
+      if (!confirm(`Anfrage von ${a.vorname} ${a.nachname} ablehnen?`)) return;
+      versuche(() => store.anfrageAblehnen(a.id), 'Anfrage abgelehnt.', neuLaden);
+    }
+  });
+}
 
 function versuche(fn, erfolg, neuLaden) {
   try {
@@ -22,13 +123,29 @@ function versuche(fn, erfolg, neuLaden) {
 function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
   const liste = store.nutzerListe();
   inhalt.innerHTML = `
+    <details class="karte aufklapp" id="neu-anlegen">
+      <summary>+ Person direkt anlegen</summary>
+      <form id="anlegen-form" novalidate>
+        <div class="zeile">
+          <div class="feld"><label for="n-vorname">Vorname</label><input id="n-vorname" name="vorname" required></div>
+          <div class="feld"><label for="n-nachname">Nachname</label><input id="n-nachname" name="nachname" required></div>
+        </div>
+        <label for="n-email">E-Mail-Adresse</label>
+        <input id="n-email" name="email" type="email" inputmode="email" required>
+        <p class="klein">Rollen:</p>
+        ${rollenAuswahl()}
+        <p class="feldfehler" role="alert"></p>
+        <button type="submit" class="btn btn-primaer">Konto anlegen</button>
+      </form>
+    </details>
     <p class="treffer">${liste.length} Konten</p>
     <table class="tabelle">
       <thead><tr><th>Name</th><th>E-Mail</th><th>Rollen</th><th>Profil</th><th>Aktionen</th></tr></thead>
       <tbody>${liste.map((n) => `
         <tr data-id="${esc(n.id)}" class="${n.aktiv ? '' : 'inaktiv'}">
           <td data-label="Name"><span><strong>${esc(vollerName(n))}</strong>${n.id === ich.id ? ' <span class="klein">(du)</span>' : ''}
-            ${n.aktiv ? '' : '<br><span class="badge badge-abgelehnt">deaktiviert</span>'}</span></td>
+            ${n.aktiv ? '' : '<br><span class="badge badge-abgelehnt">deaktiviert</span>'}
+            ${n.muss_passwort_aendern ? '<br><span class="klein">noch nicht angemeldet</span>' : ''}</span></td>
           <td data-label="E-Mail">${esc(n.email)}</td>
           <td data-label="Rollen"><span class="rollen-wahl">${Object.entries(ROLLEN_LABEL).map(([r, l]) => `
             <label class="check"><input type="checkbox" data-rolle="${r}" ${n.rollen.includes(r) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}
@@ -36,14 +153,33 @@ function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
           <td data-label="Profil">${n.rollen.includes('autor')
             ? (store.profilVollstaendig(n) ? '✓ vollständig' : '<span class="klein">unvollständig</span>') : '–'}</td>
           <td data-label="Aktionen"><span class="aktionen eng">
-            <button type="button" class="btn btn-klein" data-aktion="pw">Passwort setzen</button>
+            <button type="button" class="btn btn-klein" data-aktion="pw">Passwort zurücksetzen</button>
             <button type="button" class="btn btn-klein" data-aktion="aktiv">${n.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button>
             <button type="button" class="btn btn-klein btn-gefahr" data-aktion="loeschen">Löschen</button>
           </span></td>
         </tr>`).join('')}</tbody>
     </table>
-    <p class="hinweis">Neue Personen legen sich selbst ein Konto an und bekommen automatisch die Rolle Autor:in.
-      Redaktion, Buchhaltung und Admin vergibst du hier.</p>`;
+    <p class="hinweis">Neue Personen fragen einen Zugang an (Reiter „Anfragen“) oder du legst sie hier direkt an.
+      Rollen kannst du jederzeit ändern.</p>`;
+
+  const anlegen = inhalt.querySelector('#anlegen-form');
+  anlegen.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const fehler = anlegen.querySelector('.feldfehler');
+    fehler.textContent = '';
+    await mitSperre(anlegen.querySelector('[type=submit]'), async () => {
+      try {
+        zugangsdaten = await store.nutzerAnlegen({
+          vorname: anlegen.vorname.value, nachname: anlegen.nachname.value,
+          email: anlegen.email.value, rollen: gewaehlteRollen(anlegen),
+        });
+        meldung('Konto angelegt.', 'erfolg');
+        neuLaden();
+      } catch (e) {
+        fehler.textContent = fehlerText(e);
+      }
+    });
+  });
 
   const tabelle = inhalt.querySelector('tbody');
   tabelle.addEventListener('change', (ev) => {
@@ -64,11 +200,10 @@ function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
         + 'Abgeschickte Honorarnoten bleiben für die Buchhaltung erhalten.')) return;
       versuche(() => store.nutzerLoeschen(n.id), 'Konto gelöscht.', neuLaden);
     } else if (knopf.dataset.aktion === 'pw') {
-      const pw = prompt(`Neues Passwort für ${vollerName(n)} (mind. 8 Zeichen):`);
-      if (!pw) return;
+      if (!confirm(`Passwort von ${vollerName(n)} zurücksetzen? Es wird ein neues Startpasswort erzeugt.`)) return;
       try {
-        await store.passwortZuruecksetzen(n.id, pw);
-        meldung('Passwort gesetzt. Bitte der Person sicher mitteilen.', 'erfolg');
+        zugangsdaten = await store.passwortZuruecksetzen(n.id);
+        neuLaden();
       } catch (e) {
         meldung(fehlerText(e), 'fehler');
       }
@@ -184,20 +319,24 @@ function daten(inhalt, { store, demoDaten, neuLaden }) {
 }
 
 export function render(el, ctx) {
-  const tab = REITER[ctx.params.tab] ? ctx.params.tab : 'benutzer';
   const s = ctx.store.statistik();
+  const tab = REITER[ctx.params.tab] ? ctx.params.tab : (s.anfragen ? 'anfragen' : 'benutzer');
   el.innerHTML = `
     <h1>Admin-Terminal</h1>
     <section class="kennzahlen" aria-label="Überblick">
+      <div class="kennzahl${s.anfragen ? ' hervorgehoben' : ''}"><span class="zahl">${s.anfragen}</span><span>offene Anfragen</span></div>
       <div class="kennzahl"><span class="zahl">${s.nutzer}</span><span>Konten</span></div>
       <div class="kennzahl"><span class="zahl">${s.entwuerfe}</span><span>gespeicherte Leistungen</span></div>
       ${['eingereicht', 'angenommen', 'bezahlt'].map((st) => `
         <div class="kennzahl"><span class="zahl">${s[st]}</span><span>${esc(STATUS_LABEL[st])}</span></div>`).join('')}
     </section>
     <nav class="reiter" aria-label="Bereiche">
-      ${Object.entries(REITER).map(([k, l]) => `<a href="#/admin/${k}"${k === tab ? ' aria-current="page"' : ''}>${esc(l)}</a>`).join('')}
+      ${Object.entries(REITER).map(([k, l]) => `<a href="#/admin/${k}"${k === tab ? ' aria-current="page"' : ''}>${esc(l)}${
+        k === 'anfragen' && s.anfragen ? ` <span class="zaehler">${s.anfragen}</span>` : ''}</a>`).join('')}
     </nav>
+    <div id="a-zugang">${zugangsdaten ? zugangsdatenHtml(zugangsdaten) : ''}</div>
     <div id="a-inhalt"></div>`;
+  zugangsdatenBinden(el.querySelector('#a-zugang'), ctx.neuLaden);
   const inhalt = el.querySelector('#a-inhalt');
-  ({ benutzer, noten, einstellungen, daten })[tab](inhalt, ctx);
+  ({ anfragen, benutzer, noten, einstellungen, daten })[tab](inhalt, ctx);
 }

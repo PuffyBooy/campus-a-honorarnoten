@@ -63,13 +63,16 @@ export function navigate(pfad) {
 }
 
 function renderNav(nutzer, pfad) {
-  if (!nutzer) {
+  if (!nutzer || nutzer.muss_passwort_aendern) {
     nav.innerHTML = '';
     return;
   }
+  const anfragen = store.offeneAnfragenAnzahl();
   const links = ROUTEN.filter((r) => r.titel && darf(nutzer, r)).map((r) => {
     const aktiv = pfad === r.pfad || pfad.startsWith(r.pfad + '/');
-    return `<a href="#/${r.pfad}"${aktiv ? ' aria-current="page"' : ''}>${esc(r.titel)}</a>`;
+    const zusatz = r.pfad === 'admin' && anfragen
+      ? ` <span class="zaehler" title="offene Zugangsanfragen">${anfragen}</span>` : '';
+    return `<a href="#/${r.pfad}"${aktiv ? ' aria-current="page"' : ''}>${esc(r.titel)}${zusatz}</a>`;
   }).join('');
   nav.innerHTML = `<div class="nav-links">${links}</div>
     <div class="nav-konto">
@@ -79,7 +82,8 @@ function renderNav(nutzer, pfad) {
     </div>`;
   nav.querySelector('#abmelden').addEventListener('click', () => {
     store.abmelden();
-    location.hash = '';
+    // Adresse ohne Route; genau einmal neu zeichnen (sonst gehen Eingaben verloren)
+    history.replaceState(null, '', location.pathname + location.search);
     render();
   });
 }
@@ -96,6 +100,22 @@ async function render() {
     } });
     return;
   }
+  // Erstes Login mit Startpasswort: zuerst eigenes Passwort festlegen
+  if (nutzer.muss_passwort_aendern) {
+    login.renderPasswortFestlegen(main, {
+      store,
+      nutzer,
+      weiter: () => {
+        // Autor:innen tragen danach gleich Adresse und Bankverbindung ein
+        const ziel = nutzer.rollen.includes('autor') && !store.profilVollstaendig(nutzer) ? 'profil' : startseite(nutzer);
+        if (aktuellerPfad() === ziel) render();
+        else location.hash = '#/' + ziel;
+      },
+      abmelden: () => { store.abmelden(); render(); },
+    });
+    return;
+  }
+
   if (!pfad) {
     location.replace('#/' + startseite(nutzer));
     return;
@@ -144,9 +164,10 @@ async function start() {
   await store.initialisieren({ demoDaten });
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); });
   // Änderung in einem anderen Tab: neu zeichnen, außer man tippt gerade etwas
+  // oder ist nicht angemeldet (Login-Seite zeigt keine Daten an)
   window.addEventListener('honorare:extern', () => {
     const fokus = document.activeElement;
-    if (!fokus || !fokus.closest('form')) render();
+    if (store.aktuellerNutzer() && !fokus?.closest('form')) render();
   });
   render();
 }

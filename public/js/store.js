@@ -41,6 +41,7 @@ function leereDb() {
     kommentare: [],
     verlauf: [],
     loeschprotokoll: [],
+    anfragen: [],     // Zugangsanfragen, die ein Admin freischaltet oder ablehnt
     einstellungen: { empfaenger: { ...STANDARD_EMPFAENGER }, datenschutzKontakt: '' },
   };
 }
@@ -50,7 +51,8 @@ function laden() {
     const roh = localStorage.getItem(SPEICHER_KEY);
     if (roh) {
       const d = JSON.parse(roh);
-      if (d?.version === VERSION) return d;
+      // fehlende Bereiche (ältere Speicherstände) mit Standardwerten ergänzen
+      if (d?.version === VERSION) return { ...leereDb(), ...d };
     }
   } catch { /* beschädigt oder gesperrt -> neu anlegen */ }
   return null;
@@ -154,27 +156,122 @@ export function abmelden() {
   sessionStorage.removeItem(SITZUNG_KEY);
 }
 
-export async function registrieren({ vorname, nachname, email, passwort }) {
-  email = trim(email).toLowerCase();
-  pruefe(!leer(vorname) && !leer(nachname), 'Bitte Vor- und Nachnamen angeben.');
-  pruefe(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email), 'Bitte eine gültige E-Mail-Adresse angeben.');
-  pruefe(!db.nutzer.some((x) => x.email === email), 'Für diese E-Mail-Adresse gibt es schon ein Konto.');
-  passwortPruefen(passwort);
+// ------------------------------------------------------------------ Zugang anfragen & freischalten
+//
+// Man kann sich nicht selbst registrieren: Neue Personen schicken eine Anfrage,
+// ein Admin schaltet sie frei. Dabei entsteht ein Startpasswort, das der Admin
+// weitergibt und das beim ersten Login geändert werden muss.
+
+const EMAIL_MUSTER = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+
+/** Gut lesbares Startpasswort ohne verwechselbare Zeichen (0/O, 1/l/I) */
+export function startpasswort(laenge = 10) {
+  const zeichen = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from(crypto.getRandomValues(new Uint32Array(laenge)), (x) => zeichen[x % zeichen.length]).join('');
+}
+
+function kontoErstellen({ vorname, nachname, email, rollen }, passwortDaten) {
   const n = {
     id: id(),
     email,
     vorname: trim(vorname),
     nachname: trim(nachname),
-    rollen: ['autor'],
+    rollen,
     aktiv: true,
-    passwort: await passwortHash(passwort),
+    muss_passwort_aendern: true,
+    passwort: passwortDaten,
     profil: { strasse: '', plz_ort: '', kontoinhaber: `${trim(vorname)} ${trim(nachname)}`, iban: '', bic: '' },
     erstellt_am: jetzt(),
   };
   db.nutzer.push(n);
+  return n;
+}
+
+function neuePersonPruefen({ vorname, nachname, email }) {
+  pruefe(!leer(vorname) && !leer(nachname), 'Bitte Vor- und Nachnamen angeben.');
+  pruefe(EMAIL_MUSTER.test(email), 'Bitte eine gültige E-Mail-Adresse angeben.');
+  pruefe(!db.nutzer.some((x) => x.email === email), 'Für diese E-Mail-Adresse gibt es schon ein Konto.');
+}
+
+/** Öffentlich (ohne Anmeldung): Zugang anfragen */
+export function zugangAnfragen({ vorname, nachname, email, nachricht }) {
+  email = trim(email).toLowerCase();
+  neuePersonPruefen({ vorname, nachname, email });
+  pruefe(!db.anfragen.some((a) => a.email === email && a.status === 'offen'),
+    'Für diese E-Mail-Adresse gibt es schon eine offene Anfrage. Bitte etwas Geduld.');
+  db.anfragen.push({
+    id: id(), vorname: trim(vorname), nachname: trim(nachname), email,
+    nachricht: trim(nachricht).slice(0, 1000), status: 'offen', am: jetzt(),
+  });
   speichern();
-  sessionStorage.setItem(SITZUNG_KEY, n.id);
-  return nutzerSicht(n);
+}
+
+export function anfragen() {
+  brauche('admin');
+  return kopie(db.anfragen).sort((a, b) => b.am.localeCompare(a.am));
+}
+
+export function offeneAnfragenAnzahl() {
+  const n = sitzungsNutzer();
+  return n && hat(n, 'admin') ? db.anfragen.filter((a) => a.status === 'offen').length : 0;
+}
+
+function anfrageHolen(anfrageId) {
+  const a = db.anfragen.find((x) => x.id === anfrageId);
+  pruefe(a, 'Diese Anfrage gibt es nicht (mehr).');
+  pruefe(a.status === 'offen', 'Diese Anfrage wurde bereits bearbeitet.');
+  return a;
+}
+
+const erlaubteRollen = (rollen) => ['autor', 'redaktion', 'buchhaltung', 'admin'].filter((r) => rollen.includes(r));
+
+/** Anfrage freischalten -> Konto mit Startpasswort. Gibt E-Mail und Startpasswort zurück. */
+export async function anfrageFreischalten(anfrageId, rollen = ['autor']) {
+  const admin = brauche('admin');
+  const a = anfrageHolen(anfrageId);
+  rollen = erlaubteRollen(rollen);
+  pruefe(rollen.length, 'Bitte mindestens eine Rolle wählen.');
+  neuePersonPruefen(a);
+  const passwort = startpasswort();
+  const hash = await passwortHash(passwort);
+  kontoErstellen({ ...a, rollen }, hash);
+  Object.assign(a, { status: 'freigeschaltet', bearbeitet_am: jetzt(), bearbeitet_von: anzeigename(admin) });
+  speichern();
+  return { email: a.email, vorname: a.vorname, passwort };
+}
+
+export function anfrageAblehnen(anfrageId) {
+  const admin = brauche('admin');
+  const a = anfrageHolen(anfrageId);
+  Object.assign(a, { status: 'abgelehnt', bearbeitet_am: jetzt(), bearbeitet_von: anzeigename(admin) });
+  speichern();
+}
+
+/** Admin legt eine Person direkt an (ohne Anfrage) */
+export async function nutzerAnlegen({ vorname, nachname, email, rollen }) {
+  brauche('admin');
+  email = trim(email).toLowerCase();
+  neuePersonPruefen({ vorname, nachname, email });
+  rollen = erlaubteRollen(rollen ?? []);
+  pruefe(rollen.length, 'Bitte mindestens eine Rolle wählen.');
+  const passwort = startpasswort();
+  kontoErstellen({ vorname, nachname, email, rollen }, await passwortHash(passwort));
+  // eine evtl. offene Anfrage derselben Person ist damit erledigt
+  db.anfragen.filter((a) => a.email === email && a.status === 'offen')
+    .forEach((a) => Object.assign(a, { status: 'freigeschaltet', bearbeitet_am: jetzt() }));
+  speichern();
+  return { email, vorname: trim(vorname), passwort };
+}
+
+/** Nach Login mit Startpasswort: eigenes Passwort festlegen */
+export async function erstesPasswortSetzen(neu) {
+  const n = ich();
+  pruefe(n.muss_passwort_aendern, 'Bitte das Passwort im Profil ändern.');
+  passwortPruefen(neu);
+  pruefe(!(await passwortPasst(n, neu)), 'Bitte ein neues Passwort wählen, nicht das Startpasswort.');
+  n.passwort = await passwortHash(neu);
+  n.muss_passwort_aendern = false;
+  speichern();
 }
 
 // ------------------------------------------------------------------ Profil
@@ -209,6 +306,7 @@ export async function passwortAendern(alt, neu) {
   pruefe(await passwortPasst(n, alt), 'Das bisherige Passwort stimmt nicht.');
   passwortPruefen(neu);
   n.passwort = await passwortHash(neu);
+  n.muss_passwort_aendern = false;
   speichern();
 }
 
@@ -488,8 +586,7 @@ const nochEinAdmin = (ohne) => db.nutzer.some((x) => x.id !== ohne && x.aktiv &&
 
 export function rollenSetzen(uid, rollen) {
   const { admin, n } = adminNutzer(uid);
-  const erlaubt = ['autor', 'redaktion', 'buchhaltung', 'admin'];
-  rollen = erlaubt.filter((r) => rollen.includes(r));
+  rollen = erlaubteRollen(rollen);
   if (!rollen.includes('admin')) pruefe(nochEinAdmin(uid), 'Es muss mindestens ein aktives Admin-Konto geben.');
   n.rollen = rollen;
   speichern();
@@ -504,11 +601,14 @@ export function nutzerAktivSetzen(uid, aktiv) {
   speichern();
 }
 
-export async function passwortZuruecksetzen(uid, neu) {
+/** Admin setzt ein neues Startpasswort; die Person muss es beim nächsten Login ändern. */
+export async function passwortZuruecksetzen(uid) {
   const { n } = adminNutzer(uid);
-  passwortPruefen(neu);
-  n.passwort = await passwortHash(neu);
+  const passwort = startpasswort();
+  n.passwort = await passwortHash(passwort);
+  n.muss_passwort_aendern = true;
   speichern();
+  return { email: n.email, vorname: n.vorname, passwort };
 }
 
 /** Konto löschen (Datenschutz). Abgeschickte Honorarnoten bleiben für die Buchhaltung erhalten. */
@@ -563,6 +663,7 @@ export function statistik() {
   const zaehle = (s) => db.noten.filter((x) => x.status === s).length;
   return {
     nutzer: db.nutzer.length,
+    anfragen: db.anfragen.filter((a) => a.status === 'offen').length,
     entwuerfe: db.positionen.length,
     eingereicht: zaehle('eingereicht'),
     angenommen: zaehle('angenommen'),

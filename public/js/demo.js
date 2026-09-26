@@ -113,5 +113,14 @@ export async function demoDaten(db, { passwortHash }) {
       text: 'Porträt ist online, Fotos passen. Kann angenommen werden.', am: iso(tageZurueck(1)) });
   }
 
+  // offene Zugangsanfragen zum Ausprobieren des Freischaltens
+  db.anfragen.push(
+    { id: 'demo-anfrage-1', vorname: 'Sophie', nachname: 'Neumann', email: 'sophie@demo.at',
+      nachricht: 'Ich bin in der 7B am BRG Wien und würde gerne Kolumnen über Sport schreiben.',
+      status: 'offen', am: iso(tageZurueck(1, 17)) },
+    { id: 'demo-anfrage-2', vorname: 'Emil', nachname: 'Huber', email: 'emil@demo.at',
+      nachricht: '', status: 'offen', am: iso(tageZurueck(0, 8)) },
+  );
+
   db.einstellungen.datenschutzKontakt = 'office@campus-a-college.at';
 }
