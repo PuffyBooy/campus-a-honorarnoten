@@ -97,6 +97,24 @@ verfügbar. Bei einem Gratis-Konto muss das Repo öffentlich sein.
   durch Server-Aufrufe ersetzt (z. B. Supabase mit Row Level Security; eine fertige
   Supabase-Variante liegt in der Git-History).
 
+## Appwrite (Backend für den echten Betrieb)
+
+Das Appwrite-Web-SDK ist eingebunden ([`public/js/appwrite.js`](public/js/appwrite.js),
+gebündelt in `public/vendor/appwrite.mjs`):
+
+- Endpoint: `https://fra.cloud.appwrite.io/v1` (Region Frankfurt)
+- Projekt: `campus a honorarnoten` (`6ab7ccc3003d09ca2ac8`)
+
+Beim Start ruft die App einmal `client.ping()` auf. Das Ergebnis steht in der Browser-Konsole
+(F12 → Konsole): **„Appwrite verbunden … Pong“** oder eine Warnung, falls Appwrite nicht erreichbar
+ist. Die Demo funktioniert in beiden Fällen weiter, die Daten liegen noch lokal.
+
+**Wichtig:** In der Appwrite-Konsole unter *Overview → Platforms → Add platform → Web* jede
+Adresse eintragen, von der aus die App läuft, sonst blockiert Appwrite die Anfragen (CORS):
+`localhost` für die Entwicklung und `puffybooy.github.io` für GitHub Pages.
+
+Einen API-Key niemals ins Frontend oder Repo – der gehört nur in Appwrite Functions.
+
 ## Design anpassen
 
 Farben stehen oben in [`public/css/style.css`](public/css/style.css) (`--marke`, `--akzent` …).

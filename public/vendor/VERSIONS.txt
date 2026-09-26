@@ -1,3 +1,4 @@
 jszip 3.10.1 (MIT)
 qrcode-generator 2.0.4 (MIT)
+appwrite 28.1.0 (BSD-3-Clause)
 Neu erzeugen: bash scripts/vendor.sh

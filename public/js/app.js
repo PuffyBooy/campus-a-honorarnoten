@@ -1,5 +1,6 @@
 // Einstieg: Anmeldung, Navigation und Hash-Routing (funktioniert auf GitHub Pages)
 import * as store from './store.js';
+import { appwritePing } from './appwrite.js';
 import { demoDaten } from './demo.js';
 import { esc } from './lib/format.js';
 import { fehlerText, ladeAnzeige } from './lib/ui.js';
@@ -161,6 +162,8 @@ async function start() {
       nicht direkt als Datei.</p></section>`;
     return;
   }
+  // Verbindung zu Appwrite einmal beim Start prüfen (Ergebnis in der Konsole)
+  appwritePing();
   await store.initialisieren({ demoDaten });
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); });
   // Änderung in einem anderen Tab: neu zeichnen, außer man tippt gerade etwas
