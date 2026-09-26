@@ -35,6 +35,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      # Versionsnummer an JS/CSS anhängen, damit Browser nach einem Update
+      # nicht mehr die alten Dateien aus dem Cache verwenden.
+      - run: scripts/cache-bust.sh public "${GITHUB_SHA::8}"
       - uses: actions/upload-pages-artifact@v3
         with:
           path: public
