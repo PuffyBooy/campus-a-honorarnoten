@@ -13,11 +13,11 @@ function feld(name, label, wert, { typ = 'text', pflicht = true, attrs = '', hin
     </div>`;
 }
 
-export function render(el, { store, nutzer, navigate, neuLaden }) {
+export async function render(el, { store, nutzer, navigate, neuLaden }) {
   const p = nutzer.profil;
   const istAutor = nutzer.rollen.includes('autor');
   const vollstaendig = store.profilVollstaendig(nutzer);
-  const kontakt = store.einstellungen().datenschutzKontakt;
+  const kontakt = (await store.einstellungen()).datenschutzKontakt;
 
   el.innerHTML = `
     <h1>Mein Profil</h1>
@@ -108,7 +108,7 @@ export function render(el, { store, nutzer, navigate, neuLaden }) {
     }
     await mitSperre(form.querySelector('[type=submit]'), async () => {
       try {
-        store.profilSpeichern({
+        await store.profilSpeichern({
           vorname: form.vorname.value, nachname: form.nachname.value, email: form.email.value,
           strasse: form.strasse?.value ?? p.strasse, plz_ort: form.plz_ort?.value ?? p.plz_ort,
           kontoinhaber: form.kontoinhaber?.value ?? p.kontoinhaber, iban: form.iban?.value ?? p.iban,

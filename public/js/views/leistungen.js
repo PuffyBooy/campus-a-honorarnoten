@@ -69,13 +69,14 @@ function formularHtml(p) {
     </form>`;
 }
 
-export function render(el, { store, nutzer, navigate, setFlash, neuLaden }) {
-  const liste = store.meineLeistungen();
+export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, istAktuell }) {
+  const [liste, diesenMonat, naechste, einstellungen] = await Promise.all([
+    store.meineLeistungen(), store.notenDiesenMonat(), store.naechsteNummer(), store.einstellungen(),
+  ]);
+  if (!istAktuell()) return;
   const bearbeite = liste.find((p) => p.id === bearbeiteId) ?? null;
   if (!bearbeite) bearbeiteId = null;
   const profilOk = store.profilVollstaendig(nutzer);
-  const diesenMonat = store.notenDiesenMonat();
-  const naechste = store.naechsteNummer();
   const gesamt = summe(liste);
 
   el.innerHTML = `
@@ -125,7 +126,7 @@ export function render(el, { store, nutzer, navigate, setFlash, neuLaden }) {
             nächsten Monat mitschicken.</p>` : ''}
           <dl class="angaben kompakt">
             <dt>Nummer</dt><dd class="nummer">${esc(naechste.nummer)}</dd>
-            <dt>An</dt><dd>${esc(store.einstellungen().empfaenger.name)}</dd>
+            <dt>An</dt><dd>${esc(einstellungen.empfaenger.name)}</dd>
             <dt>Überweisung an</dt><dd>${profilOk ? `${esc(nutzer.profil.kontoinhaber)}<br><span class="mono">${esc(formatIban(nutzer.profil.iban))}</span>` : '–'}</dd>
           </dl>
           <button type="button" class="btn btn-primaer btn-breit" id="abschicken" ${profilOk ? '' : 'disabled'}>
@@ -148,7 +149,7 @@ export function render(el, { store, nutzer, navigate, setFlash, neuLaden }) {
   });
   el.querySelector('#l-abbrechen')?.addEventListener('click', () => { bearbeiteId = null; neuLaden(); });
 
-  form.addEventListener('submit', (ev) => {
+  form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     ['titel', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'formular'].forEach((n) => fehler(n, ''));
     const betrag = parseBetrag(form.betrag.value);
@@ -164,8 +165,10 @@ export function render(el, { store, nutzer, navigate, setFlash, neuLaden }) {
       form.elements[Object.keys(f)[0]].focus();
       return;
     }
+    const knopf = form.querySelector('button[type=submit]');
+    knopf.disabled = true;
     try {
-      store.leistungSpeichern({
+      await store.leistungSpeichern({
         id: bearbeiteId ?? undefined,
         kategorie: form.kategorie.value, art: form.art.value, titel: form.titel.value,
         veroeffentlichung: form.veroeffentlichung.value, betrag, vereinbart_mit: form.vereinbart_mit.value,
@@ -176,6 +179,7 @@ export function render(el, { store, nutzer, navigate, setFlash, neuLaden }) {
       neuLaden();
     } catch (e) {
       fehler('formular', fehlerText(e));
+      knopf.disabled = false;
     }
   });
 
@@ -188,7 +192,7 @@ export function render(el, { store, nutzer, navigate, setFlash, neuLaden }) {
     const knopf = el.querySelector('#abschicken');
     if (knopf) knopf.disabled = !profilOk || !ids.length;
   });
-  abrForm?.addEventListener('click', (ev) => {
+  abrForm?.addEventListener('click', async (ev) => {
     const b = ev.target.closest('[data-bearbeiten]');
     const l = ev.target.closest('[data-loeschen]');
     if (b) {
@@ -197,9 +201,13 @@ export function render(el, { store, nutzer, navigate, setFlash, neuLaden }) {
     } else if (l) {
       const p = liste.find((x) => x.id === l.dataset.loeschen);
       if (!confirm(`„${p.titel}“ wirklich löschen?`)) return;
-      store.leistungLoeschen(p.id);
+      try {
+        await store.leistungLoeschen(p.id);
+        meldung('Leistung gelöscht.');
+      } catch (e) {
+        meldung(fehlerText(e), 'fehler');
+      }
       if (bearbeiteId === p.id) bearbeiteId = null;
-      meldung('Leistung gelöscht.');
       neuLaden();
     }
   });
@@ -212,7 +220,7 @@ export function render(el, { store, nutzer, navigate, setFlash, neuLaden }) {
       + (diesenMonat.length ? '\n\nHinweis: Du hast diesen Monat schon eine Honorarnote abgeschickt.' : '');
     if (!confirm(text)) return;
     try {
-      const note = store.abrechnungAbschicken(ids);
+      const note = await store.abrechnungAbschicken(ids);
       bearbeiteId = null;
       setFlash({ neu: note.nummer });
       navigate('noten');

@@ -1,0 +1,15 @@
+# Tägliche Sicherung der Datenbank (ausgelöst von honorarnoten-backup.timer)
+[Unit]
+Description=Honorarnoten – Datenbank sichern
+
+[Service]
+Type=oneshot
+User=honorarnoten
+Group=honorarnoten
+WorkingDirectory=__APP_DIR__
+EnvironmentFile=/etc/honorarnoten.env
+ExecStart=/usr/bin/env node --disable-warning=ExperimentalWarning __APP_DIR__/server/cli.js backup
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/var/lib/honorarnoten

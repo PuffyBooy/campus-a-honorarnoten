@@ -31,8 +31,9 @@ export function positionenTabelle(note, { mitKorrektur = false } = {}) {
     </table>`;
 }
 
-export function render(el, { store, flash, neuLaden }) {
-  const noten = store.meineNoten();
+export async function render(el, { store, flash, neuLaden, istAktuell }) {
+  const noten = await store.meineNoten();
+  if (!istAktuell()) return;
 
   el.innerHTML = `
     <div class="kopfzeile">
@@ -76,7 +77,7 @@ export function render(el, { store, flash, neuLaden }) {
       await mitSperre(knopf, () => honorarnoteHerunterladen(n).catch((e) => meldung(fehlerText(e), 'fehler')));
     } else if ('zurueck' in knopf.dataset) {
       try {
-        store.leistungenZurueckholen(n.id);
+        await store.leistungenZurueckholen(n.id);
         meldung('Die Leistungen stehen wieder unter „Meine Leistungen“ zum Bearbeiten bereit.', 'erfolg');
         location.hash = '#/leistungen';
       } catch (e) {

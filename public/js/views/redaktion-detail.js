@@ -14,17 +14,17 @@ function verlaufDetails(e) {
   }
 }
 
-export function render(el, { store, nutzer, params, navigate, neuLaden }) {
+export async function render(el, { store, nutzer, params, neuLaden, istAktuell }) {
   let n;
   try {
-    n = store.note(params.id);
+    n = await store.note(params.id);
   } catch {
     el.innerHTML = `<section class="karte"><h1>Nicht gefunden</h1>
       <p>Diese Honorarnote gibt es nicht (mehr).</p><p><a href="#/redaktion">Zurück zur Liste</a></p></section>`;
     return;
   }
-  const kommentare = store.kommentare(n.id);
-  const verlauf = store.verlaufVon(n.id);
+  const [kommentare, verlauf] = await Promise.all([store.kommentare(n.id), store.verlaufVon(n.id)]);
+  if (!istAktuell()) return;
   const kannAnnehmen = ['eingereicht', 'abgelehnt'].includes(n.status) && !n.zurueckgeholt_am;
   const kannAblehnen = ['eingereicht', 'angenommen'].includes(n.status);
 
@@ -110,13 +110,17 @@ export function render(el, { store, nutzer, params, navigate, neuLaden }) {
     </div>
     ${nutzer.rollen.includes('admin') ? `<p><a href="#/admin/noten">Löschen im Admin-Terminal</a></p>` : ''}`;
 
-  const aktion = (fn, erfolg) => {
+  // Aktion ausführen; alle Knöpfe sind währenddessen gesperrt (kein doppeltes Absenden)
+  const aktion = async (fn, erfolg) => {
+    const knoepfe = Array.from(el.querySelectorAll('button'));
+    knoepfe.forEach((k) => { k.disabled = true; });
     try {
-      fn();
+      await fn();
       meldung(erfolg, 'erfolg');
       neuLaden();
     } catch (e) {
       meldung(fehlerText(e), 'fehler');
+      knoepfe.forEach((k) => { k.disabled = false; });
     }
   };
 

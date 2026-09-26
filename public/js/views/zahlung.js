@@ -65,8 +65,9 @@ async function qrZeichnen(box, n) {
   }
 }
 
-function offen(inhalt, { store, neuLaden }) {
-  const daten = store.offeneZahlungen();
+async function offen(inhalt, { store, neuLaden, istAktuell }) {
+  const daten = await store.offeneZahlungen();
+  if (!istAktuell()) return;
   const summe = daten.reduce((s, n) => s + n.betrag, 0);
   inhalt.innerHTML = daten.length
     ? `<p class="treffer">${daten.length} offene ${daten.length === 1 ? 'Zahlung' : 'Zahlungen'} · Summe ${esc(formatEuro(summe))}</p>
@@ -135,7 +136,7 @@ function offen(inhalt, { store, neuLaden }) {
     await mitSperre(form.querySelector('button'), async () => {
       let bezahlt;
       try {
-        bezahlt = store.alsBezahltMarkieren(n.id, datum);
+        bezahlt = await store.alsBezahltMarkieren(n.id, datum);
       } catch (e) {
         meldung(fehlerText(e), 'fehler');
         return;
@@ -152,7 +153,7 @@ function offen(inhalt, { store, neuLaden }) {
   });
 }
 
-function bezahlt(inhalt, { store }) {
+async function bezahlt(inhalt, { store }) {
   inhalt.innerHTML = `
     <section class="karte filterleiste filter-zwei">
       <div class="feld">
@@ -169,8 +170,17 @@ function bezahlt(inhalt, { store }) {
   let daten = [];
   const monatInput = inhalt.querySelector('#z-monat');
 
-  function zeichnen() {
-    daten = store.bezahlteNoten(gewaehlterMonat);
+  async function zeichnen() {
+    const monat = gewaehlterMonat;
+    let geladen;
+    try {
+      geladen = await store.bezahlteNoten(monat);
+    } catch (e) {
+      inhalt.querySelector('#z-liste').innerHTML = `<p class="fehlerbox">${esc(fehlerText(e))}</p>`;
+      return;
+    }
+    if (monat !== gewaehlterMonat) return; // inzwischen anderer Monat gewählt
+    daten = geladen;
     inhalt.querySelector('#z-csv').disabled = !daten.length;
     inhalt.querySelector('#z-zip').disabled = !daten.length;
     const summe = daten.reduce((s, n) => s + n.betrag, 0);
@@ -219,10 +229,10 @@ function bezahlt(inhalt, { store }) {
   inhalt.querySelector('#z-zip').addEventListener('click', (ev) => mitSperre(ev.currentTarget, () =>
     honorarnotenAlsZip(daten, `honorarnoten-${gewaehlterMonat}.zip`).catch((e) => meldung(fehlerText(e), 'fehler'))));
 
-  zeichnen();
+  await zeichnen();
 }
 
-export function render(el, ctx) {
+export async function render(el, ctx) {
   const tab = ctx.params.tab === 'bezahlt' ? 'bezahlt' : 'offen';
   el.innerHTML = `
     <h1>Bezahl-Terminal</h1>
@@ -232,6 +242,6 @@ export function render(el, ctx) {
     </nav>
     <div id="z-inhalt"></div>`;
   const inhalt = el.querySelector('#z-inhalt');
-  if (tab === 'offen') offen(inhalt, ctx);
-  else bezahlt(inhalt, ctx);
+  if (tab === 'offen') await offen(inhalt, ctx);
+  else await bezahlt(inhalt, ctx);
 }

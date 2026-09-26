@@ -1,7 +1,5 @@
 // Einstieg: Anmeldung, Navigation und Hash-Routing (funktioniert auf GitHub Pages)
-import * as store from './store.js';
-import { appwritePing } from './appwrite.js';
-import { demoDaten } from './demo.js';
+import { MODUS } from './modus.js';
 import { esc } from './lib/format.js';
 import { fehlerText, ladeAnzeige } from './lib/ui.js';
 import * as login from './views/login.js';
@@ -12,6 +10,11 @@ import * as redaktion from './views/redaktion.js';
 import * as redaktionDetail from './views/redaktion-detail.js';
 import * as zahlung from './views/zahlung.js';
 import * as admin from './views/admin.js';
+
+// Demo: Daten im Browser (store.js). Server: Daten über die API (api.js).
+const IST_DEMO = MODUS !== 'server';
+const store = IST_DEMO ? await import('./store.js') : await import('./api.js');
+const demoDaten = IST_DEMO ? (await import('./demo.js')).demoDaten : null;
 
 const main = document.getElementById('app');
 const nav = document.getElementById('nav');
@@ -63,12 +66,12 @@ export function navigate(pfad) {
   else location.hash = '#/' + pfad;
 }
 
-function renderNav(nutzer, pfad) {
+async function renderNav(nutzer, pfad) {
   if (!nutzer || nutzer.muss_passwort_aendern) {
     nav.innerHTML = '';
     return;
   }
-  const anfragen = store.offeneAnfragenAnzahl();
+  const anfragen = await Promise.resolve(store.offeneAnfragenAnzahl()).catch(() => 0);
   const links = ROUTEN.filter((r) => r.titel && darf(nutzer, r)).map((r) => {
     const aktiv = pfad === r.pfad || pfad.startsWith(r.pfad + '/');
     const zusatz = r.pfad === 'admin' && anfragen
@@ -81,21 +84,33 @@ function renderNav(nutzer, pfad) {
          title="${esc(nutzer.email)}">${esc(nutzer.vorname)} ${esc(nutzer.nachname)}</a>
       <button type="button" class="btn-link" id="abmelden">Abmelden</button>
     </div>`;
-  nav.querySelector('#abmelden').addEventListener('click', () => {
-    store.abmelden();
+  nav.querySelector('#abmelden').addEventListener('click', async () => {
+    await Promise.resolve(store.abmelden()).catch(() => {});
     // Adresse ohne Route; genau einmal neu zeichnen (sonst gehen Eingaben verloren)
     history.replaceState(null, '', location.pathname + location.search);
     render();
   });
 }
 
+let renderZaehler = 0;
+
 async function render() {
+  const lauf = ++renderZaehler;
   const pfad = aktuellerPfad();
-  const nutzer = store.aktuellerNutzer();
-  renderNav(nutzer, pfad);
+  let nutzer;
+  try {
+    nutzer = await store.aktuellerNutzer();
+  } catch (e) {
+    main.innerHTML = `<section class="karte fehlerbox" role="alert"><h1>Keine Verbindung</h1>
+      <p>${esc(fehlerText(e))}</p><p><button type="button" class="btn" id="nochmal">Erneut versuchen</button></p></section>`;
+    main.querySelector('#nochmal').addEventListener('click', render);
+    return;
+  }
+  if (lauf !== renderZaehler) return; // inzwischen wurde neu navigiert
+  await renderNav(nutzer, pfad);
 
   if (!nutzer) {
-    login.render(main, { store, nachAnmeldung: (ziel) => {
+    login.render(main, { store, istDemo: IST_DEMO, nachAnmeldung: (ziel) => {
       history.replaceState(null, '', ziel ? '#/' + ziel : location.pathname + location.search);
       render();
     } });
@@ -112,7 +127,7 @@ async function render() {
         if (aktuellerPfad() === ziel) render();
         else location.hash = '#/' + ziel;
       },
-      abmelden: () => { store.abmelden(); render(); },
+      abmelden: async () => { await Promise.resolve(store.abmelden()).catch(() => {}); render(); },
     });
     return;
   }
@@ -146,9 +161,12 @@ async function render() {
       setFlash: (x) => { flash = x; },
       neuLaden: render,
       demoDaten,
+      istDemo: IST_DEMO,
+      istAktuell: () => lauf === renderZaehler,
     });
   } catch (e) {
     console.error(e);
+    if (lauf !== renderZaehler) return;
     main.innerHTML = `<section class="karte fehlerbox" role="alert">
       <h1>Fehler</h1><p>${esc(fehlerText(e))}</p>
       <p><a href="#/${startseite(nutzer)}">Zur Startseite</a></p></section>`;
@@ -156,22 +174,23 @@ async function render() {
 }
 
 async function start() {
-  if (!window.crypto?.subtle) {
+  if (IST_DEMO && !window.crypto?.subtle) {
     main.innerHTML = `<section class="karte fehlerbox"><h1>Nicht unterstützt</h1>
       <p>Bitte die Seite über https (z. B. GitHub Pages) oder <code>npm run dev</code> öffnen –
       nicht direkt als Datei.</p></section>`;
     return;
   }
-  // Verbindung zu Appwrite einmal beim Start prüfen (Ergebnis in der Konsole)
-  appwritePing();
+  document.body.classList.toggle('modus-demo', IST_DEMO);
   await store.initialisieren({ demoDaten });
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); });
-  // Änderung in einem anderen Tab: neu zeichnen, außer man tippt gerade etwas
+  // Demo: Änderung in einem anderen Tab -> neu zeichnen, außer man tippt gerade etwas
   // oder ist nicht angemeldet (Login-Seite zeigt keine Daten an)
-  window.addEventListener('honorare:extern', () => {
+  window.addEventListener('honorare:extern', async () => {
     const fokus = document.activeElement;
-    if (store.aktuellerNutzer() && !fokus?.closest('form')) render();
+    if ((await store.aktuellerNutzer()) && !fokus?.closest('form')) render();
   });
+  // Server: Sitzung abgelaufen -> zurück zur Anmeldung
+  window.addEventListener('honorare:abgemeldet', () => render());
   render();
 }
 

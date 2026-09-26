@@ -3,7 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/*.test.mjs",
-    "dev": "npx --yes http-server public -p 5173 -c-1"
+    "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.mjs",
+    "dev": "npx --yes http-server public -p 5173 -c-1",
+    "start": "node --disable-warning=ExperimentalWarning server/server.js",
+    "dev:server": "COOKIE_SECURE=0 TRUST_PROXY=0 node --disable-warning=ExperimentalWarning server/server.js",
+    "admin": "node --disable-warning=ExperimentalWarning server/cli.js admin",
+    "passwort": "node --disable-warning=ExperimentalWarning server/cli.js passwort",
+    "backup": "node --disable-warning=ExperimentalWarning server/cli.js backup"
+  },
+  "engines": {
+    "node": ">=22.13"
   }
 }

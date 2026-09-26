@@ -5,11 +5,20 @@ Autor:innen speichern ihre Beiträge laufend und schicken sie **einmal im Monat 
 als Honorarnote** ab. Die Redaktion prüft, die Buchhaltung überweist. Beim Bezahlen wird die
 Honorarnote automatisch als Word-Datei **aus der offiziellen Vorlage** erzeugt.
 
-> **Demo-Version:** Alle Daten werden **lokal im Browser** (localStorage) gespeichert – ohne
-> Server. Ideal zum Herzeigen über GitHub Pages. Für den echten Betrieb mit mehreren Personen
-> auf verschiedenen Geräten braucht es später einen Server (siehe unten).
+Die App läuft in zwei Betriebsarten – derselbe Code, nur die Datenhaltung ist anders:
 
-## Ausprobieren
+| | **Demo** (GitHub Pages) | **Server** (eigener VPS) |
+|---|---|---|
+| Wofür | Herzeigen, Ausprobieren | echter Betrieb |
+| Daten | nur im jeweiligen Browser | gemeinsame Datenbank (SQLite) auf dem Server |
+| Rechte | nur im Browser geprüft | auf dem Server geprüft, nicht umgehbar |
+| Kosten | gratis | Software gratis, nur der Server (VPS) kostet |
+| Anleitung | [Ausprobieren](#ausprobieren-demo) | [Auf einem VPS installieren](#auf-einem-vps-installieren-echter-betrieb) |
+
+Welche Betriebsart aktiv ist, steht in `public/js/modus.js`. Der Server liefert diese Datei
+automatisch mit `MODUS = 'server'` aus – man muss nichts umstellen.
+
+## Ausprobieren (Demo)
 
 Auf der Startseite gibt es **Demo-Zugänge** für jede Rolle (Passwort jeweils `demo1234`):
 
@@ -73,7 +82,87 @@ Layout und Formatierung der Vorlage bleiben erhalten.
 `Wien, 17.07.2026`, `MUSTERFRAU-MA-2026-01`) und die Tabellenüberschriften müssen gleich
 bleiben, weil sie als Platzhalter erkannt werden.
 
-## Auf GitHub Pages veröffentlichen
+## Auf einem VPS installieren (echter Betrieb)
+
+Die Server-Variante braucht **keine npm-Pakete und keinen Datenbankserver**: nur Node.js (ab 22.13).
+Die Datenbank ist eine einzelne Datei (SQLite). Davor läuft [Caddy](https://caddyserver.com), das
+automatisch ein kostenloses HTTPS-Zertifikat (Let's Encrypt) holt und erneuert.
+
+**Du brauchst:**
+- einen VPS mit **Debian 12 oder Ubuntu 22.04/24.04** – z. B. Hetzner (ab ca. 4 € im Monat) oder den
+  „Always Free“-Tarif von Oracle Cloud; 1 CPU und 1 GB RAM reichen
+- eine **(Sub-)Domain**, z. B. `honorare.campus-a-college.at`, deren DNS-Eintrag (A-Record) auf die
+  IP-Adresse des Servers zeigt
+- offene Ports **80 und 443**
+
+**Installation** (auf dem Server, als Benutzer mit sudo-Rechten):
+
+```bash
+sudo git clone https://github.com/PuffyBooy/campus-a-honorarnoten.git /opt/honorarnoten
+sudo bash /opt/honorarnoten/deploy/install.sh honorare.campus-a-college.at deine@email.at
+```
+
+Das Skript installiert Node.js und Caddy, richtet den Dienst mit Autostart ein
+([`deploy/honorarnoten.service`](deploy/honorarnoten.service)), plant eine tägliche Sicherung und
+legt das **erste Admin-Konto** an. Am Ende steht das **Startpasswort** im Terminal. Damit unter
+`https://honorare.campus-a-college.at` anmelden und ein eigenes Passwort festlegen. Alle weiteren
+Personen fragen auf der Startseite einen Zugang an und werden im Admin-Terminal freigeschaltet.
+
+**Wichtige Befehle:**
+
+| Was | Befehl |
+|---|---|
+| Status | `systemctl status honorarnoten` |
+| Protokoll ansehen | `journalctl -u honorarnoten -f` |
+| Neu starten | `sudo systemctl restart honorarnoten` |
+| Update auf neueste Version | `sudo bash /opt/honorarnoten/deploy/update.sh` |
+| Passwort vergessen (auch Admin) | `sudo bash /opt/honorarnoten/deploy/passwort.sh email@beispiel.at` |
+| Sicherung sofort | `sudo systemctl start honorarnoten-backup` |
+
+### Backups
+
+- Jede Nacht um 3:15 Uhr landet eine Kopie der Datenbank in `/var/lib/honorarnoten/backups/`,
+  30 Tage lang (änderbar über `BACKUP_TAGE` in `/etc/honorarnoten.env`). `update.sh` sichert vor
+  jedem Update zusätzlich.
+- **Zusätzlich außer Haus sichern!** Liegt nur auf dem Server eine Kopie, ist bei einem Serverausfall
+  alles weg. Einfachste Lösung: regelmäßig vom eigenen Rechner holen, z. B.
+  `scp -r benutzer@server:/var/lib/honorarnoten/backups ./honorar-backups`, oder die Backup-Funktion
+  des VPS-Anbieters einschalten.
+- **Wiederherstellen:**
+  ```bash
+  sudo systemctl stop honorarnoten
+  sudo cp /var/lib/honorarnoten/backups/honorarnoten-DATUM.sqlite /var/lib/honorarnoten/honorarnoten.sqlite
+  sudo rm -f /var/lib/honorarnoten/honorarnoten.sqlite-wal /var/lib/honorarnoten/honorarnoten.sqlite-shm
+  sudo chown honorarnoten:honorarnoten /var/lib/honorarnoten/honorarnoten.sqlite
+  sudo systemctl start honorarnoten
+  ```
+
+### Ohne Installationsskript starten
+
+Zum Ausprobieren auf dem eigenen Rechner (Node.js 22.13 oder neuer):
+
+```bash
+npm run dev:server             # http://127.0.0.1:3000, ohne HTTPS
+npm run admin -- deine@email.at  # erstes Admin-Konto, zeigt das Startpasswort
+```
+
+Oder mit Einstellungen aus einer `.env`-Datei: `./start.sh` (siehe Kommentare in [`start.sh`](start.sh)).
+
+### Sicherheit im Server-Modus
+
+- Alle Rechte (Rollen, Statuswechsel, wer IBAN und Adresse sehen darf) prüft der Server
+  ([`server/honorare.js`](server/honorare.js)); die Redaktion bekommt IBAN und Adresse gar nicht
+  erst ausgeliefert.
+- Passwörter mit scrypt gehasht, Startpasswörter müssen beim ersten Login geändert werden.
+- Anmeldung über ein Sitzungs-Cookie (`HttpOnly`, `Secure`, `SameSite=Strict`), in der Datenbank
+  nur als Hash gespeichert; Abmelden, Deaktivieren und Passwort-Reset beenden Sitzungen.
+- Schutz vor gefälschten Anfragen fremder Seiten (CSRF), Begrenzung von Anmeldeversuchen,
+  strenge Content-Security-Policy, HTTPS mit HSTS.
+- Der Dienst läuft als eigener Benutzer ohne Rechte und darf nur in `/var/lib/honorarnoten` schreiben.
+- E-Mails verschickt der Server nicht (damit er gratis bleibt): Startpasswörter gibt der Admin über
+  „E-Mail vorbereiten“ weiter.
+
+## Demo auf GitHub Pages veröffentlichen
 
 1. In GitHub: **Settings → Pages → Source: „GitHub Actions“**.
 2. Auf `main` pushen (oder den Branch nach `main` mergen). Der Workflow
@@ -85,6 +174,8 @@ verfügbar. Bei einem Gratis-Konto muss das Repo öffentlich sein.
 
 ## Datenschutz und Grenzen der Demo
 
+Gilt nur für die Demo auf GitHub Pages – für den echten Betrieb den Server-Modus verwenden.
+
 - Alles bleibt im Browser des jeweiligen Geräts. Nichts wird an einen Server geschickt.
   Keine externen Schriftarten oder CDNs, die Bibliotheken liegen in `public/vendor/`.
 - Passwörter werden gehasht gespeichert (PBKDF2). **Die Rollenrechte werden aber nur im
@@ -92,28 +183,8 @@ verfügbar. Bei einem Gratis-Konto muss das Repo öffentlich sein.
   Für echte IBANs und Adressen deshalb nur mit Server-Backend einsetzen.
 - Jeder Browser hat seine eigenen Daten: Was Maria auf ihrem Handy speichert, sieht die
   Redaktion auf ihrem Laptop **nicht**. Das geht erst mit einem Server.
-- Die Datenhaltung steckt komplett in [`public/js/store.js`](public/js/store.js). Jede Funktion
-  prüft dort Rolle und erlaubte Statuswechsel. Für den Echtbetrieb werden nur diese Funktionen
-  durch Server-Aufrufe ersetzt (z. B. Supabase mit Row Level Security; eine fertige
-  Supabase-Variante liegt in der Git-History).
-
-## Appwrite (Backend für den echten Betrieb)
-
-Das Appwrite-Web-SDK ist eingebunden ([`public/js/appwrite.js`](public/js/appwrite.js),
-gebündelt in `public/vendor/appwrite.mjs`):
-
-- Endpoint: `https://fra.cloud.appwrite.io/v1` (Region Frankfurt)
-- Projekt: `campus a honorarnoten` (`6ab7ccc3003d09ca2ac8`)
-
-Beim Start ruft die App einmal `client.ping()` auf. Das Ergebnis steht in der Browser-Konsole
-(F12 → Konsole): **„Appwrite verbunden … Pong“** oder eine Warnung, falls Appwrite nicht erreichbar
-ist. Die Demo funktioniert in beiden Fällen weiter, die Daten liegen noch lokal.
-
-**Wichtig:** In der Appwrite-Konsole unter *Overview → Platforms → Add platform → Web* jede
-Adresse eintragen, von der aus die App läuft, sonst blockiert Appwrite die Anfragen (CORS):
-`localhost` für die Entwicklung und `puffybooy.github.io` für GitHub Pages.
-
-Einen API-Key niemals ins Frontend oder Repo – der gehört nur in Appwrite Functions.
+- Die Datenhaltung der Demo steckt in [`public/js/store.js`](public/js/store.js), die des
+  Server-Modus in [`public/js/api.js`](public/js/api.js) (gleiche Funktionen, Aufrufe an den Server).
 
 ## Design anpassen
 
@@ -124,7 +195,12 @@ Das Logo in [`public/index.html`](public/index.html) an der markierten Stelle ei
 ## Entwicklung
 
 ```bash
-npm run dev    # lokaler Server auf Port 5173
-npm test       # Unit-Tests (IBAN, Nummernformat, GiroCode, CSV, Beträge)
+npm run dev          # Demo lokal auf Port 5173
+npm run dev:server   # Server-Modus lokal auf Port 3000
+npm test             # alle Tests: Hilfsfunktionen und Server (Rechte, Abläufe, Schutz)
 bash scripts/vendor.sh   # JSZip und QR-Generator aktualisieren
 ```
+
+Aufbau: `public/` ist die Oberfläche (ohne Framework, ohne Build-Schritt), `server/` der Server
+(`server.js` HTTP und Schutz, `honorare.js` Geschäftslogik, `db.js` Datenbank, `auth.js`
+Passwörter und Sitzungen, `cli.js` Verwaltung), `deploy/` die Installationsskripte.

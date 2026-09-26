@@ -58,8 +58,8 @@ function rollenAuswahl(vorauswahl = ['autor']) {
 
 const gewaehlteRollen = (el) => Array.from(el.querySelectorAll('[data-rolle]:checked'), (x) => x.dataset.rolle);
 
-function anfragen(inhalt, { store, neuLaden }) {
-  const alle = store.anfragen();
+async function anfragen(inhalt, { store, neuLaden }) {
+  const alle = await store.anfragen();
   const offen = alle.filter((a) => a.status === 'offen');
   const erledigt = alle.filter((a) => a.status !== 'offen').slice(0, 30);
   inhalt.innerHTML = `
@@ -108,20 +108,22 @@ function anfragen(inhalt, { store, neuLaden }) {
   });
 }
 
-function versuche(fn, erfolg, neuLaden) {
+/** Aktion ausführen, Meldung zeigen und neu laden (bei Fehlern nur, wenn immerNeuLaden) */
+async function versuche(fn, erfolg, neuLaden, { immerNeuLaden = false } = {}) {
   try {
-    const r = fn();
+    const r = await fn();
     if (erfolg) meldung(erfolg, 'erfolg');
     neuLaden();
     return r;
   } catch (e) {
     meldung(fehlerText(e), 'fehler');
+    if (immerNeuLaden) neuLaden(); // z. B. Checkbox wieder auf den gespeicherten Stand
     return undefined;
   }
 }
 
-function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
-  const liste = store.nutzerListe();
+async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
+  const liste = await store.nutzerListe();
   inhalt.innerHTML = `
     <details class="karte aufklapp" id="neu-anlegen">
       <summary>+ Person direkt anlegen</summary>
@@ -187,7 +189,7 @@ function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
     if (!cb) return;
     const tr = cb.closest('tr');
     const rollen = Array.from(tr.querySelectorAll('[data-rolle]:checked'), (x) => x.dataset.rolle);
-    versuche(() => store.rollenSetzen(tr.dataset.id, rollen), 'Rollen gespeichert.', neuLaden);
+    versuche(() => store.rollenSetzen(tr.dataset.id, rollen), 'Rollen gespeichert.', neuLaden, { immerNeuLaden: true });
   });
   tabelle.addEventListener('click', async (ev) => {
     const knopf = ev.target.closest('[data-aktion]');
@@ -211,9 +213,8 @@ function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
   });
 }
 
-function noten(inhalt, { store, neuLaden }) {
-  const liste = store.alleNotenAdmin();
-  const protokoll = store.loeschprotokoll();
+async function noten(inhalt, { store, neuLaden }) {
+  const [liste, protokoll] = await Promise.all([store.alleNotenAdmin(), store.loeschprotokoll()]);
   inhalt.innerHTML = `
     ${liste.length ? `<table class="tabelle">
       <thead><tr><th>Nummer</th><th>Name</th><th>Abrechnung</th><th class="rechts">Betrag</th><th>Status</th><th></th></tr></thead>
@@ -244,8 +245,8 @@ function noten(inhalt, { store, neuLaden }) {
   });
 }
 
-function einstellungen(inhalt, { store, neuLaden }) {
-  const e = store.einstellungen();
+async function einstellungen(inhalt, { store, neuLaden }) {
+  const e = await store.einstellungen();
   inhalt.innerHTML = `
     <form class="karte" id="e-form" novalidate>
       <h2>Rechnungsempfänger</h2>
@@ -270,8 +271,8 @@ function einstellungen(inhalt, { store, neuLaden }) {
   });
 }
 
-function daten(inhalt, { store, demoDaten, neuLaden }) {
-  inhalt.innerHTML = `
+function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
+  inhalt.innerHTML = istDemo ? `
     <div class="spalten">
       <section class="karte">
         <h2>Sicherung</h2>
@@ -288,15 +289,25 @@ function daten(inhalt, { store, demoDaten, neuLaden }) {
         <p>Löscht alle Daten in diesem Browser und lädt die Beispieldaten neu. Danach bist du abgemeldet.</p>
         <button type="button" class="btn btn-gefahr" id="d-reset">Alles zurücksetzen</button>
       </section>
-    </div>`;
+    </div>` : `
+    <section class="karte">
+      <h2>Datenexport</h2>
+      <p>Alle Daten als JSON-Datei, z. B. zur Archivierung (ohne Passwörter).
+        <strong>Die Datei enthält IBANs und Adressen – vertraulich aufbewahren!</strong></p>
+      <button type="button" class="btn btn-primaer" id="d-export">Datenexport herunterladen</button>
+      <p class="hinweis">Vollständige Sicherungen der Datenbank erstellt der Server automatisch jede Nacht
+        (siehe README, Abschnitt „Backups“).</p>
+    </section>`;
 
-  inhalt.querySelector('#d-export').addEventListener('click', () => {
+  inhalt.querySelector('#d-export').addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
     try {
-      downloadText(`honorarnoten-sicherung-${new Date().toISOString().slice(0, 10)}.json`, store.exportieren(), 'application/json');
+      const name = istDemo ? 'sicherung' : 'datenexport';
+      downloadText(`honorarnoten-${name}-${new Date().toISOString().slice(0, 10)}.json`, await store.exportieren(), 'application/json');
     } catch (e) {
       meldung(fehlerText(e), 'fehler');
     }
-  });
+  }));
+  if (!istDemo) return;
   inhalt.querySelector('#d-import').addEventListener('change', async (ev) => {
     const datei = ev.target.files[0];
     if (!datei) return;
@@ -318,8 +329,9 @@ function daten(inhalt, { store, demoDaten, neuLaden }) {
   });
 }
 
-export function render(el, ctx) {
-  const s = ctx.store.statistik();
+export async function render(el, ctx) {
+  const s = await ctx.store.statistik();
+  if (!ctx.istAktuell()) return;
   const tab = REITER[ctx.params.tab] ? ctx.params.tab : (s.anfragen ? 'anfragen' : 'benutzer');
   el.innerHTML = `
     <h1>Admin-Terminal</h1>
@@ -338,5 +350,5 @@ export function render(el, ctx) {
     <div id="a-inhalt"></div>`;
   zugangsdatenBinden(el.querySelector('#a-zugang'), ctx.neuLaden);
   const inhalt = el.querySelector('#a-inhalt');
-  ({ anfragen, benutzer, noten, einstellungen, daten })[tab](inhalt, ctx);
+  await ({ anfragen, benutzer, noten, einstellungen, daten })[tab](inhalt, ctx);
 }

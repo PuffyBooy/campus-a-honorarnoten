@@ -258,8 +258,9 @@ section.fehlerbox { border: 0; }
 .meldung-fehler { background: var(--gefahr); }
 
 /* ---------- Login ---------- */
-.login-raster { display: grid; gap: 0 1rem; max-width: 960px; margin: 1.5rem auto; }
-@media (min-width: 820px) { .login-raster { grid-template-columns: 1.2fr 1fr; align-items: start; } }
+.login-raster { display: grid; gap: 0 1rem; max-width: 480px; margin: 1.5rem auto; }
+.login-raster:has(> .demo) { max-width: 960px; }
+@media (min-width: 820px) { .login-raster:has(> .demo) { grid-template-columns: 1.2fr 1fr; align-items: start; } }
 .login-raster form label { margin-top: .6rem; }
 .login-raster form .btn-primaer { margin-top: 1rem; }
 .demo { background: var(--marke-hell); }
@@ -318,6 +319,8 @@ tr.inaktiv { opacity: .6; }
 label.btn { margin: 0; font-weight: 600; }
 
 /* ---------- Fußzeile ---------- */
+.fuss { display: none; }
+body.modus-demo .fuss { display: block; }
 .fuss { max-width: 1100px; margin: 2rem auto 5rem; padding: 0 1rem; color: var(--text-leise); font-size: .8rem; }
 
 @media print {

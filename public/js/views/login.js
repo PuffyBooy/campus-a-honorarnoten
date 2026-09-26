@@ -1,10 +1,10 @@
 // Anmelden / Zugang anfragen, dazu Schnellzugang zu den Demo-Konten.
 // Selbst registrieren geht nicht – ein Admin schaltet Anfragen frei.
-import { DEMO_KONTEN, DEMO_PASSWORT } from '../demo.js';
+import { DEMO_KONTEN, DEMO_PASSWORT } from '../demo-konten.js';
 import { esc } from '../lib/format.js';
 import { fehlerText, mitSperre } from '../lib/ui.js';
 
-export function render(el, { store, nachAnmeldung }) {
+export function render(el, { store, istDemo, nachAnmeldung }) {
   el.innerHTML = `
     <div class="login-raster">
       <section class="karte">
@@ -43,7 +43,7 @@ export function render(el, { store, nachAnmeldung }) {
         </form>
       </section>
 
-      <section class="karte demo">
+      ${istDemo ? `<section class="karte demo">
         <h2>Demo-Zugänge</h2>
         <p class="hinweis">Zum Ausprobieren jeder Rolle. Passwort jeweils <code>${esc(DEMO_PASSWORT)}</code>.
           Tipp: In zwei Browser-Tabs kann man gleichzeitig verschiedene Rollen nutzen.</p>
@@ -53,7 +53,7 @@ export function render(el, { store, nachAnmeldung }) {
               <span><strong>${esc(k.rolle)}</strong><br><span class="klein">${esc(k.text)} · ${esc(k.email)}</span></span>
               <span aria-hidden="true">→</span></button></li>`).join('')}
         </ul>
-      </section>
+      </section>` : ''}
     </div>`;
 
   const reiter = { anmelden: el.querySelector('#t-anmelden'), registrieren: el.querySelector('#t-registrieren') };
@@ -86,17 +86,20 @@ export function render(el, { store, nachAnmeldung }) {
     absenden(f, async () => { await store.anmelden(f.email.value, f.passwort.value); });
   });
 
-  panels.registrieren.addEventListener('submit', (ev) => {
+  panels.registrieren.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const f = ev.currentTarget;
     const fehler = f.querySelector('.feldfehler');
     fehler.textContent = '';
+    const knopf = f.querySelector('button[type=submit]');
+    knopf.disabled = true;
     try {
-      store.zugangAnfragen({
+      await store.zugangAnfragen({
         vorname: f.vorname.value, nachname: f.nachname.value, email: f.email.value, nachricht: f.nachricht.value,
       });
     } catch (e) {
       fehler.textContent = fehlerText(e);
+      knopf.disabled = false;
       return;
     }
     f.innerHTML = `<p class="erfolgbox" role="status"><strong>Danke, deine Anfrage ist angekommen!</strong><br>

@@ -12,8 +12,9 @@ const SORTIERUNGEN = {
   betrag_asc: ['Betrag: niedrigster zuerst', (a, b) => a.betrag - b.betrag],
 };
 
-export function render(el, { store }) {
-  const daten = store.alleNoten();
+export async function render(el, { store, istAktuell }) {
+  const daten = await store.alleNoten();
+  if (!istAktuell()) return;
   const zaehler = Object.fromEntries(Object.keys(STATUS_LABEL).map((s) => [s, 0]));
   daten.forEach((n) => zaehler[n.status]++);
 
