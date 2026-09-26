@@ -80,6 +80,13 @@ menueKnopf.addEventListener('click', () => {
 });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menueSchliessen(); });
 
+// Datumsfeld: Klick irgendwo ins Feld öffnet den Kalender (nicht nur auf das Symbol)
+document.addEventListener('click', (e) => {
+  if (e.target.matches?.('input[type="date"]:not([readonly]):not([disabled])')) {
+    try { e.target.showPicker(); } catch { /* ältere Browser: Standardverhalten */ }
+  }
+});
+
 async function renderNav(nutzer, pfad) {
   menueSchliessen();
   const mitMenue = Boolean(nutzer && !nutzer.muss_passwort_aendern);

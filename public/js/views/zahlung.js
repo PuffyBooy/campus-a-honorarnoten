@@ -323,12 +323,23 @@ function sammelBinden(inhalt, { store, neuLaden, daten, nachId, getAuftraggeber,
   summeZeigen();
 }
 
+/** ['2026-09', '2026-08', …] – die letzten `anzahl` Monate bis einschließlich `bis` */
+function letzteMonate(bis, anzahl) {
+  let [j, m] = bis.split('-').map(Number);
+  return Array.from({ length: anzahl }, () => {
+    const wert = `${j}-${String(m).padStart(2, '0')}`;
+    if (--m === 0) { m = 12; j--; }
+    return wert;
+  });
+}
+
 async function bezahlt(inhalt, { store }) {
   inhalt.innerHTML = `
     <section class="karte filterleiste filter-zwei">
       <div class="feld">
         <label for="z-monat">Monat der Zahlung</label>
-        <input type="month" id="z-monat" value="${esc(gewaehlterMonat)}" max="${heuteIso().slice(0, 7)}">
+        <select id="z-monat">${letzteMonate(heuteIso().slice(0, 7), 24).map((m) =>
+          `<option value="${m}" ${m === gewaehlterMonat ? 'selected' : ''}>${esc(formatMonat(m))}</option>`).join('')}</select>
       </div>
       <div class="feld feld-knopf">
         <button type="button" class="btn btn-primaer" id="z-csv">CSV exportieren</button>
