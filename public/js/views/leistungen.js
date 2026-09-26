@@ -24,9 +24,9 @@ function formularHtml(p, einstellungen) {
       <fieldset class="kategorie">
         <legend class="sr-only">Kategorie</legend>
         <label class="radio"><input type="radio" name="kategorie" value="kolumne" ${kat === 'kolumne' ? 'checked' : ''}>
-          <span><strong>Kolumne</strong><br><span class="klein">reguläres Honorar</span></span></label>
+          <span><strong>Kolumne</strong></span></label>
         <label class="radio"><input type="radio" name="kategorie" value="ausserordentlich" ${kat === 'ausserordentlich' ? 'checked' : ''}>
-          <span><strong>Außerordentliches Honorar</strong><br><span class="klein">extra mit der Redaktion vereinbart</span></span></label>
+          <span><strong>Außerordentliches Honorar</strong></span></label>
       </fieldset>
       <div class="feld">
         <label for="l-titel">Titel des Beitrags <span class="pflicht" aria-hidden="true">*</span></label>
@@ -99,10 +99,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
       <h1>Meine Leistungen</h1>
       <a href="#/noten" class="btn">Meine Honorarnoten</a>
     </div>
-    <p class="einleitung">Speichere deine Beiträge, sobald sie erschienen sind. Einmal im Monat schickst du alle
-      gesammelten Leistungen gemeinsam als Honorarnote ab.</p>
-    ${!profilOk ? `<p class="hinweisbox">Bevor du abschicken kannst: Bitte <a href="#/profil">Adresse und
-      Bankverbindung im Profil</a> ergänzen. Du musst sie nur einmal eingeben.</p>` : ''}
+    ${!profilOk ? '<p class="hinweisbox">Bitte zuerst <a href="#/profil">Adresse und Bankverbindung</a> ergänzen.</p>' : ''}
 
     <div class="spalten">
       <div>${formularHtml(bearbeite, einstellungen)}</div>
@@ -136,9 +133,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
         ${liste.length ? `
         <section class="karte abschicken">
           <h2>Monatsabrechnung ${esc(formatMonat(heuteIso()))}</h2>
-          ${diesenMonat.length ? `<p class="hinweisbox">Du hast diesen Monat schon ${diesenMonat.map((n) => `<strong>${esc(n.nummer)}</strong>`).join(', ')}
-            abgeschickt. Normalerweise wird einmal pro Monat abgerechnet – weitere Leistungen kannst du auch
-            nächsten Monat mitschicken.</p>` : ''}
+          ${diesenMonat.length ? `<p class="hinweisbox">Diesen Monat schon abgeschickt: ${diesenMonat.map((n) => `<strong>${esc(n.nummer)}</strong>`).join(', ')}</p>` : ''}
           <dl class="angaben kompakt">
             <dt>Nummer</dt><dd class="nummer">${esc(naechste.nummer)}</dd>
             <dt>An</dt><dd>${esc(einstellungen.empfaenger.name)}</dd>
@@ -147,8 +142,6 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
           <button type="button" class="btn btn-primaer btn-breit" id="abschicken" ${profilOk ? '' : 'disabled'}>
             Honorarnote abschicken
           </button>
-          <p class="hinweis">Die Adresse und Bankverbindung kommen aus deinem <a href="#/profil">Profil</a>.
-            Der Rechnungsbetrag ist laut § 6 Abs 1 Z 27 UStG umsatzsteuerfrei.</p>
         </section>` : ''}
       </div>
     </div>`;

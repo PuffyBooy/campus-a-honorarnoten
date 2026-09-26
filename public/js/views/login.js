@@ -9,7 +9,6 @@ export function render(el, { store, istDemo, nachAnmeldung }) {
     <div class="login-raster">
       <section class="karte">
         <h1>Honorarnoten</h1>
-        <p class="einleitung">Leistungen laufend erfassen, einmal im Monat als Honorarnote abschicken.</p>
         <div class="reiter" role="tablist">
           <button type="button" role="tab" id="t-anmelden" aria-selected="true" aria-controls="p-anmelden">Anmelden</button>
           <button type="button" role="tab" id="t-registrieren" aria-selected="false" aria-controls="p-registrieren">Zugang anfragen</button>
@@ -38,15 +37,12 @@ export function render(el, { store, istDemo, nachAnmeldung }) {
                     placeholder="z. B. Schule, Klasse oder wofür du schreibst"></textarea>
           <p class="feldfehler" role="alert"></p>
           <button class="btn btn-primaer btn-breit" type="submit">Zugang anfragen</button>
-          <p class="hinweis">Die Redaktion prüft deine Anfrage und schickt dir ein Startpasswort.
-            Beim ersten Anmelden legst du dein eigenes Passwort fest.</p>
         </form>
       </section>
 
       ${istDemo ? `<section class="karte demo">
         <h2>Demo-Zugänge</h2>
-        <p class="hinweis">Zum Ausprobieren jeder Rolle. Passwort jeweils <code>${esc(DEMO_PASSWORT)}</code>.
-          Tipp: In zwei Browser-Tabs kann man gleichzeitig verschiedene Rollen nutzen.</p>
+        <p class="hinweis">Passwort: <code>${esc(DEMO_PASSWORT)}</code></p>
         <ul class="demo-liste">
           ${DEMO_KONTEN.map((k) => `
             <li><button type="button" class="btn btn-breit demo-knopf" data-email="${esc(k.email)}">
@@ -102,9 +98,7 @@ export function render(el, { store, istDemo, nachAnmeldung }) {
       knopf.disabled = false;
       return;
     }
-    f.innerHTML = `<p class="erfolgbox" role="status"><strong>Danke, deine Anfrage ist angekommen!</strong><br>
-      Sobald die Redaktion dich freischaltet, bekommst du dein Startpasswort. Damit meldest du dich
-      unter „Anmelden“ an und legst dein eigenes Passwort fest.</p>`;
+    f.innerHTML = `<p class="erfolgbox" role="status"><strong>Anfrage gesendet.</strong> Du bekommst ein Startpasswort, sobald du freigeschaltet bist.</p>`;
   });
 
   el.querySelectorAll('.demo-knopf').forEach((knopf) => knopf.addEventListener('click', () =>
@@ -123,7 +117,7 @@ export function renderPasswortFestlegen(el, { store, nutzer, weiter, abmelden })
   el.innerHTML = `
     <section class="karte schmal">
       <h1>Willkommen, ${esc(nutzer.vorname)}!</h1>
-      <p>Du hast dich mit einem Startpasswort angemeldet. Bitte lege jetzt dein eigenes Passwort fest.</p>
+      <p>Bitte lege dein eigenes Passwort fest.</p>
       <form id="pw-festlegen" novalidate>
         <input type="text" name="username" value="${esc(nutzer.email)}" autocomplete="username" hidden>
         <label for="pf-neu">Neues Passwort (mind. 8 Zeichen)</label>

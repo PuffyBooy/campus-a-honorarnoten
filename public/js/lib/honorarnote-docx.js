@@ -8,8 +8,8 @@ const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const W14 = 'http://schemas.microsoft.com/office/word/2010/wordml';
 const XML_NS = 'http://www.w3.org/XML/1998/namespace';
 
-export const VORLAGE_URL = new URL('../../vorlage/honorarnote-vorlage.docx', import.meta.url).href;
-export const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+const VORLAGE_URL = new URL('../../vorlage/honorarnote-vorlage.docx', import.meta.url).href;
+const DOCX_MIME = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
 
 // Beispielwerte in der Vorlage -> werden ersetzt
 const BEISPIEL = {
@@ -103,7 +103,7 @@ function positionsTabelle(tbl, positionen, spalten) {
  * @param {object} note  Honorarnote (mit autor, zahlung, empfaenger, positionen)
  * @param {{DOMParser, XMLSerializer}} dom
  */
-export function dokumentBefuellen(xml, note, dom = globalThis) {
+function dokumentBefuellen(xml, note, dom = globalThis) {
   const doc = new dom.DOMParser().parseFromString(xml, 'application/xml');
   if (doc.getElementsByTagName('parsererror').length) throw new Error('Vorlage konnte nicht gelesen werden.');
   const body = alle(doc, 'body')[0];

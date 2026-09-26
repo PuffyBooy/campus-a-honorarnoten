@@ -128,9 +128,8 @@ code { font-family: var(--mono); font-size: .9em; }
 }
 .liste { list-style: none; margin: 0; padding: 0; }
 .laden { color: var(--text-leise); }
-.klein, .meta, .hinweis, .legende, .treffer { color: var(--text-leise); font-size: .875rem; }
+.klein, .meta, .hinweis, .treffer { color: var(--text-leise); font-size: .875rem; }
 .meta { margin: .25rem 0; }
-.einleitung { margin-top: 0; color: var(--text-leise); }
 
 /* ---------- Formulare ---------- */
 fieldset { border: 0; padding: 0; margin: 0 0 1.25rem; }
@@ -366,7 +365,7 @@ body.modus-demo .fuss { display: block; }
 .fuss { max-width: 1100px; margin: 2rem auto 5rem; padding: 0 1rem; color: var(--text-leise); font-size: .8rem; }
 
 @media print {
-  .kopf, .meldungen, .aktionen, form, .fuss, .einleitung, .gen-vorschau-titel { display: none !important; }
+  .kopf, .meldungen, .aktionen, form, .fuss, .gen-vorschau-titel { display: none !important; }
   body { background: #fff; }
   .inhalt { padding: 0; max-width: none; }
   .gen-spalten { display: block; }

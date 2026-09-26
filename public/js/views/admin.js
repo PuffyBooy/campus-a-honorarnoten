@@ -25,8 +25,7 @@ function zugangsdatenHtml(z) {
   return `
     <section class="karte zugangsdaten" role="status">
       <h2>Zugangsdaten für ${esc(z.vorname)}</h2>
-      <p>Bitte gib diese Daten an die Person weiter. Das Startpasswort wird nur jetzt angezeigt
-        und muss beim ersten Anmelden geändert werden.</p>
+      <p>Das Startpasswort wird nur jetzt angezeigt.</p>
       <div class="kopierblock">
         <div class="kopierzeile"><span class="kopier-label">E-Mail</span><span class="kopier-wert">${esc(z.email)}</span><span></span></div>
         <div class="kopierzeile"><span class="kopier-label">Startpasswort</span>
@@ -77,8 +76,6 @@ async function anfragen(inhalt, { store, neuLaden }) {
         </div>
       </li>`).join('')}</ul>`
     : '<section class="karte"><p>Keine offenen Zugangsanfragen.</p></section>'}
-    <p class="hinweis">Neue Personen können sich nicht selbst registrieren, sondern nur einen Zugang anfragen.
-      Beim Freischalten entsteht ein Startpasswort, das du weitergibst.</p>
     ${erledigt.length ? `<section class="karte">
       <h2>Bearbeitet</h2>
       <ul class="verlauf">${erledigt.map((a) => `<li>${esc(a.vorname)} ${esc(a.nachname)} · ${esc(a.email)} –
@@ -161,8 +158,7 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
           </span></td>
         </tr>`).join('')}</tbody>
     </table>
-    <p class="hinweis">Neue Personen fragen einen Zugang an (Reiter „Anfragen“) oder du legst sie hier direkt an.
-      Rollen kannst du jederzeit ändern.</p>`;
+`;
 
   const anlegen = inhalt.querySelector('#anlegen-form');
   anlegen.addEventListener('submit', async (ev) => {
@@ -227,8 +223,6 @@ async function noten(inhalt, { store, neuLaden }) {
           <td data-label="Status">${statusBadge(n.status)}</td>
           <td data-label=""><button type="button" class="btn btn-klein btn-gefahr" data-loeschen>Löschen</button></td>
         </tr>`).join('')}</tbody></table>` : '<section class="karte"><p>Keine Honorarnoten vorhanden.</p></section>'}
-    <p class="hinweis">Löschen entfernt die Honorarnote samt Bankdaten, Kommentaren und Verlauf endgültig (Datenschutz).
-      Bezahlte Honorarnoten sind Buchhaltungsbelege – vorher sichern!</p>
     <section class="karte">
       <h2>Löschprotokoll</h2>
       ${protokoll.length ? `<ul class="verlauf">${protokoll.map((p) => `<li><strong class="nummer">${esc(p.nummer)}</strong>
@@ -250,14 +244,11 @@ async function einstellungen(inhalt, { store, neuLaden }) {
   inhalt.innerHTML = `
     <form class="karte" id="e-form" novalidate>
       <h2>Rechnungsempfänger</h2>
-      <p class="hinweis">Steht auf jeder neuen Honorarnote. Bereits abgeschickte Honorarnoten behalten ihre Angaben.</p>
       <label for="e-name">Name</label><input id="e-name" name="name" value="${esc(e.empfaenger.name)}" required>
       <label for="e-strasse">Straße und Hausnummer</label><input id="e-strasse" name="strasse" value="${esc(e.empfaenger.strasse)}">
       <label for="e-plz">PLZ und Ort</label><input id="e-plz" name="plz_ort" value="${esc(e.empfaenger.plz_ort)}">
       <label for="e-uid">UID-Nummer</label><input id="e-uid" name="uid" value="${esc(e.empfaenger.uid)}">
       <h2 class="abstand-oben">Honorarsätze</h2>
-      <p class="hinweis">Wird beim Speichern einer Leistung als Betrag vorausgefüllt. Die Redaktion sieht,
-        wenn jemand davon abweicht. Leer lassen = kein Standardsatz.</p>
       <div class="zeile">
         <div class="feld"><label for="e-satz-kolumne">Kolumne (EUR)</label>
           <input id="e-satz-kolumne" name="satz_kolumne" inputmode="decimal" autocomplete="off"
@@ -305,8 +296,7 @@ function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
     <div class="spalten">
       <section class="karte">
         <h2>Sicherung</h2>
-        <p>Alle Daten liegen nur in diesem Browser. Lade regelmäßig eine Sicherung herunter.
-          <strong>Die Datei enthält IBANs und Adressen – vertraulich aufbewahren!</strong></p>
+        <p><strong>Enthält IBANs und Adressen – vertraulich aufbewahren.</strong></p>
         <div class="aktionen">
           <button type="button" class="btn btn-primaer" id="d-export">Sicherung herunterladen</button>
           <label class="btn" for="d-import">Sicherung einspielen …</label>
@@ -315,17 +305,14 @@ function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
       </section>
       <section class="karte gefahrenzone">
         <h2>Demo zurücksetzen</h2>
-        <p>Löscht alle Daten in diesem Browser und lädt die Beispieldaten neu. Danach bist du abgemeldet.</p>
+        <p>Lädt die Beispieldaten neu.</p>
         <button type="button" class="btn btn-gefahr" id="d-reset">Alles zurücksetzen</button>
       </section>
     </div>` : `
     <section class="karte">
       <h2>Datenexport</h2>
-      <p>Alle Daten als JSON-Datei, z. B. zur Archivierung (ohne Passwörter).
-        <strong>Die Datei enthält IBANs und Adressen – vertraulich aufbewahren!</strong></p>
+      <p><strong>Enthält IBANs und Adressen – vertraulich aufbewahren.</strong></p>
       <button type="button" class="btn btn-primaer" id="d-export">Datenexport herunterladen</button>
-      <p class="hinweis">Vollständige Sicherungen der Datenbank erstellt der Server automatisch jede Nacht
-        (siehe README, Abschnitt „Backups“).</p>
     </section>`;
 
   inhalt.querySelector('#d-export').addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {

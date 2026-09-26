@@ -14,7 +14,9 @@ mkdir -p "$ROOT/public/vendor"
 echo "import JSZip from 'jszip'; export default JSZip;" > entry.js
 npx esbuild entry.js --bundle --format=esm --minify --platform=browser --target=es2020 \
   --legal-comments=eof --outfile="$ROOT/public/vendor/jszip.mjs"
-cp node_modules/qrcode-generator/dist/qrcode.mjs "$ROOT/public/vendor/qrcode-generator.mjs"
+{ echo "/*! qrcode-generator $QRCODE_VERSION | Copyright (c) 2009 Kazuhiko Arase | MIT License | http://www.d-project.com/ */"
+  npx esbuild node_modules/qrcode-generator/dist/qrcode.mjs --minify --format=esm --target=es2020; } \
+  > "$ROOT/public/vendor/qrcode-generator.mjs"
 cat > "$ROOT/public/vendor/VERSIONS.txt" <<TXT
 jszip $JSZIP_VERSION (MIT)
 qrcode-generator $QRCODE_VERSION (MIT)

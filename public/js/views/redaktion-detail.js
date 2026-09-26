@@ -61,15 +61,14 @@ export async function render(el, { store, nutzer, params, neuLaden, istAktuell }
         </div>
       </form>
       ${n.status === 'abgelehnt' ? `<p class="fehlerbox"><strong>Ablehnungsgrund:</strong> ${esc(n.ablehnungsgrund)}</p>` : ''}
-      ${n.zurueckgeholt_am ? '<p class="hinweisbox">Die Autor:in hat die Leistungen zur Überarbeitung zurückgeholt.</p>' : ''}
-      <p class="hinweis">🔒 Adresse und Bankverbindung sind für die Redaktion ausgeblendet.</p>
+      ${n.zurueckgeholt_am ? '<p class="hinweisbox">Zur Überarbeitung zurückgeholt.</p>' : ''}
     </section>
 
     <div class="spalten">
       <div>
         <section class="karte">
           <h2>Entscheidung</h2>
-          ${n.status === 'bezahlt' ? '<p>Diese Honorarnote ist bereits bezahlt und kann nicht mehr geändert werden.</p>' : ''}
+          ${n.status === 'bezahlt' ? '<p>Bereits bezahlt.</p>' : ''}
           <div class="aktionen">
             ${kannAnnehmen ? '<button type="button" class="btn btn-erfolg" id="d-annehmen">Annehmen</button>' : ''}
             ${kannAblehnen ? '<button type="button" class="btn btn-gefahr" id="d-ablehnen-oeffnen">Ablehnen …</button>' : ''}
@@ -86,7 +85,6 @@ export async function render(el, { store, nutzer, params, neuLaden, istAktuell }
         </section>
         <section class="karte">
           <h2>Interne Kommentare</h2>
-          <p class="hinweis">Nur für die Redaktion sichtbar.</p>
           <ul class="kommentare">
             ${kommentare.map((k) => `<li><div class="klein">${esc(k.verfasser_name)} · ${esc(formatZeitpunkt(k.am))}</div>
               <div class="notiz">${esc(k.text)}</div></li>`).join('') || '<li class="klein">Noch keine Kommentare.</li>'}

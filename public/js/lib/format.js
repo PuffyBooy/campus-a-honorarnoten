@@ -7,7 +7,7 @@ export const STATUS_LABEL = {
   bezahlt: 'Bezahlt',
 };
 
-export const ART_LABEL = {
+const ART_LABEL = {
   artikel: 'Artikel',
   kommentar: 'Kommentar',
   foto: 'Foto',

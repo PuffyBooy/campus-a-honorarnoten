@@ -176,9 +176,6 @@ export function render(el, { nutzer }) {
     <div class="kopfzeile">
       <h1>Externe Honorarnote</h1>
     </div>
-    <p class="einleitung">Honorarnote für eine <strong>andere Firma</strong> erstellen – z. B. wenn du auch für ein anderes
-      Medium schreibst. Deine Daten kommen aus dem <a href="#/profil">Profil</a>. Der Entwurf bleibt in diesem Browser
-      gespeichert; an campus a college wird nichts geschickt.</p>
     <div class="spalten gen-spalten">
       <form id="gen-form" class="gen-formular" novalidate>
         <section class="karte">
@@ -205,13 +202,10 @@ export function render(el, { nutzer }) {
             ${feld('nummer', 'Honorarnote Nr.', entwurf.nummer, { pflicht: true, attrs: 'maxlength="60"' })}
             ${feld('datum', 'Datum', entwurf.datum, { pflicht: true, typ: 'date' })}
           </div>
-          <p class="hinweis">Tipp: Für externe Honorarnoten eine eigene, fortlaufende Nummernserie verwenden (Vorschlag mit „E“).</p>
           <div class="zeile">
             ${feld('ort', 'Ort', entwurf.ort, { pflicht: true, attrs: 'maxlength="60"' })}
             ${feld('leistungszeitraum', 'Leistungszeitraum', entwurf.leistungszeitraum, { attrs: 'maxlength="60" placeholder="z. B. September 2026"' })}
           </div>
-          <p class="hinweis">Die Honorarnote enthält immer den Hinweis, dass der Betrag als Kleinunternehmer:in
-            umsatzsteuerfrei ist (§ 6 Abs 1 Z 27 UStG).</p>
           <div class="feld">
             <label for="g-anmerkung">Anmerkung <span class="optional">(optional)</span></label>
             <textarea id="g-anmerkung" name="anmerkung" rows="2" maxlength="1000">${esc(entwurf.anmerkung)}</textarea>
@@ -352,7 +346,7 @@ export function render(el, { nutzer }) {
   });
 
   el.querySelector('#gen-neu').addEventListener('click', () => {
-    if (!confirm('Alle Eingaben löschen und eine neue Honorarnote beginnen? Empfänger und Leistungen werden geleert.')) return;
+    if (!confirm('Neue Honorarnote beginnen? Eingaben werden gelöscht.')) return;
     schreiben(entwurfKey(nutzer.id), null);
     render(el, { nutzer });
   });

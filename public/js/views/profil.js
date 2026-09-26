@@ -3,12 +3,11 @@ import { ROLLEN_LABEL, esc } from '../lib/format.js';
 import { formatIban, ibanFehler, bicIstGueltig } from '../lib/iban.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
 
-function feld(name, label, wert, { typ = 'text', pflicht = true, attrs = '', hinweis = '' } = {}) {
+function feld(name, label, wert, { typ = 'text', pflicht = true, attrs = '' } = {}) {
   return `
     <div class="feld">
       <label for="p-${name}">${esc(label)}${pflicht ? ' <span class="pflicht" aria-hidden="true">*</span>' : ' <span class="optional">(optional)</span>'}</label>
       <input id="p-${name}" name="${name}" type="${typ}" value="${esc(wert)}" ${pflicht ? 'required' : ''} ${attrs}>
-      ${hinweis ? `<p class="hinweis">${hinweis}</p>` : ''}
       <p class="feldfehler" id="pe-${name}"></p>
     </div>`;
 }
@@ -21,8 +20,7 @@ export async function render(el, { store, nutzer, navigate, neuLaden }) {
 
   el.innerHTML = `
     <h1>Mein Profil</h1>
-    ${istAutor && !vollstaendig ? `<p class="hinweisbox" role="status">Bitte ergänze Adresse und Bankverbindung –
-      dann musst du sie bei deinen Honorarnoten nie wieder angeben.</p>` : ''}
+    ${istAutor && !vollstaendig ? `<p class="hinweisbox" role="status">Bitte Adresse und Bankverbindung ergänzen.</p>` : ''}
     <div class="spalten">
       <form class="karte" id="profil-form" novalidate>
         <fieldset>
@@ -44,9 +42,7 @@ export async function render(el, { store, nutzer, navigate, neuLaden }) {
           ${feld('bic', 'BIC', p.bic, { pflicht: false, attrs: 'autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="11"' })}
         </fieldset>
         <aside class="datenschutz" aria-label="Datenschutzhinweis">
-          <strong>Datenschutz:</strong> Deine Adresse und Bankverbindung werden ausschließlich für die
-          Abrechnung und Auszahlung deiner Honorare verwendet. Die Redaktion sieht sie nicht, nur die
-          Buchhaltung. Die Honorarnoten werden im Rahmen der gesetzlichen Aufbewahrungspflichten gespeichert.
+          <strong>Datenschutz:</strong> Adresse und Bankverbindung sieht nur die Buchhaltung, sie dienen nur der Auszahlung.
           ${kontakt ? `Fragen, Auskunft oder Löschung: <a href="mailto:${esc(kontakt)}">${esc(kontakt)}</a>.` : ''}
         </aside>` : ''}
         <p class="feldfehler" id="pe-formular" role="alert"></p>
@@ -57,7 +53,6 @@ export async function render(el, { store, nutzer, navigate, neuLaden }) {
         <section class="karte">
           <h2>Meine Rollen</h2>
           <p>${nutzer.rollen.map((r) => `<span class="badge badge-rolle">${esc(ROLLEN_LABEL[r])}</span>`).join(' ') || '–'}</p>
-          <p class="hinweis">Rollen vergibt ein Admin.</p>
         </section>
         <form class="karte" id="pw-form" novalidate>
           <h2>Passwort ändern</h2>

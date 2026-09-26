@@ -98,7 +98,7 @@ async function pbkdf2(passwort, saltHex) {
   return Array.from(new Uint8Array(bits), (b) => b.toString(16).padStart(2, '0')).join('');
 }
 
-export async function passwortHash(passwort) {
+async function passwortHash(passwort) {
   const salt = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
   return { salt, hash: await pbkdf2(passwort, salt) };
 }
@@ -171,7 +171,7 @@ export function abmelden() {
 const EMAIL_MUSTER = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 
 /** Gut lesbares Startpasswort ohne verwechselbare Zeichen (0/O, 1/l/I) */
-export function startpasswort(laenge = 10) {
+function startpasswort(laenge = 10) {
   const zeichen = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
   return Array.from(crypto.getRandomValues(new Uint32Array(laenge)), (x) => zeichen[x % zeichen.length]).join('');
 }

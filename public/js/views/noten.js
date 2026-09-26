@@ -60,7 +60,7 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
           ${n.positionen.length === 1 ? 'Leistung' : 'Leistungen'})</span></p>
         ${n.status === 'abgelehnt' ? `<div class="fehlerbox"><strong>Begründung der Ablehnung:</strong> ${esc(n.ablehnungsgrund)}
           ${n.zurueckgeholt_am
-            ? '<p class="klein">Die Leistungen wurden zur Überarbeitung in „Meine Leistungen“ übernommen.</p>'
+            ? '<p class="klein">Zur Überarbeitung zurückgeholt.</p>'
             : '<p><button type="button" class="btn btn-klein" data-zurueck>Leistungen überarbeiten und neu abschicken</button></p>'}
           </div>` : ''}
         <details class="aufklapp">
@@ -71,8 +71,7 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
           <button type="button" class="btn btn-klein" data-word>Honorarnote (Word) herunterladen</button>
         </div>
       </li>`).join('')}</ul>`
-    : '<section class="karte"><p>Du hast noch keine Honorarnote abgeschickt.</p></section>'}
-    <p class="legende">Ablauf: Abgeschickt → Angenommen oder Abgelehnt → Bezahlt</p>`;
+    : '<section class="karte"><p>Noch keine Honorarnoten.</p></section>'}`;
 
   el.querySelector('.liste')?.addEventListener('click', async (ev) => {
     const karte = ev.target.closest('[data-id]');
@@ -84,7 +83,7 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
     } else if ('zurueck' in knopf.dataset) {
       try {
         await store.leistungenZurueckholen(n.id);
-        meldung('Die Leistungen stehen wieder unter „Meine Leistungen“ zum Bearbeiten bereit.', 'erfolg');
+        meldung('Leistungen zurückgeholt.', 'erfolg');
         location.hash = '#/leistungen';
       } catch (e) {
         meldung(fehlerText(e), 'fehler');

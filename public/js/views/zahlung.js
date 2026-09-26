@@ -26,7 +26,7 @@ function zahlungsdaten(n) {
   };
 }
 
-export function textblock(n) {
+function textblock(n) {
   const d = zahlungsdaten(n);
   return [
     `Empfänger: ${d.empfaenger}`,
@@ -73,8 +73,6 @@ function sammelHtml(auftraggeber) {
   return `
     <section class="karte sammel" id="sammel" aria-labelledby="sammel-titel">
       <h2 id="sammel-titel">Sammelüberweisung (SEPA)</h2>
-      <p>Alle ausgewählten Zahlungen in <strong>einer Datei</strong>, die du im Online-Banking beim Import von
-        Sammelaufträgen hochlädst – kein Abtippen mehr.</p>
       <p id="sammel-konto" ${konto ? '' : 'hidden'}>Überwiesen wird von:
         <strong>${esc(auftraggeber?.name ?? '')}</strong> · <span class="mono">${esc(formatIban(auftraggeber?.iban ?? ''))}</span>
         <button type="button" class="btn-link" id="konto-aendern">ändern</button></p>
@@ -105,9 +103,8 @@ function sammelHtml(auftraggeber) {
       <button type="button" class="btn btn-primaer btn-breit" id="sammel-laden">SEPA-Datei herunterladen</button>
       <div id="sammel-danach" hidden>
         <ol class="schritte">
-          <li>Datei im Online-Banking hochladen (Import von Sammelaufträgen) und dort freigeben.</li>
-          <li>Danach hier bestätigen – alle Zahlungen aus der Datei werden als bezahlt markiert und die
-            Honorarnoten als ZIP erstellt:</li>
+          <li>Datei im Online-Banking hochladen und freigeben.</li>
+          <li>Hier bestätigen:</li>
         </ol>
         <button type="button" class="btn btn-erfolg btn-breit" id="sammel-bezahlt"></button>
       </div>

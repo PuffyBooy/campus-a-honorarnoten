@@ -2,7 +2,7 @@
 
 import { STATUS_LABEL, esc } from './format.js';
 
-export async function inZwischenablage(text) {
+async function inZwischenablage(text) {
   try {
     await navigator.clipboard.writeText(text);
   } catch {
