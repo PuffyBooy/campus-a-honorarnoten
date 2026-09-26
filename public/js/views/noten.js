@@ -1,6 +1,6 @@
 // Autor:in: abgeschickte Honorarnoten mit Status, Download als Word
 import {
-  ART_LABEL, KATEGORIE_LABEL, esc, formatDatum, formatEuro, formatMonat, formatZeitpunkt,
+  KATEGORIE_LABEL, artText, esc, formatDatum, formatEuro, formatMonat, formatZeitpunkt,
 } from '../lib/format.js';
 import { honorarnoteHerunterladen } from '../lib/beleg.js';
 import { weichtAb } from '../lib/honorarsaetze.js';
@@ -20,7 +20,7 @@ export function positionenTabelle(note, { mitKorrektur = false, saetze = null } 
           <td data-label="Titel"><span><strong>${esc(p.titel)}</strong>
             ${p.ausgabe ? `<br><span class="klein">${esc(p.ausgabe)}</span>` : ''}
             ${p.notiz ? `<br><span class="klein">Notiz: ${esc(p.notiz)}</span>` : ''}</span></td>
-          <td data-label="Kategorie"><span>${esc(KATEGORIE_LABEL[p.kategorie])}<br><span class="klein">${esc(ART_LABEL[p.art] ?? '')}${
+          <td data-label="Kategorie"><span>${esc(KATEGORIE_LABEL[p.kategorie])}<br><span class="klein">${esc(artText(p))}${
             p.vereinbart_mit ? ` · vereinbart mit ${esc(p.vereinbart_mit)}` : ''}</span></span></td>
           <td data-label="Veröffentlichung">${esc(formatDatum(p.veroeffentlichung))}</td>
           <td data-label="Betrag" class="rechts"><span>${esc(formatEuro(p.betrag))}

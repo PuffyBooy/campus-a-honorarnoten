@@ -216,6 +216,23 @@ test('Honorarsätze: Admin legt fest, alle sehen sie, ungültige Werte abgelehnt
   assert.deepEqual((await k.anna.ok('einstellungen')).honorarsaetze, { kolumne: 17.5, ausserordentlich: null });
 });
 
+test('Kolumnenart: Admin-Liste, Speichern, bleibt beim Abschicken erhalten', async () => {
+  await k.admin.ok('einstellungenSpeichern', {
+    empfaenger: { name: 'campus a Medien GmbH' }, kolumnenarten: ' Schulalltag \nKultur\n\nkultur\n',
+  });
+  assert.deepEqual((await k.anna.ok('einstellungen')).kolumnenarten, ['Schulalltag', 'Kultur'], 'getrimmt, ohne Leerzeilen und Doppelte');
+  await k.anna.ok('leistungSpeichern', { kategorie: 'kolumne', art: 'foto', kolumnenart: 'Kultur', titel: 'Theaterkritik', veroeffentlichung: '2026-09-10', betrag: 15 });
+  await k.anna.ok('leistungSpeichern', { kategorie: 'ausserordentlich', art: 'foto', kolumnenart: 'Kultur', titel: 'Fotostrecke', veroeffentlichung: '2026-09-11', betrag: 40, vereinbart_mit: 'Rita' });
+  const [kolumne, extra] = await k.anna.ok('meineLeistungen');
+  assert.equal(kolumne.kolumnenart, 'Kultur');
+  assert.equal(kolumne.art, '', 'Kolumnen haben keine Art der Leistung');
+  assert.equal(extra.kolumnenart, '', 'nur Kolumnen haben eine Kolumnenart');
+  assert.equal(extra.art, 'foto');
+  const note = await k.anna.ok('abrechnungAbschicken', [kolumne.id, extra.id]);
+  assert.equal(note.positionen.find((p) => p.kategorie === 'kolumne').kolumnenart, 'Kultur');
+  assert.equal((await k.rita.ok('note', note.id)).positionen[0].kolumnenart, 'Kultur');
+});
+
 test('Auftraggeberkonto für SEPA: nur Buchhaltung und Admin', async () => {
   const konto = { name: 'campus a Medien GmbH', iban: 'AT32 2011 1823 4567 8901', bic: '' };
   assert.equal((await k.anna.aufruf('auftraggeberSpeichern', konto)).status, 403);

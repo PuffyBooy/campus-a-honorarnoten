@@ -124,6 +124,11 @@ export function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => HTML_ESCAPE[c]);
 }
 
+/** „Art“ einer Leistung für die Anzeige: bei Kolumnen die Kolumnenart, sonst Artikel/Foto/… */
+export function artText(p) {
+  return p.kategorie === 'kolumne' ? (p.kolumnenart ?? '') : (ART_LABEL[p.art] ?? '');
+}
+
 export function vollerName(note) {
   return `${note.vorname ?? ''} ${note.nachname ?? ''}`.trim();
 }

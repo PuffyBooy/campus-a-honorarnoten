@@ -33,8 +33,12 @@ export async function demoDaten(db, { passwortHash }) {
   db.nutzer.push(maria, jonas, rita, bernd, alex);
 
   let nr = 0;
+  // Beispiel-Kolumnenarten (nur Demo – im echten Betrieb trägt sie der Admin ein)
+  const KOLUMNEN = ['Schulalltag', 'Gesellschaft', 'Kultur'];
+  db.einstellungen.kolumnenarten = [...KOLUMNEN];
   const pos = (kategorie, titel, tage, betrag, extra = {}) => ({
-    id: `demo-pos-${++nr}`, kategorie, art: kategorie === 'kolumne' ? 'kommentar' : 'artikel', titel,
+    id: `demo-pos-${++nr}`, kategorie, art: kategorie === 'kolumne' ? '' : 'artikel',
+    kolumnenart: kategorie === 'kolumne' ? KOLUMNEN[nr % KOLUMNEN.length] : '', titel,
     veroeffentlichung: datum(tageZurueck(tage)), ausgabe: '', vereinbart_mit: '', notiz: '',
     betrag, betrag_eingereicht: betrag, betrag_vermerk: '', ...extra,
   });

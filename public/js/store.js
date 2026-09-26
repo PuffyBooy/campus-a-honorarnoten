@@ -8,7 +8,7 @@
 import { heuteIso, summe } from './lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from './lib/iban.js';
 import { honorarnoteNummer } from './lib/nummer.js';
-import { STANDARD_SAETZE, saetzeNormalisieren } from './lib/honorarsaetze.js';
+import { STANDARD_SAETZE, saetzeNormalisieren, kolumnenartenNormalisieren } from './lib/honorarsaetze.js';
 
 const SPEICHER_KEY = 'campus-a-honorare:v1';
 const SITZUNG_KEY = 'campus-a-honorare:sitzung';
@@ -47,6 +47,7 @@ function leereDb() {
       empfaenger: { ...STANDARD_EMPFAENGER },
       datenschutzKontakt: '',
       honorarsaetze: { ...STANDARD_SAETZE },
+      kolumnenarten: [], // leer = freies Textfeld
       auftraggeber: { name: '', iban: '', bic: '' }, // Konto für SEPA-Sammelüberweisungen
     },
   };
@@ -337,9 +338,12 @@ export function meineLeistungen() {
 
 export function leistungSpeichern(daten) {
   const n = brauche('autor');
+  const istKolumne = daten.kategorie === 'kolumne';
   const p = {
     kategorie: daten.kategorie,
-    art: daten.art || 'artikel',
+    // Kolumnen haben eine Kolumnenart, alle anderen eine Art der Leistung
+    art: istKolumne ? '' : (daten.art || 'artikel'),
+    kolumnenart: istKolumne ? trim(daten.kolumnenart).replace(/\s+/g, ' ').slice(0, 100) : '',
     titel: trim(daten.titel),
     veroeffentlichung: daten.veroeffentlichung,
     ausgabe: trim(daten.ausgabe),
@@ -438,7 +442,7 @@ export function abrechnungAbschicken(positionIds) {
     zahlung: { kontoinhaber: n.profil.kontoinhaber, iban: n.profil.iban, bic: n.profil.bic },
     empfaenger: { ...db.einstellungen.empfaenger },
     positionen: positionen.map((p) => ({
-      id: p.id, kategorie: p.kategorie, art: p.art, titel: p.titel, veroeffentlichung: p.veroeffentlichung,
+      id: p.id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel, veroeffentlichung: p.veroeffentlichung,
       ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
       betrag: p.betrag, betrag_eingereicht: p.betrag, betrag_vermerk: '',
     })),
@@ -466,7 +470,7 @@ export function leistungenZurueckholen(noteId) {
   pruefe(!note.zurueckgeholt_am, 'Die Leistungen wurden bereits zurückgeholt.');
   for (const p of note.positionen) {
     db.positionen.push({
-      id: id(), autor_id: n.id, kategorie: p.kategorie, art: p.art, titel: p.titel,
+      id: id(), autor_id: n.id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel,
       veroeffentlichung: p.veroeffentlichung, ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit,
       betrag: p.betrag_eingereicht, notiz: p.notiz, erstellt_am: jetzt(),
     });
@@ -655,12 +659,14 @@ export function einstellungen() {
   return e;
 }
 
-export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorarsaetze }) {
+export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorarsaetze, kolumnenarten }) {
   brauche('admin');
   pruefe(!leer(empfaenger?.name), 'Bitte den Namen des Rechnungsempfängers angeben.');
   let saetze;
+  let arten;
   try {
     saetze = saetzeNormalisieren(honorarsaetze ?? db.einstellungen.honorarsaetze ?? STANDARD_SAETZE);
+    arten = kolumnenartenNormalisieren(kolumnenarten ?? db.einstellungen.kolumnenarten ?? []);
   } catch (e) {
     throw new Fehler(e.message);
   }
@@ -672,6 +678,7 @@ export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorar
     },
     datenschutzKontakt: trim(datenschutzKontakt),
     honorarsaetze: saetze,
+    kolumnenarten: arten,
   };
   speichern();
 }

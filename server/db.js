@@ -134,6 +134,11 @@ const MIGRATIONEN = [
     wert       text not null
   );
   `,
+  // Version 2: Art der Kolumne (statt Art der Leistung bei Kolumnen)
+  `
+  alter table positionen add column kolumnenart text not null default '';
+  alter table note_positionen add column kolumnenart text not null default '';
+  `,
 ];
 
 export function oeffneDatenbank(pfad) {

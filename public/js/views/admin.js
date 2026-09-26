@@ -266,6 +266,11 @@ async function einstellungen(inhalt, { store, neuLaden }) {
           <input id="e-satz-ausser" name="satz_ausserordentlich" inputmode="decimal" autocomplete="off" placeholder="individuell"
                  value="${e.honorarsaetze?.ausserordentlich != null ? esc(formatBetragPlain(e.honorarsaetze.ausserordentlich)) : ''}"></div>
       </div>
+      <h2 class="abstand-oben">Kolumnenarten</h2>
+      <p class="hinweis">Eine pro Zeile. Beim Speichern einer Kolumne wählt man daraus „Art der Kolumne“.
+        Leer lassen = freies Textfeld.</p>
+      <label for="e-kolumnenarten" class="sr-only">Kolumnenarten</label>
+      <textarea id="e-kolumnenarten" name="kolumnenarten" rows="4" placeholder="z. B.&#10;Schulalltag&#10;Gesellschaft">${esc((e.kolumnenarten ?? []).join('\n'))}</textarea>
       <h2 class="abstand-oben">Datenschutz</h2>
       <label for="e-kontakt">Kontakt für Datenschutzanfragen (E-Mail)</label>
       <input id="e-kontakt" name="kontakt" type="email" value="${esc(e.datenschutzKontakt)}">
@@ -296,6 +301,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       empfaenger: { name: form.name.value, strasse: form.strasse.value, plz_ort: form.plz_ort.value, uid: form.uid.value },
       datenschutzKontakt: form.kontakt.value,
       honorarsaetze,
+      kolumnenarten: form.kolumnenarten.value.split('\n'),
     }), 'Einstellungen gespeichert.', neuLaden);
   });
 }

@@ -8,7 +8,7 @@ import {
 import { heuteIso } from '../public/js/lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from '../public/js/lib/iban.js';
 import { honorarnoteNummer } from '../public/js/lib/nummer.js';
-import { STANDARD_SAETZE, saetzeNormalisieren } from '../public/js/lib/honorarsaetze.js';
+import { STANDARD_SAETZE, saetzeNormalisieren, kolumnenartenNormalisieren } from '../public/js/lib/honorarsaetze.js';
 
 export const STANDARD_EMPFAENGER = {
   name: 'campus a Medien GmbH',
@@ -90,6 +90,7 @@ function einstellungenLaden(db) {
     empfaenger: { ...STANDARD_EMPFAENGER },
     datenschutzKontakt: '',
     honorarsaetze: { ...STANDARD_SAETZE },
+    kolumnenarten: [], // leer = freies Textfeld
     auftraggeber: { name: '', iban: '', bic: '' }, // Konto für SEPA-Sammelüberweisungen
   };
   for (const { schluessel, wert } of db.prepare('select * from einstellungen').all()) e[schluessel] = JSON.parse(wert);
@@ -100,7 +101,7 @@ function einstellungenLaden(db) {
 
 function positionAusZeile(p) {
   return {
-    id: p.id, kategorie: p.kategorie, art: p.art, titel: p.titel, veroeffentlichung: p.veroeffentlichung,
+    id: p.id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel, veroeffentlichung: p.veroeffentlichung,
     ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
     betrag: euro(p.betrag_cent), betrag_eingereicht: euro(p.betrag_eingereicht_cent), betrag_vermerk: p.betrag_vermerk,
   };
@@ -266,9 +267,12 @@ export const funktionen = {
 
   leistungSpeichern(ctx, d = {}) {
     const n = brauche(ctx, 'autor');
+    const istKolumne = d.kategorie === 'kolumne';
     const p = {
       kategorie: d.kategorie,
-      art: ['artikel', 'kommentar', 'foto', 'video', 'sonstiges'].includes(d.art) ? d.art : 'artikel',
+      // Kolumnen haben eine Kolumnenart, alle anderen eine Art der Leistung
+      art: istKolumne ? '' : (['artikel', 'kommentar', 'foto', 'video', 'sonstiges'].includes(d.art) ? d.art : 'artikel'),
+      kolumnenart: istKolumne ? trim(d.kolumnenart).replace(/\s+/g, ' ').slice(0, 100) : '',
       titel: trim(d.titel).slice(0, 200),
       veroeffentlichung: String(d.veroeffentlichung ?? ''),
       ausgabe: trim(d.ausgabe).slice(0, 100),
@@ -281,15 +285,15 @@ export const funktionen = {
     if (p.kategorie === 'ausserordentlich') pruefe(!leer(p.vereinbart_mit), 'Bitte angeben, mit wem aus der Redaktion das Honorar vereinbart wurde.');
     const betragCent = cent(d.betrag);
     if (d.id) {
-      const r = ctx.db.prepare(`update positionen set kategorie = ?, art = ?, titel = ?, veroeffentlichung = ?, ausgabe = ?,
+      const r = ctx.db.prepare(`update positionen set kategorie = ?, art = ?, kolumnenart = ?, titel = ?, veroeffentlichung = ?, ausgabe = ?,
           vereinbart_mit = ?, notiz = ?, betrag_cent = ?, geaendert_am = ? where id = ? and autor_id = ?`)
-        .run(p.kategorie, p.art, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz, betragCent, jetzt(), String(d.id), n.id);
+        .run(p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz, betragCent, jetzt(), String(d.id), n.id);
       pruefe(r.changes === 1, 'Diese Leistung gibt es nicht (mehr).', 404);
     } else {
       pruefe(ctx.db.prepare('select count(*) c from positionen where autor_id = ?').get(n.id).c < 500, 'Zu viele gespeicherte Leistungen.');
-      ctx.db.prepare(`insert into positionen (id, autor_id, kategorie, art, titel, veroeffentlichung, ausgabe, vereinbart_mit,
-          notiz, betrag_cent, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id(), n.id, p.kategorie, p.art, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz, betragCent, jetzt());
+      ctx.db.prepare(`insert into positionen (id, autor_id, kategorie, art, kolumnenart, titel, veroeffentlichung, ausgabe, vereinbart_mit,
+          notiz, betrag_cent, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id(), n.id, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz, betragCent, jetzt());
     }
     return true;
   },
@@ -329,9 +333,9 @@ export const funktionen = {
           JSON.stringify({ vorname: n.vorname, nachname: n.nachname, email: n.email, strasse: n.profil.strasse, plz_ort: n.profil.plz_ort }),
           JSON.stringify({ kontoinhaber: n.profil.kontoinhaber, iban: n.profil.iban, bic: n.profil.bic }),
           JSON.stringify(e.empfaenger));
-      const einf = ctx.db.prepare(`insert into note_positionen (id, note_id, reihenfolge, kategorie, art, titel, veroeffentlichung,
-          ausgabe, vereinbart_mit, notiz, betrag_cent, betrag_eingereicht_cent) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-      positionen.forEach((p, i) => einf.run(p.id, noteId, i, p.kategorie, p.art, p.titel, p.veroeffentlichung, p.ausgabe,
+      const einf = ctx.db.prepare(`insert into note_positionen (id, note_id, reihenfolge, kategorie, art, kolumnenart, titel, veroeffentlichung,
+          ausgabe, vereinbart_mit, notiz, betrag_cent, betrag_eingereicht_cent) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      positionen.forEach((p, i) => einf.run(p.id, noteId, i, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe,
         p.vereinbart_mit, p.notiz, p.betrag_cent, p.betrag_cent));
       ctx.db.prepare(`delete from positionen where autor_id = ? and id in (${ids.map(() => '?').join(',')})`).run(n.id, ...ids);
       const summe = positionen.reduce((s, p) => s + p.betrag_cent, 0);
@@ -352,10 +356,10 @@ export const funktionen = {
       pruefe(note.autor_id === n.id, 'Dafür fehlt dir die Berechtigung.', 403);
       pruefe(note.status === 'abgelehnt', 'Nur abgelehnte Honorarnoten können überarbeitet werden.');
       pruefe(!note.zurueckgeholt_am, 'Die Leistungen wurden bereits zurückgeholt.');
-      const einf = ctx.db.prepare(`insert into positionen (id, autor_id, kategorie, art, titel, veroeffentlichung, ausgabe,
-          vereinbart_mit, notiz, betrag_cent, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+      const einf = ctx.db.prepare(`insert into positionen (id, autor_id, kategorie, art, kolumnenart, titel, veroeffentlichung, ausgabe,
+          vereinbart_mit, notiz, betrag_cent, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       for (const p of note.positionen) {
-        einf.run(id(), n.id, p.kategorie, p.art, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz,
+        einf.run(id(), n.id, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz,
           cent(p.betrag_eingereicht), jetzt());
       }
       ctx.db.prepare('update noten set zurueckgeholt_am = ? where id = ?').run(jetzt(), note.id);
@@ -604,8 +608,11 @@ export const funktionen = {
     const kontakt = trim(d.datenschutzKontakt);
     pruefe(!kontakt || EMAIL.test(kontakt), 'Bitte eine gültige E-Mail-Adresse für Datenschutzanfragen angeben.');
     let saetze;
+    let arten;
     try {
-      saetze = saetzeNormalisieren(d.honorarsaetze ?? einstellungenLaden(ctx.db).honorarsaetze);
+      const bisher = einstellungenLaden(ctx.db);
+      saetze = saetzeNormalisieren(d.honorarsaetze ?? bisher.honorarsaetze);
+      arten = kolumnenartenNormalisieren(d.kolumnenarten ?? bisher.kolumnenarten);
     } catch (fehler) {
       throw new Fehler(fehler.message);
     }
@@ -617,6 +624,7 @@ export const funktionen = {
       }));
       speichere.run('datenschutzKontakt', JSON.stringify(kontakt));
       speichere.run('honorarsaetze', JSON.stringify(saetze));
+      speichere.run('kolumnenarten', JSON.stringify(arten));
     });
     return true;
   },

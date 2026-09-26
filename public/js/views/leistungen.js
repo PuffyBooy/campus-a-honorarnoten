@@ -1,6 +1,6 @@
 // Autor:in: Leistungen laufend speichern und einmal im Monat als Honorarnote abschicken
 import {
-  ART_LABEL, KATEGORIE_LABEL, esc, formatBetragPlain, formatDatum, formatEuro, formatMonat, heuteIso, parseBetrag, summe,
+  ART_LABEL, KATEGORIE_LABEL, artText, esc, formatBetragPlain, formatDatum, formatEuro, formatMonat, heuteIso, parseBetrag, summe,
 } from '../lib/format.js';
 import { formatIban } from '../lib/iban.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
@@ -15,7 +15,24 @@ function satzHinweis(kategorie, saetze) {
   return `Standardsatz: ${formatEuro(satz)}`;
 }
 
-function formularHtml(p, saetze) {
+/** Auswahl der Kolumnenart: Liste vom Admin, sonst freies Textfeld */
+function kolumnenartFeld(p, arten) {
+  const aktuell = p?.kolumnenart ?? '';
+  if (!arten.length) {
+    return `<input id="l-kolumnenart" name="kolumnenart" maxlength="100" placeholder="z. B. Name der Kolumne"
+              value="${esc(aktuell)}">`;
+  }
+  // eine inzwischen gestrichene Art beim Bearbeiten trotzdem anzeigen
+  const optionen = aktuell && !arten.includes(aktuell) ? [...arten, aktuell] : arten;
+  return `<select id="l-kolumnenart" name="kolumnenart" required>
+      <option value="">Bitte wählen …</option>
+      ${optionen.map((a) => `<option ${a === aktuell ? 'selected' : ''}>${esc(a)}</option>`).join('')}
+    </select>`;
+}
+
+function formularHtml(p, einstellungen) {
+  const saetze = einstellungen.honorarsaetze;
+  const arten = einstellungen.kolumnenarten ?? [];
   const kat = p?.kategorie ?? 'kolumne';
   return `
     <form class="karte" id="l-form" novalidate>
@@ -33,11 +50,16 @@ function formularHtml(p, saetze) {
         <p class="feldfehler" data-fehler="titel"></p>
       </div>
       <div class="zeile">
-        <div class="feld">
+        <div class="feld" id="l-art-feld" ${kat === 'kolumne' ? 'hidden' : ''}>
           <label for="l-art">Art der Leistung</label>
           <select id="l-art" name="art">
-            ${Object.entries(ART_LABEL).map(([w, l]) => `<option value="${w}" ${(p?.art ?? 'artikel') === w ? 'selected' : ''}>${esc(l)}</option>`).join('')}
+            ${Object.entries(ART_LABEL).map(([w, l]) => `<option value="${w}" ${(p?.art || 'artikel') === w ? 'selected' : ''}>${esc(l)}</option>`).join('')}
           </select>
+        </div>
+        <div class="feld" id="l-kolumnenart-feld" ${kat === 'kolumne' ? '' : 'hidden'}>
+          <label for="l-kolumnenart">Art der Kolumne${arten.length ? ' <span class="pflicht" aria-hidden="true">*</span>' : ' <span class="optional">(optional)</span>'}</label>
+          ${kolumnenartFeld(p, arten)}
+          <p class="feldfehler" data-fehler="kolumnenart"></p>
         </div>
         <div class="feld">
           <label for="l-datum">Veröffentlichung <span class="pflicht" aria-hidden="true">*</span></label>
@@ -99,7 +121,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
       Bankverbindung im Profil</a> ergänzen. Du musst sie nur einmal eingeben.</p>` : ''}
 
     <div class="spalten">
-      <div>${formularHtml(bearbeite, einstellungen.honorarsaetze)}</div>
+      <div>${formularHtml(bearbeite, einstellungen)}</div>
       <div>
         <section class="karte">
           <h2>Gespeichert, noch nicht abgerechnet</h2>
@@ -112,7 +134,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
                     <input type="checkbox" name="pos" value="${esc(p.id)}" checked aria-label="${esc(p.titel)} abrechnen">
                     <span>
                       <strong>${esc(p.titel)}</strong><br>
-                      <span class="klein">${esc(KATEGORIE_LABEL[p.kategorie])} · ${esc(ART_LABEL[p.art] ?? '')} · ${esc(formatDatum(p.veroeffentlichung))}
+                      <span class="klein">${[KATEGORIE_LABEL[p.kategorie], artText(p), formatDatum(p.veroeffentlichung)].filter(Boolean).map(esc).join(' · ')}
                         ${p.vereinbart_mit ? ` · vereinbart mit ${esc(p.vereinbart_mit)}` : ''}</span>
                     </span>
                   </label>
@@ -158,6 +180,8 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     const neu = form.kategorie.value;
     const saetze = einstellungen.honorarsaetze ?? {};
     el.querySelector('#l-vereinbart-feld').hidden = neu !== 'ausserordentlich';
+    el.querySelector('#l-art-feld').hidden = neu === 'kolumne';
+    el.querySelector('#l-kolumnenart-feld').hidden = neu !== 'kolumne';
     el.querySelector('#l-satz-hinweis').textContent = satzHinweis(neu, saetze);
     const bisher = form.betrag.value.trim();
     if (!bisher || parseBetrag(bisher) === saetze[letzteKategorie]) form.betrag.value = satzText(saetze[neu]);
@@ -167,12 +191,15 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    ['titel', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'formular'].forEach((n) => fehler(n, ''));
+    ['titel', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'kolumnenart', 'formular'].forEach((n) => fehler(n, ''));
     const betrag = parseBetrag(form.betrag.value);
     const f = {};
     if (!form.titel.value.trim()) f.titel = 'Bitte den Titel angeben.';
     if (!form.veroeffentlichung.value) f.veroeffentlichung = 'Bitte Datum wählen.';
     if (!betrag) f.betrag = 'Bitte einen Betrag wie 15 oder 15,50 eingeben.';
+    if (form.kategorie.value === 'kolumne' && (einstellungen.kolumnenarten ?? []).length && !form.kolumnenart.value) {
+      f.kolumnenart = 'Bitte die Art der Kolumne wählen.';
+    }
     if (form.kategorie.value === 'ausserordentlich' && !form.vereinbart_mit.value.trim()) {
       f.vereinbart_mit = 'Mit wem aus der Redaktion wurde das vereinbart?';
     }
@@ -186,7 +213,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     try {
       await store.leistungSpeichern({
         id: bearbeiteId ?? undefined,
-        kategorie: form.kategorie.value, art: form.art.value, titel: form.titel.value,
+        kategorie: form.kategorie.value, art: form.art.value, kolumnenart: form.kolumnenart.value, titel: form.titel.value,
         veroeffentlichung: form.veroeffentlichung.value, betrag, vereinbart_mit: form.vereinbart_mit.value,
         ausgabe: form.ausgabe.value, notiz: form.notiz.value,
       });
