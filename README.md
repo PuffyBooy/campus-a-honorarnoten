@@ -84,8 +84,8 @@ Lokal starten: `npm run dev` → http://localhost:5173
 
 8. **Externe Honorarnote (Generator):** Für Aufträge von **anderen Firmen** erstellt man unter
    „Externe Honorarnote“ eine allgemeine Honorarnote: Empfänger und Leistungen eingeben, die
-   eigenen Daten kommen aus dem Profil. Umsatzsteuer wählbar (Kleinunternehmer:in oder 10/13/20 %;
-   mit Umsatzsteuer ist die eigene UID-Nummer Pflicht). Ergebnis als Word-Datei oder über
+   eigenen Daten kommen aus dem Profil. Die Honorarnote ist immer umsatzsteuerfrei
+   (Kleinunternehmerregelung, § 6 Abs 1 Z 27 UStG). Ergebnis als Word-Datei oder über
    „Drucken / als PDF speichern“. Die Nummer wird als eigene Serie vorgeschlagen
    (z. B. `MUSTERFRAU-MA-2026-E01`). Der Entwurf bleibt nur im eigenen Browser gespeichert und wird
    nicht an campus a college geschickt.

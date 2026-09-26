@@ -6,7 +6,9 @@ import { formatIban, normalizeIban } from '../lib/iban.js';
 import { namensteil, initialen } from '../lib/nummer.js';
 import { ortAusPlzOrt } from '../lib/honorarnote-docx.js';
 import { downloadBlob } from '../lib/csv.js';
-import { UST_OPTIONEN, summen, pruefen, externeHonorarnoteDocx, dateiname } from '../lib/externe-honorarnote.js';
+import {
+  HINWEIS_KLEINUNTERNEHMER, gesamtCent, pruefen, externeHonorarnoteDocx, dateiname,
+} from '../lib/externe-honorarnote.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
 
 // ------------------------------------------------------------------ Entwurf im Browser (pro Person)
@@ -48,8 +50,6 @@ function neuerEntwurf(nutzer) {
     ort: ortAusPlzOrt(p.plz_ort),
     datum: heuteIso(),
     leistungszeitraum: '',
-    ust: 'kleinunternehmer',
-    zahlungsziel: 14,
     anmerkung: '',
     positionen: [{ beschreibung: '', datum: heuteIso(), betrag: '' }],
   };
@@ -115,7 +115,6 @@ function formularLesen(form) {
 function fuerDokument(entwurf) {
   return {
     ...entwurf,
-    zahlungsziel: entwurf.zahlungsziel === '' ? NaN : Number(entwurf.zahlungsziel),
     absender: { ...entwurf.absender, iban: normalizeIban(entwurf.absender.iban) },
     positionen: entwurf.positionen.map((p) => ({ ...p, betrag: parseBetrag(p.betrag) ?? 0 })),
   };
@@ -126,11 +125,9 @@ function fuerDokument(entwurf) {
 function vorschauHtml(d) {
   const a = d.absender;
   const e = d.empfaenger;
-  const s = summen(d.positionen, d.ust);
+  const gesamt = gesamtCent(d.positionen);
   const zeile = (label, links, rechts) => (links || rechts
     ? `<tr><th scope="row">${esc(label)}</th><td>${esc(links)}</td><td>${esc(rechts)}</td></tr>` : '');
-  const betrag = (c) => esc(formatBetragDokument(c / 100));
-  const tage = Number(d.zahlungsziel);
   return `
     <article class="hn-dok" aria-label="Vorschau der Honorarnote">
       <h2>Honorarnote</h2>
@@ -153,14 +150,11 @@ function vorschauHtml(d) {
         <tbody>${d.positionen.map((p, i) => `<tr><td>${i + 1}</td><td>${esc(p.beschreibung)}</td>
           <td>${esc(formatDatum(p.datum))}</td><td class="rechts">${p.betrag ? esc(formatBetragDokument(p.betrag)) : ''}</td></tr>`).join('')}</tbody>
         <tfoot>
-          ${s.satz > 0 ? `<tr><td colspan="3" class="rechts">Summe netto</td><td class="rechts">${betrag(s.netto)}</td></tr>
-            <tr><td colspan="3" class="rechts">zuzüglich ${s.satz} % Umsatzsteuer</td><td class="rechts">${betrag(s.steuer)}</td></tr>` : ''}
-          <tr class="hn-summe"><td colspan="3" class="rechts">Gesamtbetrag in Euro</td><td class="rechts">${betrag(s.gesamt)}</td></tr>
+          <tr class="hn-summe"><td colspan="3" class="rechts">Gesamtbetrag in Euro</td><td class="rechts">${esc(formatBetragDokument(gesamt / 100))}</td></tr>
         </tfoot>
       </table>
-      ${d.ust === 'kleinunternehmer' ? '<p>Der angeführte Rechnungsbetrag ist laut § 6 Abs 1 Z 27 UStG umsatzsteuerfrei (Kleinunternehmerregelung).</p>' : ''}
-      <p>${Number.isInteger(tage) && tage === 0 ? 'Bitte überweisen Sie den Gesamtbetrag umgehend auf folgendes Konto:'
-        : `Bitte überweisen Sie den Gesamtbetrag innerhalb von ${Number.isInteger(tage) ? tage : '…'} ${tage === 1 ? 'Tag' : 'Tagen'} auf folgendes Konto:`}</p>
+      <p>${esc(HINWEIS_KLEINUNTERNEHMER)}</p>
+      <p>Bitte überweisen Sie den Gesamtbetrag auf folgendes Konto:</p>
       <table class="hn-tab hn-bank">
         <tr><th>Kontoinhaber:in</th><td>${esc(a.kontoinhaber)}</td></tr>
         <tr><th>IBAN</th><td>${esc(formatIban(a.iban))}</td></tr>
@@ -216,16 +210,8 @@ export function render(el, { nutzer }) {
             ${feld('ort', 'Ort', entwurf.ort, { pflicht: true, attrs: 'maxlength="60"' })}
             ${feld('leistungszeitraum', 'Leistungszeitraum', entwurf.leistungszeitraum, { attrs: 'maxlength="60" placeholder="z. B. September 2026"' })}
           </div>
-          <div class="zeile">
-            <div class="feld">
-              <label for="g-ust">Umsatzsteuer <span class="pflicht" aria-hidden="true">*</span></label>
-              <select id="g-ust" name="ust">${Object.entries(UST_OPTIONEN).map(([w, o]) =>
-                `<option value="${w}" ${entwurf.ust === w ? 'selected' : ''}>${esc(o.label)}</option>`).join('')}</select>
-              <p class="feldfehler" data-fehler="ust"></p>
-            </div>
-            ${feld('zahlungsziel', 'Zahlungsziel (Tage)', entwurf.zahlungsziel, { pflicht: true, attrs: 'inputmode="numeric" maxlength="3"' })}
-          </div>
-          <p class="hinweis">Im Zweifel, ob Umsatzsteuer verrechnet werden muss: bei der Steuerberatung oder dem Finanzamt nachfragen.</p>
+          <p class="hinweis">Die Honorarnote enthält immer den Hinweis, dass der Betrag als Kleinunternehmer:in
+            umsatzsteuerfrei ist (§ 6 Abs 1 Z 27 UStG).</p>
           <div class="feld">
             <label for="g-anmerkung">Anmerkung <span class="optional">(optional)</span></label>
             <textarea id="g-anmerkung" name="anmerkung" rows="2" maxlength="1000">${esc(entwurf.anmerkung)}</textarea>

@@ -4,25 +4,15 @@
 import { formatBetragDokument, formatDatum } from './format.js';
 import { formatIban, ibanFehler, bicIstGueltig, normalizeBic } from './iban.js';
 
-export const UST_OPTIONEN = {
-  kleinunternehmer: { label: 'Kleinunternehmer:in – umsatzsteuerfrei (§ 6 Abs 1 Z 27 UStG)', satz: 0 },
-  ust20: { label: 'mit 20 % Umsatzsteuer', satz: 20 },
-  ust13: { label: 'mit 13 % Umsatzsteuer', satz: 13 },
-  ust10: { label: 'mit 10 % Umsatzsteuer', satz: 10 },
-  ohne: { label: 'ohne Umsatzsteuer-Hinweis', satz: 0 },
-};
-
-const HINWEIS_KLEINUNTERNEHMER = 'Der angeführte Rechnungsbetrag ist laut § 6 Abs 1 Z 27 UStG umsatzsteuerfrei (Kleinunternehmerregelung).';
+// Immer umsatzsteuerfrei (Kleinunternehmerregelung), wie in der campus-a-Vorlage
+export const HINWEIS_KLEINUNTERNEHMER = 'Der angeführte Rechnungsbetrag ist laut § 6 Abs 1 Z 27 UStG umsatzsteuerfrei (Kleinunternehmerregelung).';
 
 const cent = (b) => Math.round(Number(b) * 100);
 const leer = (s) => !String(s ?? '').trim();
 
-/** Beträge in Cent: netto, Umsatzsteuer, gesamt */
-export function summen(positionen, ust = 'kleinunternehmer') {
-  const netto = positionen.reduce((s, p) => s + cent(p.betrag), 0);
-  const satz = UST_OPTIONEN[ust]?.satz ?? 0;
-  const steuer = Math.round((netto * satz) / 100);
-  return { netto, satz, steuer, gesamt: netto + steuer };
+/** Gesamtbetrag in Cent */
+export function gesamtCent(positionen) {
+  return positionen.reduce((s, p) => s + cent(p.betrag), 0);
 }
 
 /** Liefert Fehlermeldungen je Feld ({feld: text}); leer = alles in Ordnung */
@@ -36,18 +26,12 @@ export function pruefen(d) {
   if (leer(a.kontoinhaber)) f['absender.kontoinhaber'] = 'Bitte Kontoinhaber:in angeben.';
   if (ibanFehler(a.iban)) f['absender.iban'] = ibanFehler(a.iban);
   if (!bicIstGueltig(a.bic ?? '')) f['absender.bic'] = 'Der BIC hat 8 oder 11 Zeichen.';
-  if ((UST_OPTIONEN[d.ust]?.satz ?? 0) > 0 && leer(a.uid)) {
-    f['absender.uid'] = 'Bei Rechnungen mit Umsatzsteuer ist deine UID-Nummer nötig.';
-  }
   if (leer(e.name)) f['empfaenger.name'] = 'Bitte den Namen der Firma angeben.';
   if (leer(e.strasse)) f['empfaenger.strasse'] = 'Bitte die Adresse der Firma angeben.';
   if (leer(e.plz_ort)) f['empfaenger.plz_ort'] = 'Bitte PLZ und Ort der Firma angeben.';
   if (leer(d.nummer)) f.nummer = 'Bitte eine Nummer angeben.';
   if (leer(d.ort)) f.ort = 'Bitte den Ort angeben.';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(d.datum ?? '')) f.datum = 'Bitte das Datum angeben.';
-  if (!UST_OPTIONEN[d.ust]) f.ust = 'Bitte die Umsatzsteuer-Variante wählen.';
-  const tage = Number(d.zahlungsziel);
-  if (!(Number.isInteger(tage) && tage >= 0 && tage <= 365)) f.zahlungsziel = 'Bitte eine Zahl von 0 bis 365 angeben.';
   if (!d.positionen?.length) f.positionen = 'Bitte mindestens eine Position angeben.';
   (d.positionen ?? []).forEach((p, i) => {
     if (leer(p.beschreibung)) f[`positionen.${i}.beschreibung`] = 'Bitte beschreiben.';
@@ -100,7 +84,7 @@ const leerzeile = () => absatz('', { nach: 0 });
 export function dokumentXml(d) {
   const a = d.absender;
   const e = d.empfaenger;
-  const s = summen(d.positionen, d.ust);
+  const gesamt = gesamtCent(d.positionen);
   const kopfBreiten = [2400, 3619, 3619];
 
   // Absender und Empfänger nebeneinander (wie in der campus-a-Vorlage)
@@ -147,11 +131,7 @@ export function dokumentXml(d) {
   const summenzeile = (label, betrag, fett = false) => zelle(label, posBreiten[0] + posBreiten[1] + posBreiten[2],
     { spannweite: 3, ausrichtung: 'right', fett, fuellung: fett ? GRAU_HELL : null })
     + zelle(formatBetragDokument(betrag / 100), posBreiten[3], { ausrichtung: 'right', fett, fuellung: fett ? GRAU_HELL : null });
-  if (s.satz > 0) {
-    posZeilen.push(summenzeile('Summe netto', s.netto));
-    posZeilen.push(summenzeile(`zuzüglich ${s.satz} % Umsatzsteuer`, s.steuer));
-  }
-  posZeilen.push(summenzeile('Gesamtbetrag in Euro', s.gesamt, true));
+  posZeilen.push(summenzeile('Gesamtbetrag in Euro', gesamt, true));
 
   const bankBreiten = [2400, 7238];
   const bankZeilen = [
@@ -161,10 +141,6 @@ export function dokumentXml(d) {
   if (!leer(a.bic)) bankZeilen.push(zelle('BIC', bankBreiten[0], { fett: true }) + zelle(normalizeBic(a.bic), bankBreiten[1]));
   bankZeilen.push(zelle('Verwendungszweck', bankBreiten[0], { fett: true }) + zelle(`Honorarnote ${d.nummer}`, bankBreiten[1]));
 
-  const tage = Number(d.zahlungsziel);
-  const zahlung = tage === 0
-    ? 'Bitte überweisen Sie den Gesamtbetrag umgehend auf folgendes Konto:'
-    : `Bitte überweisen Sie den Gesamtbetrag innerhalb von ${tage} ${tage === 1 ? 'Tag' : 'Tagen'} auf folgendes Konto:`;
 
   const teile = [
     absatz(lauf('Honorarnote', { fett: true, groesse: 32 }), { nach: 200 }),
@@ -174,9 +150,9 @@ export function dokumentXml(d) {
     absatz(lauf('Sehr geehrte Damen und Herren, für folgende Leistungen berechne ich wie vereinbart:'), { vor: 240, nach: 120 }),
     tabelle(posBreiten, posZeilen),
   ];
-  if (d.ust === 'kleinunternehmer') teile.push(absatz(lauf(HINWEIS_KLEINUNTERNEHMER), { vor: 200 }));
   teile.push(
-    absatz(lauf(zahlung), { vor: 200, zusammen: true }),
+    absatz(lauf(HINWEIS_KLEINUNTERNEHMER), { vor: 200 }),
+    absatz(lauf('Bitte überweisen Sie den Gesamtbetrag auf folgendes Konto:'), { vor: 200, zusammen: true }),
     tabelle(bankBreiten, bankZeilen),
   );
   if (!leer(d.anmerkung)) teile.push(absatz(lauf(d.anmerkung), { vor: 200 }));
