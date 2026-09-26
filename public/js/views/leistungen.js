@@ -15,30 +15,14 @@ function satzHinweis(kategorie, saetze) {
   return `Standardsatz: ${formatEuro(satz)}`;
 }
 
-/** Auswahl der Kolumnenart: Liste vom Admin, sonst freies Textfeld */
-function kolumnenartFeld(p, arten) {
-  const aktuell = p?.kolumnenart ?? '';
-  if (!arten.length) {
-    return `<input id="l-kolumnenart" name="kolumnenart" maxlength="100" placeholder="z. B. Name der Kolumne"
-              value="${esc(aktuell)}">`;
-  }
-  // eine inzwischen gestrichene Art beim Bearbeiten trotzdem anzeigen
-  const optionen = aktuell && !arten.includes(aktuell) ? [...arten, aktuell] : arten;
-  return `<select id="l-kolumnenart" name="kolumnenart" required>
-      <option value="">Bitte wählen …</option>
-      ${optionen.map((a) => `<option ${a === aktuell ? 'selected' : ''}>${esc(a)}</option>`).join('')}
-    </select>`;
-}
-
 function formularHtml(p, einstellungen) {
   const saetze = einstellungen.honorarsaetze;
-  const arten = einstellungen.kolumnenarten ?? [];
   const kat = p?.kategorie ?? 'kolumne';
   return `
     <form class="karte" id="l-form" novalidate>
       <h2>${p ? 'Leistung bearbeiten' : 'Neue Leistung speichern'}</h2>
       <fieldset class="kategorie">
-        <legend class="sr-only">Art des Honorars</legend>
+        <legend class="sr-only">Kategorie</legend>
         <label class="radio"><input type="radio" name="kategorie" value="kolumne" ${kat === 'kolumne' ? 'checked' : ''}>
           <span><strong>Kolumne</strong><br><span class="klein">reguläres Honorar</span></span></label>
         <label class="radio"><input type="radio" name="kategorie" value="ausserordentlich" ${kat === 'ausserordentlich' ? 'checked' : ''}>
@@ -51,15 +35,14 @@ function formularHtml(p, einstellungen) {
       </div>
       <div class="zeile">
         <div class="feld" id="l-art-feld" ${kat === 'kolumne' ? 'hidden' : ''}>
-          <label for="l-art">Art der Leistung</label>
+          <label for="l-art">Art des Honorars</label>
           <select id="l-art" name="art">
             ${Object.entries(ART_LABEL).map(([w, l]) => `<option value="${w}" ${(p?.art || 'artikel') === w ? 'selected' : ''}>${esc(l)}</option>`).join('')}
           </select>
         </div>
         <div class="feld" id="l-kolumnenart-feld" ${kat === 'kolumne' ? '' : 'hidden'}>
-          <label for="l-kolumnenart">Art der Kolumne${arten.length ? ' <span class="pflicht" aria-hidden="true">*</span>' : ' <span class="optional">(optional)</span>'}</label>
-          ${kolumnenartFeld(p, arten)}
-          <p class="feldfehler" data-fehler="kolumnenart"></p>
+          <label for="l-kolumnenart">Art der Kolumne <span class="optional">(optional)</span></label>
+          <input id="l-kolumnenart" name="kolumnenart" maxlength="100" autocomplete="off" value="${esc(p?.kolumnenart)}">
         </div>
         <div class="feld">
           <label for="l-datum">Veröffentlichung <span class="pflicht" aria-hidden="true">*</span></label>
@@ -191,15 +174,12 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    ['titel', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'kolumnenart', 'formular'].forEach((n) => fehler(n, ''));
+    ['titel', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'formular'].forEach((n) => fehler(n, ''));
     const betrag = parseBetrag(form.betrag.value);
     const f = {};
     if (!form.titel.value.trim()) f.titel = 'Bitte den Titel angeben.';
     if (!form.veroeffentlichung.value) f.veroeffentlichung = 'Bitte Datum wählen.';
     if (!betrag) f.betrag = 'Bitte einen Betrag wie 15 oder 15,50 eingeben.';
-    if (form.kategorie.value === 'kolumne' && (einstellungen.kolumnenarten ?? []).length && !form.kolumnenart.value) {
-      f.kolumnenart = 'Bitte die Art der Kolumne wählen.';
-    }
     if (form.kategorie.value === 'ausserordentlich' && !form.vereinbart_mit.value.trim()) {
       f.vereinbart_mit = 'Mit wem aus der Redaktion wurde das vereinbart?';
     }

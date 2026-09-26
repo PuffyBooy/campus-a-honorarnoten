@@ -8,7 +8,7 @@ import {
 import { heuteIso } from '../public/js/lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from '../public/js/lib/iban.js';
 import { honorarnoteNummer } from '../public/js/lib/nummer.js';
-import { STANDARD_SAETZE, saetzeNormalisieren, kolumnenartenNormalisieren } from '../public/js/lib/honorarsaetze.js';
+import { STANDARD_SAETZE, saetzeNormalisieren } from '../public/js/lib/honorarsaetze.js';
 
 export const STANDARD_EMPFAENGER = {
   name: 'campus a Medien GmbH',
@@ -90,7 +90,6 @@ function einstellungenLaden(db) {
     empfaenger: { ...STANDARD_EMPFAENGER },
     datenschutzKontakt: '',
     honorarsaetze: { ...STANDARD_SAETZE },
-    kolumnenarten: [], // leer = freies Textfeld
     auftraggeber: { name: '', iban: '', bic: '' }, // Konto für SEPA-Sammelüberweisungen
   };
   for (const { schluessel, wert } of db.prepare('select * from einstellungen').all()) e[schluessel] = JSON.parse(wert);
@@ -270,7 +269,7 @@ export const funktionen = {
     const istKolumne = d.kategorie === 'kolumne';
     const p = {
       kategorie: d.kategorie,
-      // Kolumnen haben eine Kolumnenart, alle anderen eine Art der Leistung
+      // Kolumnen haben eine Art der Kolumne (freier Text), außerordentliche Honorare eine Art des Honorars
       art: istKolumne ? '' : (['artikel', 'kommentar', 'foto', 'video', 'sonstiges'].includes(d.art) ? d.art : 'artikel'),
       kolumnenart: istKolumne ? trim(d.kolumnenart).replace(/\s+/g, ' ').slice(0, 100) : '',
       titel: trim(d.titel).slice(0, 200),
@@ -608,11 +607,8 @@ export const funktionen = {
     const kontakt = trim(d.datenschutzKontakt);
     pruefe(!kontakt || EMAIL.test(kontakt), 'Bitte eine gültige E-Mail-Adresse für Datenschutzanfragen angeben.');
     let saetze;
-    let arten;
     try {
-      const bisher = einstellungenLaden(ctx.db);
-      saetze = saetzeNormalisieren(d.honorarsaetze ?? bisher.honorarsaetze);
-      arten = kolumnenartenNormalisieren(d.kolumnenarten ?? bisher.kolumnenarten);
+      saetze = saetzeNormalisieren(d.honorarsaetze ?? einstellungenLaden(ctx.db).honorarsaetze);
     } catch (fehler) {
       throw new Fehler(fehler.message);
     }
@@ -624,7 +620,6 @@ export const funktionen = {
       }));
       speichere.run('datenschutzKontakt', JSON.stringify(kontakt));
       speichere.run('honorarsaetze', JSON.stringify(saetze));
-      speichere.run('kolumnenarten', JSON.stringify(arten));
     });
     return true;
   },

@@ -8,7 +8,7 @@
 import { heuteIso, summe } from './lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from './lib/iban.js';
 import { honorarnoteNummer } from './lib/nummer.js';
-import { STANDARD_SAETZE, saetzeNormalisieren, kolumnenartenNormalisieren } from './lib/honorarsaetze.js';
+import { STANDARD_SAETZE, saetzeNormalisieren } from './lib/honorarsaetze.js';
 
 const SPEICHER_KEY = 'campus-a-honorare:v1';
 const SITZUNG_KEY = 'campus-a-honorare:sitzung';
@@ -47,7 +47,6 @@ function leereDb() {
       empfaenger: { ...STANDARD_EMPFAENGER },
       datenschutzKontakt: '',
       honorarsaetze: { ...STANDARD_SAETZE },
-      kolumnenarten: [], // leer = freies Textfeld
       auftraggeber: { name: '', iban: '', bic: '' }, // Konto für SEPA-Sammelüberweisungen
     },
   };
@@ -341,7 +340,7 @@ export function leistungSpeichern(daten) {
   const istKolumne = daten.kategorie === 'kolumne';
   const p = {
     kategorie: daten.kategorie,
-    // Kolumnen haben eine Kolumnenart, alle anderen eine Art der Leistung
+    // Kolumnen haben eine Art der Kolumne (freier Text), außerordentliche Honorare eine Art des Honorars
     art: istKolumne ? '' : (daten.art || 'artikel'),
     kolumnenart: istKolumne ? trim(daten.kolumnenart).replace(/\s+/g, ' ').slice(0, 100) : '',
     titel: trim(daten.titel),
@@ -659,14 +658,12 @@ export function einstellungen() {
   return e;
 }
 
-export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorarsaetze, kolumnenarten }) {
+export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorarsaetze }) {
   brauche('admin');
   pruefe(!leer(empfaenger?.name), 'Bitte den Namen des Rechnungsempfängers angeben.');
   let saetze;
-  let arten;
   try {
     saetze = saetzeNormalisieren(honorarsaetze ?? db.einstellungen.honorarsaetze ?? STANDARD_SAETZE);
-    arten = kolumnenartenNormalisieren(kolumnenarten ?? db.einstellungen.kolumnenarten ?? []);
   } catch (e) {
     throw new Fehler(e.message);
   }
@@ -678,7 +675,6 @@ export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorar
     },
     datenschutzKontakt: trim(datenschutzKontakt),
     honorarsaetze: saetze,
-    kolumnenarten: arten,
   };
   speichern();
 }

@@ -33,9 +33,8 @@ export async function demoDaten(db, { passwortHash }) {
   db.nutzer.push(maria, jonas, rita, bernd, alex);
 
   let nr = 0;
-  // Beispiel-Kolumnenarten (nur Demo – im echten Betrieb trägt sie der Admin ein)
+  // Beispielwerte für „Art der Kolumne“ (freies Textfeld)
   const KOLUMNEN = ['Schulalltag', 'Gesellschaft', 'Kultur'];
-  db.einstellungen.kolumnenarten = [...KOLUMNEN];
   const pos = (kategorie, titel, tage, betrag, extra = {}) => ({
     id: `demo-pos-${++nr}`, kategorie, art: kategorie === 'kolumne' ? '' : 'artikel',
     kolumnenart: kategorie === 'kolumne' ? KOLUMNEN[nr % KOLUMNEN.length] : '', titel,

@@ -27,18 +27,3 @@ export function weichtAb(position, saetze) {
   const betrag = position.betrag_eingereicht ?? position.betrag;
   return satz != null && Math.round(Number(betrag) * 100) !== Math.round(satz * 100);
 }
-
-/**
- * Liste der Kolumnenarten (vom Admin, eine pro Zeile).
- * Leere Liste = freies Textfeld beim Speichern einer Kolumne.
- */
-export function kolumnenartenNormalisieren(liste) {
-  const roh = Array.isArray(liste) ? liste : String(liste ?? '').split('\n');
-  const ergebnis = [];
-  for (const eintrag of roh) {
-    const t = String(eintrag ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
-    if (t && !ergebnis.some((x) => x.toLowerCase() === t.toLowerCase())) ergebnis.push(t);
-  }
-  if (ergebnis.length > 50) throw new Error('Höchstens 50 Kolumnenarten möglich.');
-  return ergebnis;
-}
