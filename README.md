@@ -48,8 +48,8 @@ Lokal starten: `npm run dev` → http://localhost:5173
    Honorarnote automatisch übernommen.
 2. **Meine Leistungen:** Jeden Beitrag speichern, sobald er erschienen ist – als *Kolumne* oder
    *außerordentliches Honorar* (mit „Vereinbart mit“), jeweils mit Titel, Veröffentlichungsdatum
-   und Betrag. Bei Kolumnen gibt man die **Art der Kolumne** als freien Text ein (optional),
-   bei außerordentlichen Honoraren wählt man die **Art des Honorars** (Artikel, Foto, Video …). Der Betrag ist mit dem **Honorarsatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin
+   und Betrag. Bei Kolumnen gibt man die **Art der Kolumne** als freien Text ein (Pflicht),
+   bei außerordentlichen Honoraren die **Art des Honorars** (freier Text, optional). Der Betrag ist mit dem **Honorarsatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin
    einstellbar). Gespeicherte Leistungen kann man bearbeiten oder löschen.
 3. **Monatsabrechnung:** Einmal im Monat die gesammelten Leistungen auswählen und als
    Honorarnote abschicken. Die Nummer folgt der Vorlage: `NACHNAME-VO-JAHR-NN`

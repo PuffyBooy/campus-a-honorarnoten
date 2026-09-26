@@ -1,6 +1,6 @@
 // Autor:in: Leistungen laufend speichern und einmal im Monat als Honorarnote abschicken
 import {
-  ART_LABEL, KATEGORIE_LABEL, artText, esc, formatBetragPlain, formatDatum, formatEuro, formatMonat, heuteIso, parseBetrag, summe,
+  KATEGORIE_LABEL, artText, esc, formatBetragPlain, formatDatum, formatEuro, formatMonat, heuteIso, parseBetrag, summe,
 } from '../lib/format.js';
 import { formatIban } from '../lib/iban.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
@@ -35,14 +35,14 @@ function formularHtml(p, einstellungen) {
       </div>
       <div class="zeile">
         <div class="feld" id="l-art-feld" ${kat === 'kolumne' ? 'hidden' : ''}>
-          <label for="l-art">Art des Honorars</label>
-          <select id="l-art" name="art">
-            ${Object.entries(ART_LABEL).map(([w, l]) => `<option value="${w}" ${(p?.art || 'artikel') === w ? 'selected' : ''}>${esc(l)}</option>`).join('')}
-          </select>
+          <label for="l-art">Art des Honorars <span class="optional">(optional)</span></label>
+          <input id="l-art" name="art" maxlength="100" autocomplete="off" placeholder="z. B. Interview, Reportage, Fotostrecke"
+                 value="${esc(p ? artText(p) : '')}">
         </div>
         <div class="feld" id="l-kolumnenart-feld" ${kat === 'kolumne' ? '' : 'hidden'}>
-          <label for="l-kolumnenart">Art der Kolumne <span class="optional">(optional)</span></label>
+          <label for="l-kolumnenart">Art der Kolumne <span class="pflicht" aria-hidden="true">*</span></label>
           <input id="l-kolumnenart" name="kolumnenart" maxlength="100" autocomplete="off" value="${esc(p?.kolumnenart)}">
+          <p class="feldfehler" data-fehler="kolumnenart"></p>
         </div>
         <div class="feld">
           <label for="l-datum">Veröffentlichung <span class="pflicht" aria-hidden="true">*</span></label>
@@ -174,12 +174,13 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    ['titel', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'formular'].forEach((n) => fehler(n, ''));
+    ['titel', 'kolumnenart', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'formular'].forEach((n) => fehler(n, ''));
     const betrag = parseBetrag(form.betrag.value);
     const f = {};
     if (!form.titel.value.trim()) f.titel = 'Bitte den Titel angeben.';
     if (!form.veroeffentlichung.value) f.veroeffentlichung = 'Bitte Datum wählen.';
     if (!betrag) f.betrag = 'Bitte einen Betrag wie 15 oder 15,50 eingeben.';
+    if (form.kategorie.value === 'kolumne' && !form.kolumnenart.value.trim()) f.kolumnenart = 'Bitte die Art der Kolumne angeben.';
     if (form.kategorie.value === 'ausserordentlich' && !form.vereinbart_mit.value.trim()) {
       f.vereinbart_mit = 'Mit wem aus der Redaktion wurde das vereinbart?';
     }

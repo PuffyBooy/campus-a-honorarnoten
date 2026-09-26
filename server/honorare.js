@@ -5,7 +5,7 @@ import { transaktion } from './db.js';
 import {
   passwortHash, passwortPasst, startpasswort, sitzungErstellen, sitzungBeenden, alleSitzungenBeenden,
 } from './auth.js';
-import { heuteIso } from '../public/js/lib/format.js';
+import { artNormalisieren, heuteIso } from '../public/js/lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from '../public/js/lib/iban.js';
 import { honorarnoteNummer } from '../public/js/lib/nummer.js';
 import { STANDARD_SAETZE, saetzeNormalisieren } from '../public/js/lib/honorarsaetze.js';
@@ -270,8 +270,8 @@ export const funktionen = {
     const p = {
       kategorie: d.kategorie,
       // Kolumnen haben eine Art der Kolumne (freier Text), außerordentliche Honorare eine Art des Honorars
-      art: istKolumne ? '' : (['artikel', 'kommentar', 'foto', 'video', 'sonstiges'].includes(d.art) ? d.art : 'artikel'),
-      kolumnenart: istKolumne ? trim(d.kolumnenart).replace(/\s+/g, ' ').slice(0, 100) : '',
+      art: istKolumne ? '' : artNormalisieren(d.art),
+      kolumnenart: istKolumne ? artNormalisieren(d.kolumnenart) : '',
       titel: trim(d.titel).slice(0, 200),
       veroeffentlichung: String(d.veroeffentlichung ?? ''),
       ausgabe: trim(d.ausgabe).slice(0, 100),
@@ -280,6 +280,7 @@ export const funktionen = {
     };
     pruefe(['kolumne', 'ausserordentlich'].includes(p.kategorie), 'Bitte wählen, ob Kolumne oder außerordentliches Honorar.');
     pruefe(!leer(p.titel), 'Bitte den Titel des Beitrags angeben.');
+    if (istKolumne) pruefe(!leer(p.kolumnenart), 'Bitte die Art der Kolumne angeben.');
     pruefe(/^\d{4}-\d{2}-\d{2}$/.test(p.veroeffentlichung) && !Number.isNaN(Date.parse(p.veroeffentlichung)), 'Bitte das Datum der Veröffentlichung angeben.');
     if (p.kategorie === 'ausserordentlich') pruefe(!leer(p.vereinbart_mit), 'Bitte angeben, mit wem aus der Redaktion das Honorar vereinbart wurde.');
     const betragCent = cent(d.betrag);

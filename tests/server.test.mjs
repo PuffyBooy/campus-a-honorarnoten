@@ -109,8 +109,9 @@ test('Autor:in: Profil, Leistungen, Monatsabrechnung', async () => {
   assert.equal((await a.ok('aktuellerNutzer')).profil.iban, AT_IBAN);
 
   assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'ausserordentlich', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10 })).fehler, /vereinbart/);
-  assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'kolumne', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10.005 })).fehler, /Betrag/);
-  await a.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Kolumne 1', veroeffentlichung: '2026-09-01', betrag: 15 });
+  assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: 'Schule', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10.005 })).fehler, /Betrag/);
+  assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: '   ', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 15 })).fehler, /Art der Kolumne/);
+  await a.ok('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: 'Schule', titel: 'Kolumne 1', veroeffentlichung: '2026-09-01', betrag: 15 });
   await a.ok('leistungSpeichern', { kategorie: 'ausserordentlich', titel: 'Interview', veroeffentlichung: '2026-09-05', betrag: 60.5, vereinbart_mit: 'Rita' });
   const liste = await a.ok('meineLeistungen');
   assert.equal(liste.length, 2);
@@ -185,7 +186,7 @@ test('Abgelehnte Note überarbeiten', async () => {
     vorname: 'Bert', nachname: 'Beispiel', email: 'bert@example.org', strasse: 'Weg 2', plz_ort: '8010 Graz',
     kontoinhaber: 'Bert Beispiel', iban: 'DE89370400440532013000',
   });
-  await k.bert.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Graz', veroeffentlichung: '2026-09-02', betrag: 15 });
+  await k.bert.ok('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: 'Stadt', titel: 'Graz', veroeffentlichung: '2026-09-02', betrag: 15 });
   const note = await k.bert.ok('abrechnungAbschicken', (await k.bert.ok('meineLeistungen')).map((p) => p.id));
   await k.rita.ok('ablehnen', note.id, 'Nicht erschienen');
   assert.equal((await k.bert.ok('meineNoten'))[0].ablehnungsgrund, 'Nicht erschienen');
@@ -218,12 +219,12 @@ test('Honorarsätze: Admin legt fest, alle sehen sie, ungültige Werte abgelehnt
 
 test('Art der Kolumne (freier Text): Speichern, bleibt beim Abschicken erhalten', async () => {
   await k.anna.ok('leistungSpeichern', { kategorie: 'kolumne', art: 'foto', kolumnenart: '  Kultur  ', titel: 'Theaterkritik', veroeffentlichung: '2026-09-10', betrag: 15 });
-  await k.anna.ok('leistungSpeichern', { kategorie: 'ausserordentlich', art: 'foto', kolumnenart: 'Kultur', titel: 'Fotostrecke', veroeffentlichung: '2026-09-11', betrag: 40, vereinbart_mit: 'Rita' });
+  await k.anna.ok('leistungSpeichern', { kategorie: 'ausserordentlich', art: '  Foto   und Text ', kolumnenart: 'Kultur', titel: 'Fotostrecke', veroeffentlichung: '2026-09-11', betrag: 40, vereinbart_mit: 'Rita' });
   const [kolumne, extra] = await k.anna.ok('meineLeistungen');
   assert.equal(kolumne.kolumnenart, 'Kultur');
   assert.equal(kolumne.art, '', 'Kolumnen haben keine Art des Honorars');
   assert.equal(extra.kolumnenart, '', 'nur Kolumnen haben eine Kolumnenart');
-  assert.equal(extra.art, 'foto');
+  assert.equal(extra.art, 'Foto und Text', 'Art des Honorars ist freier Text');
   const note = await k.anna.ok('abrechnungAbschicken', [kolumne.id, extra.id]);
   assert.equal(note.positionen.find((p) => p.kategorie === 'kolumne').kolumnenart, 'Kultur');
   assert.equal((await k.rita.ok('note', note.id)).positionen[0].kolumnenart, 'Kultur');

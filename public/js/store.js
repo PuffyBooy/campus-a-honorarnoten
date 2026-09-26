@@ -5,7 +5,7 @@
 // mehreren Personen auf verschiedenen Geräten braucht es einen Server – die
 // Funktionen hier sind so geschnitten, dass sie 1:1 durch API-Aufrufe
 // ersetzt werden können. Jede Funktion prüft Rolle und erlaubte Statuswechsel.
-import { heuteIso, summe } from './lib/format.js';
+import { artNormalisieren, heuteIso, summe } from './lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from './lib/iban.js';
 import { honorarnoteNummer } from './lib/nummer.js';
 import { STANDARD_SAETZE, saetzeNormalisieren } from './lib/honorarsaetze.js';
@@ -341,8 +341,8 @@ export function leistungSpeichern(daten) {
   const p = {
     kategorie: daten.kategorie,
     // Kolumnen haben eine Art der Kolumne (freier Text), außerordentliche Honorare eine Art des Honorars
-    art: istKolumne ? '' : (daten.art || 'artikel'),
-    kolumnenart: istKolumne ? trim(daten.kolumnenart).replace(/\s+/g, ' ').slice(0, 100) : '',
+    art: istKolumne ? '' : artNormalisieren(daten.art),
+    kolumnenart: istKolumne ? artNormalisieren(daten.kolumnenart) : '',
     titel: trim(daten.titel),
     veroeffentlichung: daten.veroeffentlichung,
     ausgabe: trim(daten.ausgabe),
@@ -351,6 +351,7 @@ export function leistungSpeichern(daten) {
     notiz: trim(daten.notiz),
   };
   positionPruefen(p);
+  if (istKolumne) pruefe(p.kolumnenart, 'Bitte die Art der Kolumne angeben.');
   if (daten.id) {
     const alt = db.positionen.find((x) => x.id === daten.id && x.autor_id === n.id);
     pruefe(alt, 'Diese Leistung gibt es nicht (mehr).');

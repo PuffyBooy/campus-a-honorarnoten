@@ -5,7 +5,7 @@ import { parseBetrag, verwendungszweck, formatBetragPlain, formatDatum, esc } fr
 import { epcPayload, utf8BinaryString } from '../public/js/lib/epc.js';
 import { toCsv } from '../public/js/lib/csv.js';
 import { honorarnoteNummer, namensteil, initialen } from '../public/js/lib/nummer.js';
-import { summe, formatMonat, formatBetragDokument } from '../public/js/lib/format.js';
+import { summe, formatMonat, formatBetragDokument, artText, artNormalisieren } from '../public/js/lib/format.js';
 import { ortAusPlzOrt } from '../public/js/lib/honorarnote-docx.js';
 
 test('IBAN-Prüfung', () => {
@@ -91,4 +91,12 @@ test('CSV', () => {
   assert.ok(csv.startsWith('﻿A;B\r\n'));
   assert.ok(csv.includes('"x;y";\'=SUMME(1)'));
   assert.ok(csv.includes('"Zeile\n2";"ok ""q"""'));
+});
+
+test('Art der Kolumne / Art des Honorars', () => {
+  assert.equal(artText({ kategorie: 'kolumne', kolumnenart: 'Kultur', art: 'foto' }), 'Kultur');
+  assert.equal(artText({ kategorie: 'ausserordentlich', art: 'foto' }), 'Foto', 'alte feste Werte schön benannt');
+  assert.equal(artText({ kategorie: 'ausserordentlich', art: 'Reportage' }), 'Reportage', 'freier Text');
+  assert.equal(artNormalisieren('  Foto \n und   Text '), 'Foto und Text');
+  assert.equal(artNormalisieren('x'.repeat(300)).length, 100);
 });

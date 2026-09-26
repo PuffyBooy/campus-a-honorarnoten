@@ -124,9 +124,17 @@ export function esc(value) {
   return String(value ?? '').replace(/[&<>"']/g, (c) => HTML_ESCAPE[c]);
 }
 
-/** „Art“ einer Leistung für die Anzeige: bei Kolumnen die Kolumnenart, sonst Artikel/Foto/… */
+/**
+ * „Art“ einer Leistung für die Anzeige: bei Kolumnen die Art der Kolumne, sonst die Art des
+ * Honorars (freier Text; ältere Einträge mit festen Werten wie „foto“ werden schön benannt).
+ */
 export function artText(p) {
-  return p.kategorie === 'kolumne' ? (p.kolumnenart ?? '') : (ART_LABEL[p.art] ?? '');
+  return p.kategorie === 'kolumne' ? (p.kolumnenart ?? '') : (ART_LABEL[p.art] ?? p.art ?? '');
+}
+
+/** Freitext für Art der Kolumne / Art des Honorars: Leerraum zusammenfassen, max. 100 Zeichen */
+export function artNormalisieren(text) {
+  return String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
 }
 
 export function vollerName(note) {
