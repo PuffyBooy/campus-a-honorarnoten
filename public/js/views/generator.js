@@ -176,6 +176,7 @@ export function render(el, { nutzer }) {
     <div class="kopfzeile">
       <h1>Externe Honorarnote</h1>
     </div>
+    <p class="tipp">Für Honorarnoten an andere Firmen. Der Entwurf bleibt nur in diesem Browser.</p>
     <div class="spalten gen-spalten">
       <form id="gen-form" class="gen-formular" novalidate>
         <section class="karte">

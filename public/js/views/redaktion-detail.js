@@ -85,6 +85,7 @@ export async function render(el, { store, nutzer, params, neuLaden, istAktuell }
         </section>
         <section class="karte">
           <h2>Interne Kommentare</h2>
+          <p class="tipp">Nur für die Redaktion sichtbar.</p>
           <ul class="kommentare">
             ${kommentare.map((k) => `<li><div class="klein">${esc(k.verfasser_name)} · ${esc(formatZeitpunkt(k.am))}</div>
               <div class="notiz">${esc(k.text)}</div></li>`).join('') || '<li class="klein">Noch keine Kommentare.</li>'}

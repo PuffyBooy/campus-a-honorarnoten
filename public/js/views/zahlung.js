@@ -73,6 +73,7 @@ function sammelHtml(auftraggeber) {
   return `
     <section class="karte sammel" id="sammel" aria-labelledby="sammel-titel">
       <h2 id="sammel-titel">Sammelüberweisung (SEPA)</h2>
+      <p class="tipp">Alle ausgewählten Zahlungen in einer Datei für den Sammelauftrag im Online-Banking.</p>
       <p id="sammel-konto" ${konto ? '' : 'hidden'}>Überwiesen wird von:
         <strong>${esc(auftraggeber?.name ?? '')}</strong> · <span class="mono">${esc(formatIban(auftraggeber?.iban ?? ''))}</span>
         <button type="button" class="btn-link" id="konto-aendern">ändern</button></p>

@@ -99,6 +99,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
       <h1>Meine Leistungen</h1>
       <a href="#/noten" class="btn">Meine Honorarnoten</a>
     </div>
+    <p class="tipp">Beiträge speichern, sobald sie erschienen sind – einmal im Monat gesammelt abschicken.</p>
     ${!profilOk ? '<p class="hinweisbox">Bitte zuerst <a href="#/profil">Adresse und Bankverbindung</a> ergänzen.</p>' : ''}
 
     <div class="spalten">

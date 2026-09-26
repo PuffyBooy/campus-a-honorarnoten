@@ -37,12 +37,13 @@ export function render(el, { store, istDemo, nachAnmeldung }) {
                     placeholder="z. B. Schule, Klasse oder wofür du schreibst"></textarea>
           <p class="feldfehler" role="alert"></p>
           <button class="btn btn-primaer btn-breit" type="submit">Zugang anfragen</button>
+          <p class="tipp">Die Redaktion schickt dir nach der Freischaltung ein Startpasswort.</p>
         </form>
       </section>
 
       ${istDemo ? `<section class="karte demo">
         <h2>Demo-Zugänge</h2>
-        <p class="hinweis">Passwort: <code>${esc(DEMO_PASSWORT)}</code></p>
+        <p class="tipp">Passwort: <code>${esc(DEMO_PASSWORT)}</code> · Tipp: In zwei Tabs lassen sich zwei Rollen gleichzeitig testen.</p>
         <ul class="demo-liste">
           ${DEMO_KONTEN.map((k) => `
             <li><button type="button" class="btn btn-breit demo-knopf" data-email="${esc(k.email)}">

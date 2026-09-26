@@ -71,7 +71,8 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
           <button type="button" class="btn btn-klein" data-word>Honorarnote (Word) herunterladen</button>
         </div>
       </li>`).join('')}</ul>`
-    : '<section class="karte"><p>Noch keine Honorarnoten.</p></section>'}`;
+    : '<section class="karte"><p>Noch keine Honorarnoten.</p></section>'}
+    <p class="tipp">Abgeschickt → Angenommen → Bezahlt</p>`;
 
   el.querySelector('.liste')?.addEventListener('click', async (ev) => {
     const karte = ev.target.closest('[data-id]');

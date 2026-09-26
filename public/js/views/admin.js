@@ -76,6 +76,7 @@ async function anfragen(inhalt, { store, neuLaden }) {
         </div>
       </li>`).join('')}</ul>`
     : '<section class="karte"><p>Keine offenen Zugangsanfragen.</p></section>'}
+    <p class="tipp">Beim Freischalten entsteht ein Startpasswort, das du weitergibst.</p>
     ${erledigt.length ? `<section class="karte">
       <h2>Bearbeitet</h2>
       <ul class="verlauf">${erledigt.map((a) => `<li>${esc(a.vorname)} ${esc(a.nachname)} · ${esc(a.email)} –
@@ -223,6 +224,7 @@ async function noten(inhalt, { store, neuLaden }) {
           <td data-label="Status">${statusBadge(n.status)}</td>
           <td data-label=""><button type="button" class="btn btn-klein btn-gefahr" data-loeschen>Löschen</button></td>
         </tr>`).join('')}</tbody></table>` : '<section class="karte"><p>Keine Honorarnoten vorhanden.</p></section>'}
+    <p class="tipp">Löschen ist endgültig – bezahlte Honorarnoten vorher sichern.</p>
     <section class="karte">
       <h2>Löschprotokoll</h2>
       ${protokoll.length ? `<ul class="verlauf">${protokoll.map((p) => `<li><strong class="nummer">${esc(p.nummer)}</strong>
@@ -249,6 +251,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <label for="e-plz">PLZ und Ort</label><input id="e-plz" name="plz_ort" value="${esc(e.empfaenger.plz_ort)}">
       <label for="e-uid">UID-Nummer</label><input id="e-uid" name="uid" value="${esc(e.empfaenger.uid)}">
       <h2 class="abstand-oben">Honorarsätze</h2>
+      <p class="tipp">Wird als Betrag vorausgefüllt. Leer = kein Standardsatz.</p>
       <div class="zeile">
         <div class="feld"><label for="e-satz-kolumne">Kolumne (EUR)</label>
           <input id="e-satz-kolumne" name="satz_kolumne" inputmode="decimal" autocomplete="off"
