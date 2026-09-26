@@ -1,16 +1,19 @@
 /* campus a college – Honorarnoten
    Farben: nur diese Variablen anpassen, um das Design an das CI anzupassen. */
 :root {
-  --marke: #111111;          /* Kopfzeile, Hauptbuttons */
-  --marke-hell: #f1f1ee;     /* helle Flächen */
+  --marke: #8a5370;          /* Beere/Mauve wie campus-a-college.at: Buttons, aktive Navigation */
+  --marke-dunkel: #6f4059;   /* Hover */
+  --marke-hell: #f5edf1;     /* helle Flächen */
   --marke-kontrast: #ffffff;
-  --akzent: #d6004c;         /* Hervorhebungen, Links in der Navigation */
+  --akzent: #8a5370;         /* Hervorhebungen, Zähler */
+  --kopf: #ffffff;           /* Kopfzeile */
+  --kopf-text: #1a1a1a;
 
-  --text: #1f2328;
-  --text-leise: #5b6470;
-  --hintergrund: #f7f7f5;
+  --text: #1a1a1a;
+  --text-leise: #5f5a5d;
+  --hintergrund: #f5f4f2;
   --flaeche: #ffffff;
-  --rand: #d9dde3;
+  --rand: #e3dfe1;
 
   --erfolg: #1a7f37;
   --erfolg-hell: #e6f4ea;
@@ -19,10 +22,12 @@
   --warnung: #8a5a00;
   --warnung-hell: #fff4d6;
 
-  --radius: 10px;
-  --schatten: 0 1px 2px rgb(0 0 0 / 6%), 0 1px 6px rgb(0 0 0 / 4%);
+  --radius: 16px;
+  --radius-klein: 6px;
+  --schatten: 0 1px 3px rgb(0 0 0 / 5%), 0 4px 16px rgb(0 0 0 / 4%);
   --schrift: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --schrift-titel: Georgia, "Times New Roman", serif;
+  --schrift-titel: var(--schrift);
+  --schrift-logo: Georgia, "Times New Roman", serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
@@ -36,7 +41,7 @@ body {
   color: var(--text);
   background: var(--hintergrund);
 }
-h1 { font-family: var(--schrift-titel); font-size: 1.75rem; margin: 0 0 .75rem; line-height: 1.2; }
+h1 { font-family: var(--schrift-titel); font-weight: 800; font-size: 1.75rem; margin: 0 0 .75rem; line-height: 1.2; letter-spacing: -.01em; }
 h2 { font-size: 1.15rem; margin: 0 0 .5rem; }
 h3 { font-size: 1rem; margin: 1rem 0 .25rem; }
 a { color: var(--marke); }
@@ -50,34 +55,46 @@ code { font-family: var(--mono); font-size: .9em; }
 }
 
 /* ---------- Kopfzeile ---------- */
-.kopf { background: var(--marke); color: var(--marke-kontrast); border-bottom: 4px solid var(--akzent); }
+.kopf {
+  background: var(--kopf); color: var(--kopf-text);
+  box-shadow: 0 1px 0 var(--rand), 0 2px 8px rgb(0 0 0 / 4%);
+  position: relative; z-index: 2;
+}
 .kopf-innen {
-  max-width: 1100px; margin: 0 auto; padding: .6rem 1rem;
+  max-width: 1100px; margin: 0 auto; padding: .7rem 1rem;
   display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.5rem;
 }
-.marke { color: inherit; text-decoration: none; display: flex; align-items: baseline; gap: .5rem; }
-.marke-name { font-family: var(--schrift-titel); font-weight: 700; font-size: 1.3rem; letter-spacing: -.01em; }
-.marke-name em { color: var(--akzent); }
-.marke-zusatz { opacity: .8; font-size: .9rem; }
+.marke { color: inherit; text-decoration: none; display: flex; flex-direction: column; line-height: 1.1; }
+.marke-name { font-family: var(--schrift-logo); font-weight: 700; font-size: 1.5rem; letter-spacing: -.01em; }
+.marke-name em { font-style: normal; color: var(--marke); }
+.marke-zusatz { font-style: italic; font-weight: 600; font-size: .78rem; margin-top: .1rem; }
 .nav { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem 1rem; flex: 1; justify-content: space-between; }
 .nav-links, .nav-konto { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; }
 .nav a {
-  color: inherit; text-decoration: none; padding: .45rem .7rem; border-radius: 6px;
-  font-weight: 600; font-size: .95rem;
+  color: inherit; text-decoration: none; padding: .5rem .75rem; border-radius: var(--radius-klein);
+  font-weight: 600; font-size: .9rem; text-transform: uppercase; letter-spacing: .02em;
 }
-.nav a:hover { background: rgb(255 255 255 / 12%); }
-.nav a[aria-current="page"] { background: rgb(255 255 255 / 16%); box-shadow: inset 0 -3px 0 var(--akzent); }
+.nav a:hover { background: var(--marke-hell); }
+.nav a[aria-current="page"] { background: var(--marke); color: var(--marke-kontrast); }
+.nav a[aria-current="page"] .zaehler { background: #fff; color: var(--marke); }
 .nav .nav-user {
-  font-size: .85rem; font-weight: 500; opacity: .9;
+  font-size: .85rem; font-weight: 500; color: var(--text-leise); text-transform: none; letter-spacing: 0;
   max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .nav .btn-link { color: inherit; }
+@media (max-width: 699px) {
+  /* Handy: Menüpunkte als waagrecht wischbare Reiter wie auf campus-a-college.at */
+  .nav { gap: .25rem; }
+  .nav-links { flex-wrap: nowrap; overflow-x: auto; width: 100%; scrollbar-width: none; margin: 0 -1rem; padding: 0 1rem; width: calc(100% + 2rem); }
+  .nav-links::-webkit-scrollbar { display: none; }
+  .nav-links a { white-space: nowrap; flex: none; font-size: .85rem; }
+}
 
 /* ---------- Layout ---------- */
 .inhalt { max-width: 1100px; margin: 0 auto; padding: 1rem; outline: none; }
 .karte {
-  background: var(--flaeche); border: 1px solid var(--rand); border-radius: var(--radius);
-  box-shadow: var(--schatten); padding: 1rem; margin-bottom: 1rem;
+  background: var(--flaeche); border: 0; border-radius: var(--radius);
+  box-shadow: var(--schatten); padding: 1.25rem; margin-bottom: 1rem;
 }
 .karte.schmal { max-width: 440px; margin: 2rem auto; }
 .kopfzeile { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem; margin-bottom: .75rem; }
@@ -101,7 +118,7 @@ legend { font-weight: 700; font-size: 1.05rem; margin-bottom: .5rem; padding: 0;
 label { display: block; font-weight: 600; font-size: .95rem; margin-bottom: .25rem; }
 input, select, textarea {
   width: 100%; font: inherit; font-size: 16px; /* verhindert Zoom auf iOS */
-  padding: .6rem .7rem; border: 1px solid var(--rand); border-radius: 8px;
+  padding: .6rem .7rem; border: 1px solid #d6d0d3; border-radius: var(--radius-klein);
   background: #fff; color: var(--text);
 }
 input[type="file"] { padding: .45rem; }
@@ -124,13 +141,13 @@ input:focus, select:focus, textarea:focus, .btn:focus-visible, a:focus-visible {
 .btn {
   display: inline-flex; align-items: center; justify-content: center; gap: .35rem;
   font: inherit; font-weight: 600; font-size: .95rem; line-height: 1.2;
-  padding: .6rem 1rem; min-height: 44px; border-radius: 8px; cursor: pointer;
+  padding: .6rem 1.1rem; min-height: 44px; border-radius: var(--radius-klein); cursor: pointer;
   border: 1px solid var(--rand); background: #fff; color: var(--text); text-decoration: none;
 }
-.btn:hover { background: #f0f2f5; }
+.btn:hover { background: var(--marke-hell); }
 .btn:disabled { opacity: .6; cursor: progress; }
-.btn-primaer { background: var(--marke); border-color: var(--marke); color: var(--marke-kontrast); }
-.btn-primaer:hover { background: color-mix(in srgb, var(--marke) 85%, #000); }
+.btn-primaer { background: var(--marke); border-color: var(--marke); color: var(--marke-kontrast); text-transform: uppercase; letter-spacing: .03em; }
+.btn-primaer:hover { background: var(--marke-dunkel); border-color: var(--marke-dunkel); }
 .btn-erfolg { background: var(--erfolg); border-color: var(--erfolg); color: #fff; }
 .btn-erfolg:hover { background: color-mix(in srgb, var(--erfolg) 85%, #000); }
 .btn-gefahr { background: #fff; border-color: var(--gefahr); color: var(--gefahr); }
@@ -155,7 +172,7 @@ section.fehlerbox { border: 0; }
   display: inline-block; padding: .15rem .6rem; border-radius: 999px;
   font-size: .8rem; font-weight: 700; white-space: nowrap;
 }
-.badge-eingereicht { background: #e7ecf3; color: #2f3f55; }
+.badge-eingereicht { background: var(--marke-hell); color: var(--marke-dunkel); }
 .badge-angenommen { background: var(--warnung-hell); color: var(--warnung); }
 .badge-abgelehnt { background: var(--gefahr-hell); color: var(--gefahr); }
 .badge-bezahlt { background: var(--erfolg-hell); color: var(--erfolg); }
@@ -171,7 +188,7 @@ section.fehlerbox { border: 0; }
 /* ---------- Tabellen (am Handy als Karten) ---------- */
 .tabelle { width: 100%; border-collapse: collapse; background: var(--flaeche); }
 .tabelle th, .tabelle td { text-align: left; padding: .6rem .7rem; border-bottom: 1px solid var(--rand); vertical-align: top; }
-.tabelle th { font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--text-leise); background: #fafbfc; }
+.tabelle th { font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--text-leise); background: #faf8f9; }
 .tabelle .rechts { text-align: right; white-space: nowrap; }
 .tabelle.klickbar tbody tr { cursor: pointer; }
 .tabelle.klickbar tbody tr:hover { background: var(--marke-hell); }
@@ -252,7 +269,7 @@ section.fehlerbox { border: 0; }
 }
 .meldung {
   padding: .75rem 1rem; border-radius: 8px; box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
-  background: #2f3f55; color: #fff; font-weight: 600;
+  background: #2b2528; color: #fff; font-weight: 600;
 }
 .meldung-erfolg { background: var(--erfolg); }
 .meldung-fehler { background: var(--gefahr); }
