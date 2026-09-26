@@ -281,6 +281,7 @@ export const funktionen = {
     pruefe(['kolumne', 'ausserordentlich'].includes(p.kategorie), 'Bitte wählen, ob Kolumne oder außerordentliches Honorar.');
     pruefe(!leer(p.titel), 'Bitte den Titel des Beitrags angeben.');
     if (istKolumne) pruefe(!leer(p.kolumnenart), 'Bitte die Art der Kolumne angeben.');
+    else pruefe(!leer(p.art), 'Bitte die Art des Honorars angeben.');
     pruefe(/^\d{4}-\d{2}-\d{2}$/.test(p.veroeffentlichung) && !Number.isNaN(Date.parse(p.veroeffentlichung)), 'Bitte das Datum der Veröffentlichung angeben.');
     if (p.kategorie === 'ausserordentlich') pruefe(!leer(p.vereinbart_mit), 'Bitte angeben, mit wem aus der Redaktion das Honorar vereinbart wurde.');
     const betragCent = cent(d.betrag);

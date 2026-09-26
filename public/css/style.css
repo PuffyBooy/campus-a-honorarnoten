@@ -324,8 +324,57 @@ body.modus-demo .fuss { display: block; }
 .fuss { max-width: 1100px; margin: 2rem auto 5rem; padding: 0 1rem; color: var(--text-leise); font-size: .8rem; }
 
 @media print {
-  .kopf, .meldungen, .aktionen, form { display: none !important; }
+  .kopf, .meldungen, .aktionen, form, .fuss, .einleitung, .gen-vorschau-titel { display: none !important; }
+  body { background: #fff; }
+  .inhalt { padding: 0; max-width: none; }
+  .gen-spalten { display: block; }
+  .gen-vorschau-bereich { position: static; }
+  .hn-dok { border: 0; box-shadow: none; padding: 0; }
+  .kopfzeile { display: none; }
 }
+
+/* ---------- Honorarnoten-Generator ---------- */
+@media (min-width: 1000px) {
+  .gen-spalten { grid-template-columns: 1fr 1fr; }
+  .gen-vorschau-bereich { position: sticky; top: 1rem; }
+}
+.gen-vorschau-titel { font-size: .9rem; text-transform: uppercase; letter-spacing: .05em; color: var(--text-leise); margin: 0 0 .5rem; }
+.gen-positionen { list-style: none; margin: 0 0 .5rem; padding: 0; }
+.gen-position {
+  display: grid; grid-template-columns: 1.5rem 1fr auto; gap: 0 .5rem; align-items: start;
+  padding: .5rem 0; border-bottom: 1px solid var(--rand);
+}
+.gen-position .gen-nr { font-weight: 700; padding-top: 2rem; color: var(--text-leise); }
+.gen-position .gen-beschreibung { grid-column: 2 / 3; }
+.gen-position .feld { margin-bottom: .4rem; }
+.gen-position .gen-entfernen { grid-column: 3; grid-row: 1; margin-top: 1.7rem; }
+.gen-position .feld:not(.gen-beschreibung) { grid-column: 2 / 3; }
+@media (min-width: 600px) {
+  .gen-position { grid-template-columns: 1.5rem minmax(0, 3fr) minmax(0, 1.4fr) minmax(0, 1.2fr) auto; }
+  .gen-position .feld, .gen-position .feld:not(.gen-beschreibung), .gen-position .gen-beschreibung { grid-column: auto; }
+  .gen-position .gen-entfernen { grid-column: auto; grid-row: auto; }
+}
+.btn.btn-link { border: 0; background: none; text-decoration: underline; color: var(--marke); }
+
+/* Vorschau im Stil der Word-Datei */
+.hn-dok {
+  background: #fff; color: #111; border: 1px solid var(--rand); border-radius: 4px; box-shadow: var(--schatten);
+  padding: 1.5rem; font-family: Calibri, Carlito, "Segoe UI", Arial, sans-serif; font-size: 10pt; line-height: 1.35;
+}
+.hn-dok h2 { font-family: inherit; font-size: 16pt; margin: 0 0 .75rem; }
+.hn-dok p { margin: .6rem 0; white-space: pre-wrap; }
+.hn-tab { width: 100%; border-collapse: collapse; margin: .5rem 0; font-size: 9pt; table-layout: fixed; }
+.hn-tab th, .hn-tab td { border: 1px solid #bfbfbf; padding: .25rem .45rem; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+.hn-tab thead th, .hn-info th { background: #d9d9d9; }
+.hn-tab th[scope=row], .hn-bank th { font-weight: 700; background: none; }
+.hn-tab .rechts { text-align: right; }
+.hn-pos th:first-child, .hn-pos td:first-child { width: 2.5rem; text-align: center; }
+.hn-pos th:nth-child(3), .hn-pos td:nth-child(3) { width: 5.5rem; }
+.hn-pos th:last-child, .hn-pos td:last-child { width: 7rem; }
+.hn-pos tfoot td { text-align: right; }
+.hn-summe td { font-weight: 700; background: #f2f2f2; }
+.hn-bank th { width: 9rem; }
+.hn-gruss { margin-top: 1.25rem !important; }
 
 /* ---------- Zugangsanfragen ---------- */
 .zaehler {

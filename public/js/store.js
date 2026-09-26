@@ -352,6 +352,7 @@ export function leistungSpeichern(daten) {
   };
   positionPruefen(p);
   if (istKolumne) pruefe(p.kolumnenart, 'Bitte die Art der Kolumne angeben.');
+  else pruefe(p.art, 'Bitte die Art des Honorars angeben.');
   if (daten.id) {
     const alt = db.positionen.find((x) => x.id === daten.id && x.autor_id === n.id);
     pruefe(alt, 'Diese Leistung gibt es nicht (mehr).');

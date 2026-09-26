@@ -10,6 +10,7 @@ import * as redaktion from './views/redaktion.js';
 import * as redaktionDetail from './views/redaktion-detail.js';
 import * as zahlung from './views/zahlung.js';
 import * as admin from './views/admin.js';
+import * as generator from './views/generator.js';
 
 // Demo: Daten im Browser (store.js). Server: Daten über die API (api.js).
 const IST_DEMO = MODUS !== 'server';
@@ -23,6 +24,7 @@ let flash = null;
 const ROUTEN = [
   { pfad: 'leistungen', view: leistungen, rolle: ['autor'], titel: 'Meine Leistungen' },
   { pfad: 'noten', view: noten, rolle: ['autor'], titel: 'Meine Honorarnoten' },
+  { pfad: 'extern', view: generator, rolle: ['autor'], titel: 'Externe Honorarnote' },
   { pfad: 'redaktion', view: redaktion, rolle: ['redaktion', 'admin'], titel: 'Redaktion' },
   { pfad: 'redaktion/:id', view: redaktionDetail, rolle: ['redaktion', 'admin'] },
   { pfad: 'zahlung', view: zahlung, rolle: ['buchhaltung', 'admin'], titel: 'Buchhaltung' },

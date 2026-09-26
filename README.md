@@ -49,7 +49,7 @@ Lokal starten: `npm run dev` → http://localhost:5173
 2. **Meine Leistungen:** Jeden Beitrag speichern, sobald er erschienen ist – als *Kolumne* oder
    *außerordentliches Honorar* (mit „Vereinbart mit“), jeweils mit Titel, Veröffentlichungsdatum
    und Betrag. Bei Kolumnen gibt man die **Art der Kolumne** als freien Text ein (Pflicht),
-   bei außerordentlichen Honoraren die **Art des Honorars** (freier Text, optional). Der Betrag ist mit dem **Honorarsatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin
+   bei außerordentlichen Honoraren die **Art des Honorars** (freier Text, Pflicht). Der Betrag ist mit dem **Honorarsatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin
    einstellbar). Gespeicherte Leistungen kann man bearbeiten oder löschen.
 3. **Monatsabrechnung:** Einmal im Monat die gesammelten Leistungen auswählen und als
    Honorarnote abschicken. Die Nummer folgt der Vorlage: `NACHNAME-VO-JAHR-NN`
@@ -81,6 +81,14 @@ Lokal starten: `npm run dev` → http://localhost:5173
    (mit Löschprotokoll), Rechnungsempfänger, **Honorarsätze** und Datenschutzkontakt einstellen,
    Sicherung herunterladen/einspielen, Demo zurücksetzen. Weicht ein eingereichter Betrag vom
    Standardsatz ab, sieht die Redaktion in der Detailansicht einen Hinweis.
+
+8. **Externe Honorarnote (Generator):** Für Aufträge von **anderen Firmen** erstellt man unter
+   „Externe Honorarnote“ eine allgemeine Honorarnote: Empfänger und Leistungen eingeben, die
+   eigenen Daten kommen aus dem Profil. Umsatzsteuer wählbar (Kleinunternehmer:in oder 10/13/20 %;
+   mit Umsatzsteuer ist die eigene UID-Nummer Pflicht). Ergebnis als Word-Datei oder über
+   „Drucken / als PDF speichern“. Die Nummer wird als eigene Serie vorgeschlagen
+   (z. B. `MUSTERFRAU-MA-2026-E01`). Der Entwurf bleibt nur im eigenen Browser gespeichert und wird
+   nicht an campus a college geschickt.
 
 Status: **Eingereicht → Angenommen / Abgelehnt → Bezahlt**
 

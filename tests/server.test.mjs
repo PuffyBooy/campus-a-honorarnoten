@@ -108,11 +108,12 @@ test('Autor:in: Profil, Leistungen, Monatsabrechnung', async () => {
   });
   assert.equal((await a.ok('aktuellerNutzer')).profil.iban, AT_IBAN);
 
-  assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'ausserordentlich', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10 })).fehler, /vereinbart/);
+  assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'ausserordentlich', art: 'Interview', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10 })).fehler, /vereinbart/);
+  assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'ausserordentlich', art: ' ', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10, vereinbart_mit: 'Rita' })).fehler, /Art des Honorars/);
   assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: 'Schule', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10.005 })).fehler, /Betrag/);
   assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: '   ', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 15 })).fehler, /Art der Kolumne/);
   await a.ok('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: 'Schule', titel: 'Kolumne 1', veroeffentlichung: '2026-09-01', betrag: 15 });
-  await a.ok('leistungSpeichern', { kategorie: 'ausserordentlich', titel: 'Interview', veroeffentlichung: '2026-09-05', betrag: 60.5, vereinbart_mit: 'Rita' });
+  await a.ok('leistungSpeichern', { kategorie: 'ausserordentlich', art: 'Interview', titel: 'Interview', veroeffentlichung: '2026-09-05', betrag: 60.5, vereinbart_mit: 'Rita' });
   const liste = await a.ok('meineLeistungen');
   assert.equal(liste.length, 2);
   assert.equal(liste[1].betrag, 60.5);
