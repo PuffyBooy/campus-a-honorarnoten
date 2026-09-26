@@ -338,3 +338,12 @@ body.modus-demo .fuss { display: block; }
 .zugangsdaten .kopierblock { background: var(--flaeche); }
 #neu-anlegen form { margin-top: .75rem; }
 #neu-anlegen summary { font-size: 1rem; }
+
+/* ---------- Honorarsätze & SEPA ---------- */
+.abweichung { display: inline-block; margin-top: .15rem; font-size: .8rem; font-weight: 600; color: var(--warnung); }
+.sammel { border-top: 4px solid var(--marke); }
+.sammel-auswahl { display: flex; align-items: center; gap: .5rem; font-weight: 600; margin: 0 0 .5rem; }
+.sammel-auswahl input { width: auto; accent-color: var(--akzent); }
+.zahl-karte.nicht-gewaehlt { opacity: .65; }
+.schritte { margin: .5rem 0 0; padding-left: 1.25rem; }
+.schritte li { margin-bottom: .35rem; }

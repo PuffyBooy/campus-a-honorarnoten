@@ -8,6 +8,7 @@
 import { heuteIso, summe } from './lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from './lib/iban.js';
 import { honorarnoteNummer } from './lib/nummer.js';
+import { STANDARD_SAETZE, saetzeNormalisieren } from './lib/honorarsaetze.js';
 
 const SPEICHER_KEY = 'campus-a-honorare:v1';
 const SITZUNG_KEY = 'campus-a-honorare:sitzung';
@@ -42,7 +43,12 @@ function leereDb() {
     verlauf: [],
     loeschprotokoll: [],
     anfragen: [],     // Zugangsanfragen, die ein Admin freischaltet oder ablehnt
-    einstellungen: { empfaenger: { ...STANDARD_EMPFAENGER }, datenschutzKontakt: '' },
+    einstellungen: {
+      empfaenger: { ...STANDARD_EMPFAENGER },
+      datenschutzKontakt: '',
+      honorarsaetze: { ...STANDARD_SAETZE },
+      auftraggeber: { name: '', iban: '', bic: '' }, // Konto für SEPA-Sammelüberweisungen
+    },
   };
 }
 
@@ -641,19 +647,44 @@ export function loeschprotokoll() {
   return kopie(db.loeschprotokoll).sort((a, b) => b.am.localeCompare(a.am));
 }
 
+/** Einstellungen; das Auftraggeberkonto sehen nur Buchhaltung und Admin */
 export function einstellungen() {
-  return kopie(db.einstellungen);
+  const e = { ...leereDb().einstellungen, ...kopie(db.einstellungen) };
+  const n = sitzungsNutzer();
+  if (!n || !hat(n, 'buchhaltung')) delete e.auftraggeber;
+  return e;
 }
 
-export function einstellungenSpeichern({ empfaenger, datenschutzKontakt }) {
+export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorarsaetze }) {
   brauche('admin');
   pruefe(!leer(empfaenger?.name), 'Bitte den Namen des Rechnungsempfängers angeben.');
+  let saetze;
+  try {
+    saetze = saetzeNormalisieren(honorarsaetze ?? db.einstellungen.honorarsaetze ?? STANDARD_SAETZE);
+  } catch (e) {
+    throw new Fehler(e.message);
+  }
   db.einstellungen = {
+    ...db.einstellungen,
     empfaenger: {
       name: trim(empfaenger.name), strasse: trim(empfaenger.strasse),
       plz_ort: trim(empfaenger.plz_ort), uid: trim(empfaenger.uid),
     },
     datenschutzKontakt: trim(datenschutzKontakt),
+    honorarsaetze: saetze,
+  };
+  speichern();
+}
+
+/** Konto, von dem die Buchhaltung Sammelüberweisungen macht */
+export function auftraggeberSpeichern({ name, iban, bic }) {
+  brauche('buchhaltung');
+  pruefe(!leer(name), 'Bitte den Kontoinhaber angeben.');
+  pruefe(!ibanFehler(iban), ibanFehler(iban));
+  pruefe(bicIstGueltig(bic), 'Der BIC ist ungültig.');
+  db.einstellungen = {
+    ...db.einstellungen,
+    auftraggeber: { name: trim(name).slice(0, 70), iban: normalizeIban(iban), bic: normalizeBic(bic) },
   };
   speichern();
 }

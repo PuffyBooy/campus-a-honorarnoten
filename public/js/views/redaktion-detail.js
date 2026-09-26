@@ -23,7 +23,7 @@ export async function render(el, { store, nutzer, params, neuLaden, istAktuell }
       <p>Diese Honorarnote gibt es nicht (mehr).</p><p><a href="#/redaktion">Zurück zur Liste</a></p></section>`;
     return;
   }
-  const [kommentare, verlauf] = await Promise.all([store.kommentare(n.id), store.verlaufVon(n.id)]);
+  const [kommentare, verlauf, einstellungen] = await Promise.all([store.kommentare(n.id), store.verlaufVon(n.id), store.einstellungen()]);
   if (!istAktuell()) return;
   const kannAnnehmen = ['eingereicht', 'abgelehnt'].includes(n.status) && !n.zurueckgeholt_am;
   const kannAblehnen = ['eingereicht', 'angenommen'].includes(n.status);
@@ -45,7 +45,7 @@ export async function render(el, { store, nutzer, params, neuLaden, istAktuell }
         ${n.bezahlt_am ? `<dt>Bezahlt am</dt><dd>${esc(formatDatum(n.bezahlt_am))}</dd>` : ''}
       </dl>
       <h2 class="abstand-oben">Leistungen</h2>
-      ${positionenTabelle(n, { mitKorrektur: true })}
+      ${positionenTabelle(n, { mitKorrektur: true, saetze: einstellungen.honorarsaetze })}
       <form id="d-betrag-form" class="unterkarte" hidden novalidate>
         <h3 id="d-betrag-titel">Betrag ändern</h3>
         <div class="zeile">

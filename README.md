@@ -48,7 +48,8 @@ Lokal starten: `npm run dev` → http://localhost:5173
    Honorarnote automatisch übernommen.
 2. **Meine Leistungen:** Jeden Beitrag speichern, sobald er erschienen ist – als *Kolumne* oder
    *außerordentliches Honorar* (mit „Vereinbart mit“), jeweils mit Titel, Veröffentlichungsdatum
-   und Betrag. Gespeicherte Leistungen kann man bearbeiten oder löschen.
+   und Betrag. Der Betrag ist mit dem **Honorarsatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin
+   einstellbar). Gespeicherte Leistungen kann man bearbeiten oder löschen.
 3. **Monatsabrechnung:** Einmal im Monat die gesammelten Leistungen auswählen und als
    Honorarnote abschicken. Die Nummer folgt der Vorlage: `NACHNAME-VO-JAHR-NN`
    (z. B. `MUSTERFRAU-MA-2026-01`). Wurde im Monat schon eine abgeschickt, kommt ein Hinweis.
@@ -62,10 +63,23 @@ Lokal starten: `npm run dev` → http://localhost:5173
    **„Als bezahlt markieren“ erzeugt automatisch die Honorarnote als Word-Datei** aus
    [`public/vorlage/honorarnote-vorlage.docx`](public/vorlage/honorarnote-vorlage.docx).
    Im Reiter „Bezahlt“ gibt es pro Monat den CSV-Export und alle Honorarnoten als ZIP.
+
+   **SEPA-Sammelüberweisung:** Oben im Reiter „Offen“ die Zahlungen auswählen und eine Datei im
+   Format `pain.001` herunterladen. Die lädt man im Online-Banking beim Import von Sammelaufträgen
+   hoch und gibt alle Überweisungen auf einmal frei. Danach ein Klick auf „… als bezahlt markieren“,
+   dann sind alle erledigt und die Honorarnoten kommen gesammelt als ZIP. Beim ersten Mal fragt die
+   App nach dem Konto, von dem überwiesen wird (nur für Buchhaltung und Admin sichtbar).
+   Zwei Formate stehen zur Wahl: `pain.001.001.03` (Standard, von praktisch allen Banken angenommen)
+   und `pain.001.001.09` (neueres Format). Falls die Bank eine Datei ablehnt, das andere Format
+   probieren. Umlaute werden für die Bank umgeschrieben (ö → oe), weil SEPA nur einen
+   eingeschränkten Zeichensatz erlaubt. Beide Formate werden in den Tests gegen die offiziellen
+   ISO-20022-Schemas geprüft (`tests/schemas/`).
 7. **Admin-Terminal:** Zugangsanfragen freischalten oder ablehnen (offene Anfragen werden in der
    Navigation gezählt), Personen direkt anlegen, Rollen vergeben (Checkboxen), Konten
-   deaktivieren oder löschen, Passwort zurücksetzen (neues Startpasswort). Honorarnoten löschen (mit Löschprotokoll), Rechnungsempfänger und
-   Datenschutzkontakt einstellen, Sicherung herunterladen/einspielen, Demo zurücksetzen.
+   deaktivieren oder löschen, Passwort zurücksetzen (neues Startpasswort). Honorarnoten löschen
+   (mit Löschprotokoll), Rechnungsempfänger, **Honorarsätze** und Datenschutzkontakt einstellen,
+   Sicherung herunterladen/einspielen, Demo zurücksetzen. Weicht ein eingereichter Betrag vom
+   Standardsatz ab, sieht die Redaktion in der Detailansicht einen Hinweis.
 
 Status: **Eingereicht → Angenommen / Abgelehnt → Bezahlt**
 

@@ -8,6 +8,7 @@ import {
 import { heuteIso } from '../public/js/lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from '../public/js/lib/iban.js';
 import { honorarnoteNummer } from '../public/js/lib/nummer.js';
+import { STANDARD_SAETZE, saetzeNormalisieren } from '../public/js/lib/honorarsaetze.js';
 
 export const STANDARD_EMPFAENGER = {
   name: 'campus a Medien GmbH',
@@ -85,7 +86,12 @@ export function profilVollstaendig(n) {
 }
 
 function einstellungenLaden(db) {
-  const e = { empfaenger: { ...STANDARD_EMPFAENGER }, datenschutzKontakt: '' };
+  const e = {
+    empfaenger: { ...STANDARD_EMPFAENGER },
+    datenschutzKontakt: '',
+    honorarsaetze: { ...STANDARD_SAETZE },
+    auftraggeber: { name: '', iban: '', bic: '' }, // Konto für SEPA-Sammelüberweisungen
+  };
   for (const { schluessel, wert } of db.prepare('select * from einstellungen').all()) e[schluessel] = JSON.parse(wert);
   return e;
 }
@@ -234,8 +240,21 @@ export const funktionen = {
   },
 
   einstellungen(ctx) {
-    ich(ctx);
-    return einstellungenLaden(ctx.db);
+    const n = ich(ctx);
+    const e = einstellungenLaden(ctx.db);
+    // das Auftraggeberkonto (IBAN der Firma) sehen nur Buchhaltung und Admin
+    if (!hat(n, 'buchhaltung')) delete e.auftraggeber;
+    return e;
+  },
+
+  auftraggeberSpeichern(ctx, d = {}) {
+    brauche(ctx, 'buchhaltung');
+    pruefe(!leer(d.name), 'Bitte den Kontoinhaber angeben.');
+    pruefe(!ibanFehler(d.iban), ibanFehler(d.iban));
+    pruefe(bicIstGueltig(d.bic), 'Der BIC ist ungültig.');
+    ctx.db.prepare('insert into einstellungen (schluessel, wert) values (?, ?) on conflict(schluessel) do update set wert = excluded.wert')
+      .run('auftraggeber', JSON.stringify({ name: trim(d.name).slice(0, 70), iban: normalizeIban(d.iban), bic: normalizeBic(d.bic) }));
+    return true;
   },
 
   // ---------------------------------------------------------------- Leistungen (Entwürfe)
@@ -584,6 +603,12 @@ export const funktionen = {
     pruefe(!leer(e.name), 'Bitte den Namen des Rechnungsempfängers angeben.');
     const kontakt = trim(d.datenschutzKontakt);
     pruefe(!kontakt || EMAIL.test(kontakt), 'Bitte eine gültige E-Mail-Adresse für Datenschutzanfragen angeben.');
+    let saetze;
+    try {
+      saetze = saetzeNormalisieren(d.honorarsaetze ?? einstellungenLaden(ctx.db).honorarsaetze);
+    } catch (fehler) {
+      throw new Fehler(fehler.message);
+    }
     const speichere = ctx.db.prepare('insert into einstellungen (schluessel, wert) values (?, ?) on conflict(schluessel) do update set wert = excluded.wert');
     transaktion(ctx.db, () => {
       speichere.run('empfaenger', JSON.stringify({
@@ -591,6 +616,7 @@ export const funktionen = {
         plz_ort: trim(e.plz_ort).slice(0, 100), uid: trim(e.uid).slice(0, 30),
       }));
       speichere.run('datenschutzKontakt', JSON.stringify(kontakt));
+      speichere.run('honorarsaetze', JSON.stringify(saetze));
     });
     return true;
   },

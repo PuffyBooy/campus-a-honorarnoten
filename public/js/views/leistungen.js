@@ -7,7 +7,15 @@ import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
 
 let bearbeiteId = null; // Leistung, die gerade im Formular bearbeitet wird
 
-function formularHtml(p) {
+const satzText = (satz) => (satz != null ? formatBetragPlain(satz) : '');
+
+function satzHinweis(kategorie, saetze) {
+  const satz = saetze?.[kategorie];
+  if (satz == null) return kategorie === 'ausserordentlich' ? 'Betrag laut Vereinbarung mit der Redaktion.' : '';
+  return `Standardsatz: ${formatEuro(satz)}`;
+}
+
+function formularHtml(p, saetze) {
   const kat = p?.kategorie ?? 'kolumne';
   return `
     <form class="karte" id="l-form" novalidate>
@@ -41,7 +49,8 @@ function formularHtml(p) {
         <div class="feld">
           <label for="l-betrag">Betrag in EUR <span class="pflicht" aria-hidden="true">*</span></label>
           <input id="l-betrag" name="betrag" inputmode="decimal" autocomplete="off" placeholder="15,00" required
-                 value="${p ? esc(formatBetragPlain(p.betrag)) : ''}">
+                 value="${p ? esc(formatBetragPlain(p.betrag)) : esc(satzText(saetze?.[kat]))}" aria-describedby="l-satz-hinweis">
+          <p class="hinweis" id="l-satz-hinweis">${esc(satzHinweis(kat, saetze))}</p>
           <p class="feldfehler" data-fehler="betrag"></p>
         </div>
         <div class="feld" id="l-vereinbart-feld" ${kat === 'ausserordentlich' ? '' : 'hidden'}>
@@ -90,7 +99,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
       Bankverbindung im Profil</a> ergänzen. Du musst sie nur einmal eingeben.</p>` : ''}
 
     <div class="spalten">
-      <div>${formularHtml(bearbeite)}</div>
+      <div>${formularHtml(bearbeite, einstellungen.honorarsaetze)}</div>
       <div>
         <section class="karte">
           <h2>Gespeichert, noch nicht abgerechnet</h2>
@@ -142,10 +151,17 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
   const form = el.querySelector('#l-form');
   const fehler = (name, t) => { const e = form.querySelector(`[data-fehler="${name}"]`); if (e) e.textContent = t || ''; };
   form.addEventListener('input', (ev) => ev.target.name && fehler(ev.target.name, ''));
+  // Kategorie gewechselt: Standardsatz übernehmen, solange der Betrag nicht selbst geändert wurde
+  let letzteKategorie = form.kategorie.value;
   form.addEventListener('change', (ev) => {
-    if (ev.target.name === 'kategorie') {
-      el.querySelector('#l-vereinbart-feld').hidden = form.kategorie.value !== 'ausserordentlich';
-    }
+    if (ev.target.name !== 'kategorie') return;
+    const neu = form.kategorie.value;
+    const saetze = einstellungen.honorarsaetze ?? {};
+    el.querySelector('#l-vereinbart-feld').hidden = neu !== 'ausserordentlich';
+    el.querySelector('#l-satz-hinweis').textContent = satzHinweis(neu, saetze);
+    const bisher = form.betrag.value.trim();
+    if (!bisher || parseBetrag(bisher) === saetze[letzteKategorie]) form.betrag.value = satzText(saetze[neu]);
+    letzteKategorie = neu;
   });
   el.querySelector('#l-abbrechen')?.addEventListener('click', () => { bearbeiteId = null; neuLaden(); });
 

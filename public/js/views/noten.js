@@ -3,9 +3,14 @@ import {
   ART_LABEL, KATEGORIE_LABEL, esc, formatDatum, formatEuro, formatMonat, formatZeitpunkt,
 } from '../lib/format.js';
 import { honorarnoteHerunterladen } from '../lib/beleg.js';
+import { weichtAb } from '../lib/honorarsaetze.js';
 import { fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 
-export function positionenTabelle(note, { mitKorrektur = false } = {}) {
+/**
+ * Tabelle der Leistungen einer Honorarnote.
+ * saetze: wenn angegeben, wird markiert, wo der eingereichte Betrag vom Standardsatz abweicht (für die Redaktion)
+ */
+export function positionenTabelle(note, { mitKorrektur = false, saetze = null } = {}) {
   return `
     <table class="tabelle positionen-tabelle">
       <thead><tr><th>Titel des Beitrags</th><th>Kategorie</th><th>Veröffentlichung</th><th class="rechts">Betrag</th>
@@ -19,7 +24,8 @@ export function positionenTabelle(note, { mitKorrektur = false } = {}) {
             p.vereinbart_mit ? ` · vereinbart mit ${esc(p.vereinbart_mit)}` : ''}</span></span></td>
           <td data-label="Veröffentlichung">${esc(formatDatum(p.veroeffentlichung))}</td>
           <td data-label="Betrag" class="rechts"><span>${esc(formatEuro(p.betrag))}
-            ${p.betrag !== p.betrag_eingereicht ? `<br><span class="durchgestrichen">${esc(formatEuro(p.betrag_eingereicht))}</span>` : ''}</span></td>
+            ${p.betrag !== p.betrag_eingereicht ? `<br><span class="durchgestrichen">${esc(formatEuro(p.betrag_eingereicht))}</span>` : ''}
+            ${saetze && weichtAb(p, saetze) ? `<br><span class="abweichung" title="Eingereichter Betrag weicht vom Standardsatz ab">⚠ Standardsatz ${esc(formatEuro(saetze[p.kategorie]))}</span>` : ''}</span></td>
           ${mitKorrektur ? `<td data-label="">${note.status !== 'bezahlt'
             ? `<button type="button" class="btn btn-klein" data-korrigieren="${esc(p.id)}">Betrag ändern</button>` : ''}</td>` : ''}
         </tr>

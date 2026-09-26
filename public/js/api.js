@@ -70,6 +70,7 @@ export const verlaufVon = f('verlaufVon');
 export const offeneZahlungen = f('offeneZahlungen');
 export const bezahlteNoten = f('bezahlteNoten');
 export const alsBezahltMarkieren = f('alsBezahltMarkieren');
+export const auftraggeberSpeichern = f('auftraggeberSpeichern');
 
 // Admin
 export const anfragen = f('anfragen');

@@ -207,6 +207,30 @@ test('Admin: Rollen, letzter Admin, Deaktivieren beendet Sitzungen', async () =>
   await k.admin.ok('nutzerAktivSetzen', bert.id, true);
 });
 
+test('Honorarsätze: Admin legt fest, alle sehen sie, ungültige Werte abgelehnt', async () => {
+  const basisDaten = { empfaenger: { name: 'campus a Medien GmbH' }, datenschutzKontakt: '' };
+  assert.equal((await k.anna.ok('einstellungen')).honorarsaetze.kolumne, 15, 'Standardsatz ab Werk');
+  assert.equal((await k.rita.aufruf('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { kolumne: 20 } })).status, 403);
+  assert.match((await k.admin.aufruf('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { kolumne: -5 } })).fehler, /Honorarsätze/);
+  await k.admin.ok('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { kolumne: 17.5, ausserordentlich: '' } });
+  assert.deepEqual((await k.anna.ok('einstellungen')).honorarsaetze, { kolumne: 17.5, ausserordentlich: null });
+});
+
+test('Auftraggeberkonto für SEPA: nur Buchhaltung und Admin', async () => {
+  const konto = { name: 'campus a Medien GmbH', iban: 'AT32 2011 1823 4567 8901', bic: '' };
+  assert.equal((await k.anna.aufruf('auftraggeberSpeichern', konto)).status, 403);
+  assert.equal((await k.rita.aufruf('auftraggeberSpeichern', konto)).status, 403);
+  assert.match((await k.kasse.aufruf('auftraggeberSpeichern', { ...konto, iban: 'AT00' })).fehler, /IBAN|Format/);
+  await k.kasse.ok('auftraggeberSpeichern', konto);
+  assert.equal((await k.kasse.ok('einstellungen')).auftraggeber.iban, 'AT322011182345678901');
+  assert.equal((await k.admin.ok('einstellungen')).auftraggeber.iban, 'AT322011182345678901');
+  assert.equal((await k.anna.ok('einstellungen')).auftraggeber, undefined, 'Autor:in sieht die Firmen-IBAN nicht');
+  assert.equal((await k.rita.ok('einstellungen')).auftraggeber, undefined, 'Redaktion sieht die Firmen-IBAN nicht');
+  // Admin-Einstellungen speichern überschreibt das Konto nicht
+  await k.admin.ok('einstellungenSpeichern', { empfaenger: { name: 'campus a Medien GmbH' } });
+  assert.equal((await k.kasse.ok('einstellungen')).auftraggeber.iban, 'AT322011182345678901');
+});
+
 test('Admin: Note löschen mit Protokoll, Export ohne Passwörter', async () => {
   assert.equal((await k.rita.aufruf('noteLoeschen', k.note.id)).status, 403);
   await k.admin.ok('noteLoeschen', k.note.id);
