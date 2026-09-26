@@ -68,8 +68,23 @@ export function navigate(pfad) {
   else location.hash = '#/' + pfad;
 }
 
+// Handy: Menü über den Knopf mit den drei Strichen auf- und zuklappen
+const menueKnopf = document.getElementById('menue-knopf');
+function menueSchliessen() {
+  document.body.classList.remove('menue-offen');
+  menueKnopf.setAttribute('aria-expanded', 'false');
+}
+menueKnopf.addEventListener('click', () => {
+  const offen = document.body.classList.toggle('menue-offen');
+  menueKnopf.setAttribute('aria-expanded', String(offen));
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') menueSchliessen(); });
+
 async function renderNav(nutzer, pfad) {
-  if (!nutzer || nutzer.muss_passwort_aendern) {
+  menueSchliessen();
+  const mitMenue = Boolean(nutzer && !nutzer.muss_passwort_aendern);
+  document.body.classList.toggle('mit-menue', mitMenue);
+  if (!mitMenue) {
     nav.innerHTML = '';
     return;
   }
