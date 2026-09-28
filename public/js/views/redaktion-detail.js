@@ -45,7 +45,7 @@ export async function render(el, { store, nutzer, params, neuLaden, istAktuell }
         ${n.bezahlt_am ? `<dt>Bezahlt am</dt><dd>${esc(formatDatum(n.bezahlt_am))}</dd>` : ''}
       </dl>
       <h2 class="abstand-oben">Leistungen</h2>
-      ${positionenTabelle(n, { mitKorrektur: true, saetze: einstellungen.honorarsaetze })}
+      ${positionenTabelle(n, { mitKorrektur: true, saetze: einstellungen.honorarsaetze, pruefen: true })}
       <form id="d-betrag-form" class="unterkarte" hidden novalidate>
         <h3 id="d-betrag-titel">Betrag ändern</h3>
         <div class="zeile">

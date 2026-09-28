@@ -420,7 +420,7 @@ function verlauf(noteId, n, aktion, details = {}) {
 
 // Die Demo kann campus-a-college.at nicht abrufen (der Browser blockiert fremde Seiten).
 // Sie zeigt deshalb Beispielartikel; im Server-Betrieb kommen hier die echten Artikel.
-const DEMO_ARTIKEL = 'demo:';
+const DEMO_ARTIKEL = 'demo:'; // gleiche Kennung wie in lib/campus.js
 
 function demoArtikel() {
   const tag = (vor) => {

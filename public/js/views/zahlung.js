@@ -143,7 +143,7 @@ async function offen(inhalt, { store, neuLaden, istAktuell }) {
            </div>
            <div class="qr" hidden></div>
            <details class="aufklapp"><summary>Leistungen und Adresse</summary>
-             ${positionenTabelle(n)}
+             ${positionenTabelle(n, { pruefen: true })}
              <p class="klein">Adresse: ${esc(n.autor.strasse)}, ${esc(n.autor.plz_ort)}</p>
            </details>
            <form class="bezahlt-form" novalidate>

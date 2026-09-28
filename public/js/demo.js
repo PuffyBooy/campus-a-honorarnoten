@@ -40,6 +40,7 @@ export async function demoDaten(db, { passwortHash }) {
     id: `demo-pos-${++nr}`, kategorie, art: kategorie === 'kolumne' ? '' : 'artikel',
     kolumnenart: kategorie === 'kolumne' ? KOLUMNEN[nr % KOLUMNEN.length] : '', titel,
     veroeffentlichung: datum(tageZurueck(tage)), ausgabe: '', vereinbart_mit: '', notiz: '',
+    artikel_url: `demo:beitrag-${nr}`, // Beispiel-Verknüpfung mit einem Artikel auf campus-a-college.at
     betrag, betrag_eingereicht: betrag, betrag_vermerk: '', ...extra,
   });
 
@@ -97,7 +98,7 @@ export async function demoDaten(db, { passwortHash }) {
   // Jonas: abgelehnt, danach neu eingereicht
   {
     const { n, v } = note(jonas, 20, [
-      pos('ausserordentlich', 'Fotostrecke Schulball', 24, 120, { art: 'foto', vereinbart_mit: 'Rita Redaktion' }),
+      pos('ausserordentlich', 'Fotostrecke Schulball', 24, 120, { art: 'foto', vereinbart_mit: 'Rita Redaktion', artikel_url: '' }),
     ], 'abgelehnt', { entschieden_am: iso(tageZurueck(18)), ablehnungsgrund: 'Die Fotostrecke wurde nicht veröffentlicht. Bitte nur erschienene Beiträge abrechnen.' });
     v(18, rita, 'abgelehnt', { vorher: 'eingereicht', grund: n.ablehnungsgrund });
   }

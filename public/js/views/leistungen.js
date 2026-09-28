@@ -3,7 +3,7 @@ import {
   KATEGORIE_LABEL, artText, esc, formatBetragPlain, formatDatum, formatEuro, formatMonat, heuteIso, parseBetrag, summe,
 } from '../lib/format.js';
 import { formatIban } from '../lib/iban.js';
-import { artikelLink, artikelUrlGueltig } from '../lib/campus.js';
+import { artikelLink, hatArtikel } from '../lib/campus.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
 
 let bearbeiteId = null; // Leistung, die gerade im Formular bearbeitet wird
@@ -154,7 +154,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
                       <strong>${esc(p.titel)}</strong><br>
                       <span class="klein">${[KATEGORIE_LABEL[p.kategorie], artText(p), formatDatum(p.veroeffentlichung)].filter(Boolean).map(esc).join(' · ')}
                         ${p.vereinbart_mit ? ` · vereinbart mit ${esc(p.vereinbart_mit)}` : ''}
-                        ${artikelUrlGueltig(p.artikel_url) ? ` · ${artikelLink(p.artikel_url)}` : ''}</span>
+                        ${hatArtikel(p.artikel_url) ? ` · ${artikelLink(p.artikel_url)}` : ''}</span>
                     </span>
                   </label>
                   <span class="position-betrag">${esc(formatEuro(p.betrag))}</span>
