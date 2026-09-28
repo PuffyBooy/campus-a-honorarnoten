@@ -9,6 +9,7 @@ import { artNormalisieren, heuteIso, summe } from './lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from './lib/iban.js';
 import { honorarnoteNummer } from './lib/nummer.js';
 import { STANDARD_SAETZE, saetzeNormalisieren } from './lib/honorarsaetze.js';
+import { artikelUrlGueltig, profilIdAusLink } from './lib/campus.js';
 
 const SPEICHER_KEY = 'campus-a-honorare:v1';
 const SITZUNG_KEY = 'campus-a-honorare:sitzung';
@@ -287,7 +288,7 @@ export function profilVollstaendig(n = aktuellerNutzer()) {
   return !leer(p.strasse) && !leer(p.plz_ort) && !leer(p.kontoinhaber) && !ibanFehler(p.iban);
 }
 
-export function profilSpeichern({ vorname, nachname, email, strasse, plz_ort, kontoinhaber, iban, bic }) {
+export function profilSpeichern({ vorname, nachname, email, strasse, plz_ort, kontoinhaber, iban, bic, campus_profil }) {
   const n = ich();
   email = trim(email).toLowerCase();
   pruefe(!leer(vorname) && !leer(nachname), 'Bitte Vor- und Nachnamen angeben.');
@@ -295,6 +296,9 @@ export function profilSpeichern({ vorname, nachname, email, strasse, plz_ort, ko
   pruefe(!db.nutzer.some((x) => x.email === email && x.id !== n.id), 'Diese E-Mail-Adresse wird schon verwendet.');
   if (!leer(iban)) pruefe(!ibanFehler(iban), ibanFehler(iban));
   pruefe(bicIstGueltig(bic), 'Der BIC ist ungültig.');
+  // ohne Angabe bleibt eine bestehende Verknüpfung erhalten
+  const campusProfil = campus_profil === undefined ? (n.profil?.campus_profil ?? '') : profilIdAusLink(campus_profil);
+  pruefe(campusProfil !== null, 'Bitte den Link zu deinem Profil auf campus-a-college.at einfügen, z. B. https://www.campus-a-college.at/profil/…');
   Object.assign(n, { vorname: trim(vorname), nachname: trim(nachname), email });
   n.profil = {
     strasse: trim(strasse),
@@ -302,6 +306,7 @@ export function profilSpeichern({ vorname, nachname, email, strasse, plz_ort, ko
     kontoinhaber: trim(kontoinhaber),
     iban: normalizeIban(iban),
     bic: normalizeBic(bic),
+    campus_profil: campusProfil,
   };
   speichern();
   return nutzerSicht(n);
@@ -340,10 +345,11 @@ export function leistungSpeichern(daten) {
   const istKolumne = daten.kategorie === 'kolumne';
   const p = {
     kategorie: daten.kategorie,
-    // Kolumnen haben eine Art der Kolumne (freier Text), außerordentliche Honorare eine Art des Honorars
+    // Kolumnen haben eine Art der Kolumne (freier Text, optional), außerordentliche Honorare eine Art des Honorars
     art: istKolumne ? '' : artNormalisieren(daten.art),
     kolumnenart: istKolumne ? artNormalisieren(daten.kolumnenart) : '',
     titel: trim(daten.titel),
+    artikel_url: trim(daten.artikel_url),
     veroeffentlichung: daten.veroeffentlichung,
     ausgabe: trim(daten.ausgabe),
     vereinbart_mit: daten.kategorie === 'ausserordentlich' ? trim(daten.vereinbart_mit) : '',
@@ -351,8 +357,11 @@ export function leistungSpeichern(daten) {
     notiz: trim(daten.notiz),
   };
   positionPruefen(p);
-  if (istKolumne) pruefe(p.kolumnenart, 'Bitte die Art der Kolumne angeben.');
-  else pruefe(p.art, 'Bitte die Art des Honorars angeben.');
+  if (!istKolumne) pruefe(p.art, 'Bitte die Art des Honorars angeben.');
+  if (p.artikel_url) {
+    pruefe(artikelUrlGueltig(p.artikel_url) || p.artikel_url.startsWith(DEMO_ARTIKEL), 'Der Link zum Artikel ist ungültig.');
+    pruefe(!verwendeteArtikel(n.id, daten.id).has(p.artikel_url), 'Dieser Artikel ist schon als Leistung gespeichert oder abgerechnet.');
+  }
   if (daten.id) {
     const alt = db.positionen.find((x) => x.id === daten.id && x.autor_id === n.id);
     pruefe(alt, 'Diese Leistung gibt es nicht (mehr).');
@@ -407,6 +416,49 @@ function verlauf(noteId, n, aktion, details = {}) {
 
 // ------------------------------------------------------------------ Honorarnoten: Autor:in
 
+// ------------------------------------------------------------------ Artikel auf campus-a-college.at
+
+// Die Demo kann campus-a-college.at nicht abrufen (der Browser blockiert fremde Seiten).
+// Sie zeigt deshalb Beispielartikel; im Server-Betrieb kommen hier die echten Artikel.
+const DEMO_ARTIKEL = 'demo:';
+
+function demoArtikel() {
+  const tag = (vor) => {
+    const d = new Date();
+    d.setDate(d.getDate() - vor);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
+  return [
+    ['Warum die Mensa-Preise schon wieder steigen', 2, 'Wirtschaft', 'Wien', 'Meinung'],
+    ['Mein erster Tag als Schulsprecherin', 6, 'Panorama', 'Wien', 'Meinung'],
+    ['Wie viel Handy ist zu viel?', 11, 'Wissenschaft', 'Österreich', 'Fakten'],
+    ['Maturaball ohne Schulden: So geht’s', 17, 'Wirtschaft', 'Österreich', 'Fakten'],
+    ['Interview: Was eine Klimaforscherin Jugendlichen rät', 24, 'Wissenschaft', 'International', 'Interview'],
+    ['Warum ich Lesen wieder lieben gelernt habe', 33, 'Kultur', 'Österreich', 'Meinung'],
+  ].map(([titel, vor, ressort, region, kategorie], i) => ({
+    url: `${DEMO_ARTIKEL}artikel-${i + 1}`, titel, datum: tag(vor), ressort, region, kategorie,
+  }));
+}
+
+/** Artikel-Adressen, die schon als Leistung gespeichert oder abgerechnet sind */
+function verwendeteArtikel(autorId, ohnePosition = null) {
+  const urls = new Set();
+  for (const p of db.positionen) if (p.autor_id === autorId && p.artikel_url && p.id !== ohnePosition) urls.add(p.artikel_url);
+  for (const x of db.noten) {
+    if (x.autor_id !== autorId || (x.status === 'abgelehnt' && x.zurueckgeholt_am)) continue;
+    for (const p of x.positionen) if (p.artikel_url) urls.add(p.artikel_url);
+  }
+  return urls;
+}
+
+export async function meineArtikel() {
+  const n = brauche('autor');
+  const profil = n.profil?.campus_profil;
+  if (!profil) return { verknuepft: false, artikel: [] };
+  const verwendet = verwendeteArtikel(n.id);
+  return { verknuepft: true, profil, demo: true, artikel: demoArtikel().map((a) => ({ ...a, erfasst: verwendet.has(a.url) })) };
+}
+
 export function naechsteNummer(n = ich(), jahr = Number(heuteIso().slice(0, 4))) {
   const lfd = db.noten.filter((x) => x.autor_id === n.id && x.jahr === jahr)
     .reduce((m, x) => Math.max(m, x.laufende_nummer), 0) + 1;
@@ -444,7 +496,7 @@ export function abrechnungAbschicken(positionIds) {
     empfaenger: { ...db.einstellungen.empfaenger },
     positionen: positionen.map((p) => ({
       id: p.id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel, veroeffentlichung: p.veroeffentlichung,
-      ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
+      artikel_url: p.artikel_url ?? '', ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
       betrag: p.betrag, betrag_eingereicht: p.betrag, betrag_vermerk: '',
     })),
     ablehnungsgrund: '',
@@ -472,7 +524,7 @@ export function leistungenZurueckholen(noteId) {
   for (const p of note.positionen) {
     db.positionen.push({
       id: id(), autor_id: n.id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel,
-      veroeffentlichung: p.veroeffentlichung, ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit,
+      veroeffentlichung: p.veroeffentlichung, artikel_url: p.artikel_url ?? '', ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit,
       betrag: p.betrag_eingereicht, notiz: p.notiz, erstellt_am: jetzt(),
     });
   }

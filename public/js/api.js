@@ -50,6 +50,7 @@ export function profilVollstaendig(n) {
 export const meineLeistungen = f('meineLeistungen');
 export const leistungSpeichern = f('leistungSpeichern');
 export const leistungLoeschen = f('leistungLoeschen');
+export const meineArtikel = f('meineArtikel');
 export const naechsteNummer = f('naechsteNummer');
 export const notenDiesenMonat = f('notenDiesenMonat');
 export const abrechnungAbschicken = f('abrechnungAbschicken');

@@ -3,6 +3,7 @@ import {
   KATEGORIE_LABEL, artText, esc, formatBetragPlain, formatDatum, formatEuro, formatMonat, heuteIso, parseBetrag, summe,
 } from '../lib/format.js';
 import { formatIban } from '../lib/iban.js';
+import { artikelLink, artikelUrlGueltig } from '../lib/campus.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
 
 let bearbeiteId = null; // Leistung, die gerade im Formular bearbeitet wird
@@ -13,6 +14,33 @@ function satzHinweis(kategorie, saetze) {
   const satz = saetze?.[kategorie];
   if (satz == null) return kategorie === 'ausserordentlich' ? 'Betrag laut Vereinbarung mit der Redaktion.' : '';
   return `Standardsatz: ${formatEuro(satz)}`;
+}
+
+const artikelVermerk = (url) => `Verknüpft mit ${artikelLink(url, 'dem Artikel')} ·
+  <button type="button" class="link-knopf" id="l-artikel-loesen">Verknüpfung lösen</button>`;
+
+function artikelKarteHtml(daten) {
+  if (!daten) return '<p class="klein" role="status">Artikel werden geladen … Beim ersten Mal kann das bis zu einer Minute dauern.</p>';
+  if (daten.fehler) return `<p class="fehlerbox" role="alert">${esc(daten.fehler)}</p>`;
+  if (!daten.verknuepft) {
+    return '<p class="klein">Trag im <a href="#/profil">Profil</a> den Link zu deiner Profilseite auf campus-a-college.at ein, dann erscheinen hier alle deine Artikel.</p>';
+  }
+  const offen = daten.artikel.filter((a) => !a.erfasst).length;
+  return `
+    ${daten.demo ? '<p class="tipp">Demo: Beispielartikel. Im echten Betrieb stehen hier deine Artikel von campus-a-college.at.</p>' : ''}
+    <p class="klein">${daten.artikel.length} Artikel, davon ${offen} noch nicht erfasst.</p>
+    ${daten.artikel.length ? `<ul class="artikel-liste">
+      ${daten.artikel.map((a, i) => `
+        <li class="artikel${a.erfasst ? ' erfasst' : ''}">
+          <span>
+            <strong>${artikelLink(a.url, a.titel)}</strong><br>
+            <span class="klein">${[a.datum ? formatDatum(a.datum) : 'Datum unbekannt', a.ressort, a.kategorie].filter(Boolean).map(esc).join(' · ')}</span>
+          </span>
+          ${a.erfasst ? '<span class="badge badge-bezahlt">erfasst</span>'
+            : `<button type="button" class="btn btn-klein" data-uebernehmen="${i}">Übernehmen</button>`}
+        </li>`).join('')}
+    </ul>` : ''}
+    <button type="button" class="link-knopf" id="artikel-neu">Liste aktualisieren</button>`;
 }
 
 function formularHtml(p, einstellungen) {
@@ -32,6 +60,8 @@ function formularHtml(p, einstellungen) {
         <label for="l-titel">Titel des Beitrags <span class="pflicht" aria-hidden="true">*</span></label>
         <input id="l-titel" name="titel" required maxlength="200" value="${esc(p?.titel)}">
         <p class="feldfehler" data-fehler="titel"></p>
+        <input type="hidden" name="artikel_url" value="${esc(p?.artikel_url)}">
+        <p class="klein" id="l-artikel" ${p?.artikel_url ? '' : 'hidden'}>${p?.artikel_url ? artikelVermerk(p.artikel_url) : ''}</p>
       </div>
       <div class="zeile">
         <div class="feld" id="l-art-feld" ${kat === 'kolumne' ? 'hidden' : ''}>
@@ -41,7 +71,7 @@ function formularHtml(p, einstellungen) {
           <p class="feldfehler" data-fehler="art"></p>
         </div>
         <div class="feld" id="l-kolumnenart-feld" ${kat === 'kolumne' ? '' : 'hidden'}>
-          <label for="l-kolumnenart">Art der Kolumne <span class="pflicht" aria-hidden="true">*</span></label>
+          <label for="l-kolumnenart">Art der Kolumne <span class="optional">(optional)</span></label>
           <input id="l-kolumnenart" name="kolumnenart" maxlength="100" autocomplete="off" value="${esc(p?.kolumnenart)}">
           <p class="feldfehler" data-fehler="kolumnenart"></p>
         </div>
@@ -103,7 +133,13 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     ${!profilOk ? '<p class="hinweisbox">Bitte zuerst <a href="#/profil">Adresse und Bankverbindung</a> ergänzen.</p>' : ''}
 
     <div class="spalten">
-      <div>${formularHtml(bearbeite, einstellungen)}</div>
+      <div>
+        ${formularHtml(bearbeite, einstellungen)}
+        <section class="karte" id="artikel-karte" aria-live="polite">
+          <h2>Meine Artikel auf campus-a-college.at</h2>
+          <div id="artikel-inhalt">${artikelKarteHtml(null)}</div>
+        </section>
+      </div>
       <div>
         <section class="karte">
           <h2>Gespeichert, noch nicht abgerechnet</h2>
@@ -117,7 +153,8 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
                     <span>
                       <strong>${esc(p.titel)}</strong><br>
                       <span class="klein">${[KATEGORIE_LABEL[p.kategorie], artText(p), formatDatum(p.veroeffentlichung)].filter(Boolean).map(esc).join(' · ')}
-                        ${p.vereinbart_mit ? ` · vereinbart mit ${esc(p.vereinbart_mit)}` : ''}</span>
+                        ${p.vereinbart_mit ? ` · vereinbart mit ${esc(p.vereinbart_mit)}` : ''}
+                        ${artikelUrlGueltig(p.artikel_url) ? ` · ${artikelLink(p.artikel_url)}` : ''}</span>
                     </span>
                   </label>
                   <span class="position-betrag">${esc(formatEuro(p.betrag))}</span>
@@ -167,15 +204,55 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
   });
   el.querySelector('#l-abbrechen')?.addEventListener('click', () => { bearbeiteId = null; neuLaden(); });
 
+  // ---- Artikel von campus-a-college.at
+  const artikelAnzeige = el.querySelector('#l-artikel');
+  const artikelSetzen = (url) => {
+    form.artikel_url.value = url;
+    artikelAnzeige.hidden = !url;
+    artikelAnzeige.innerHTML = url ? artikelVermerk(url) : '';
+  };
+  artikelAnzeige.addEventListener('click', (ev) => {
+    if (ev.target.closest('#l-artikel-loesen')) artikelSetzen('');
+  });
+
+  const artikelInhalt = el.querySelector('#artikel-inhalt');
+  let artikelDaten = null;
+  const artikelLaden = async (neu = false) => {
+    artikelInhalt.innerHTML = artikelKarteHtml(null);
+    try {
+      artikelDaten = await store.meineArtikel({ neu });
+    } catch (e) {
+      artikelDaten = { fehler: fehlerText(e) };
+    }
+    if (!istAktuell()) return;
+    artikelInhalt.innerHTML = artikelKarteHtml(artikelDaten);
+  };
+  artikelInhalt.addEventListener('click', (ev) => {
+    if (ev.target.closest('#artikel-neu')) {
+      artikelLaden(true);
+      return;
+    }
+    const knopf = ev.target.closest('[data-uebernehmen]');
+    const a = knopf && artikelDaten?.artikel?.[Number(knopf.dataset.uebernehmen)];
+    if (!a) return;
+    form.titel.value = a.titel;
+    if (a.datum) form.veroeffentlichung.value = a.datum;
+    artikelSetzen(a.url);
+    ['titel', 'veroeffentlichung', 'formular'].forEach((n) => fehler(n, ''));
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    form.titel.focus({ preventScroll: true });
+    meldung('Artikel übernommen – bitte prüfen und speichern.');
+  });
+  artikelLaden();
+
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    ['titel', 'kolumnenart', 'art', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'formular'].forEach((n) => fehler(n, ''));
+    ['titel', 'art', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'formular'].forEach((n) => fehler(n, ''));
     const betrag = parseBetrag(form.betrag.value);
     const f = {};
     if (!form.titel.value.trim()) f.titel = 'Bitte den Titel angeben.';
     if (!form.veroeffentlichung.value) f.veroeffentlichung = 'Bitte Datum wählen.';
     if (!betrag) f.betrag = 'Bitte einen Betrag wie 15 oder 15,50 eingeben.';
-    if (form.kategorie.value === 'kolumne' && !form.kolumnenart.value.trim()) f.kolumnenart = 'Bitte die Art der Kolumne angeben.';
     if (form.kategorie.value === 'ausserordentlich' && !form.art.value.trim()) f.art = 'Bitte die Art des Honorars angeben.';
     if (form.kategorie.value === 'ausserordentlich' && !form.vereinbart_mit.value.trim()) {
       f.vereinbart_mit = 'Mit wem aus der Redaktion wurde das vereinbart?';
@@ -191,6 +268,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
       await store.leistungSpeichern({
         id: bearbeiteId ?? undefined,
         kategorie: form.kategorie.value, art: form.art.value, kolumnenart: form.kolumnenart.value, titel: form.titel.value,
+        artikel_url: form.artikel_url.value,
         veroeffentlichung: form.veroeffentlichung.value, betrag, vereinbart_mit: form.vereinbart_mit.value,
         ausgabe: form.ausgabe.value, notiz: form.notiz.value,
       });

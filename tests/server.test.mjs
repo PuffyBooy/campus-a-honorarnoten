@@ -3,6 +3,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { serverErstellen } from '../server/server.js';
 import { adminAnlegen } from '../server/honorare.js';
+import { campusSeiten, campusHolen } from './campus-fixtures.mjs';
 
 let server;
 let db;
@@ -10,7 +11,7 @@ let basis;
 
 before(async () => {
   ({ server, db } = serverErstellen({
-    port: 0, host: '127.0.0.1', datenbank: ':memory:', proxy: false, cookieSecure: false,
+    port: 0, host: '127.0.0.1', datenbank: ':memory:', proxy: false, cookieSecure: false, campusHolen,
   }));
   await new Promise((r) => server.listen(0, '127.0.0.1', r));
   basis = `http://127.0.0.1:${server.address().port}`;
@@ -111,7 +112,6 @@ test('Autor:in: Profil, Leistungen, Monatsabrechnung', async () => {
   assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'ausserordentlich', art: 'Interview', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10 })).fehler, /vereinbart/);
   assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'ausserordentlich', art: ' ', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10, vereinbart_mit: 'Rita' })).fehler, /Art des Honorars/);
   assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: 'Schule', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10.005 })).fehler, /Betrag/);
-  assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: '   ', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 15 })).fehler, /Art der Kolumne/);
   await a.ok('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: 'Schule', titel: 'Kolumne 1', veroeffentlichung: '2026-09-01', betrag: 15 });
   await a.ok('leistungSpeichern', { kategorie: 'ausserordentlich', art: 'Interview', titel: 'Interview', veroeffentlichung: '2026-09-05', betrag: 60.5, vereinbart_mit: 'Rita' });
   const liste = await a.ok('meineLeistungen');
@@ -229,6 +229,72 @@ test('Art der Kolumne (freier Text): Speichern, bleibt beim Abschicken erhalten'
   const note = await k.anna.ok('abrechnungAbschicken', [kolumne.id, extra.id]);
   assert.equal(note.positionen.find((p) => p.kategorie === 'kolumne').kolumnenart, 'Kultur');
   assert.equal((await k.rita.ok('note', note.id)).positionen[0].kolumnenart, 'Kultur');
+});
+
+test('Art der Kolumne ist optional', async () => {
+  await k.anna.ok('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: '   ', titel: 'Ohne Art', veroeffentlichung: '2026-09-12', betrag: 15 });
+  const p = (await k.anna.ok('meineLeistungen')).find((x) => x.titel === 'Ohne Art');
+  assert.equal(p.kolumnenart, '');
+  await k.anna.ok('leistungLoeschen', p.id);
+});
+
+test('Artikel von campus-a-college.at: Profil verknüpfen, alle Artikel sehen, übernehmen', async () => {
+  const a = k.anna;
+  const profil = { vorname: 'Anna', nachname: 'Müller', email: 'anna@example.org', strasse: 'Hauptstraße 1', plz_ort: '1010 Wien',
+    kontoinhaber: 'Anna Müller', iban: AT_IBAN, bic: '' };
+  assert.deepEqual(await a.ok('meineArtikel'), { verknuepft: false, artikel: [] });
+  assert.match((await a.aufruf('profilSpeichern', { ...profil, campus_profil: 'https://example.org/profil/abc' })).fehler, /Profil auf campus-a-college/);
+  await a.ok('profilSpeichern', { ...profil, campus_profil: 'https://www.campus-a-college.at/profil/ae1054937a1ae033e117' });
+  assert.equal((await a.ok('aktuellerNutzer')).profil.campus_profil, 'ae1054937a1ae033e117');
+  await a.ok('profilSpeichern', profil);
+  assert.equal((await a.ok('aktuellerNutzer')).profil.campus_profil, 'ae1054937a1ae033e117', 'ohne Angabe bleibt die Verknüpfung');
+
+  // alle Artikel über beide Seiten der Liste, neueste zuerst, mit Datum und Kategorie von der Artikelseite
+  const { verknuepft, artikel } = await a.ok('meineArtikel');
+  assert.ok(verknuepft);
+  assert.deepEqual(artikel.map((x) => x.titel), ['Das Packerl wird teurer', 'Alter bestätigen, bitte', 'Der freie Platz']);
+  assert.deepEqual(artikel[0], {
+    url: 'https://www.campus-a-college.at/news/detail/das-packerl-wird-teurer', titel: 'Das Packerl wird teurer',
+    datum: '2026-09-28', ressort: 'Wirtschaft', region: 'International', kategorie: 'Meinung', erfasst: false,
+  });
+
+  // übernehmen: ein Artikel lässt sich nur einmal erfassen
+  const url = artikel[0].url;
+  const leistung = { kategorie: 'kolumne', titel: artikel[0].titel, veroeffentlichung: artikel[0].datum, betrag: 15, artikel_url: url };
+  assert.match((await a.aufruf('leistungSpeichern', { ...leistung, artikel_url: 'https://boese.example/news/detail/x' })).fehler, /Link zum Artikel/);
+  await a.ok('leistungSpeichern', leistung);
+  assert.match((await a.aufruf('leistungSpeichern', leistung)).fehler, /schon als Leistung/);
+  const gespeichert = (await a.ok('meineLeistungen')).find((p) => p.artikel_url === url);
+  await a.ok('leistungSpeichern', { ...leistung, id: gespeichert.id, betrag: 16 }); // eigene Leistung bearbeiten geht
+  assert.deepEqual((await a.ok('meineArtikel')).artikel.map((x) => x.erfasst), [true, false, false]);
+
+  // bleibt nach dem Abschicken verknüpft und erfasst; die Redaktion sieht den Link
+  const note = await a.ok('abrechnungAbschicken', [gespeichert.id]);
+  assert.equal((await k.rita.ok('note', note.id)).positionen[0].artikel_url, url);
+  assert.equal((await a.ok('meineArtikel')).artikel[0].erfasst, true);
+  assert.match((await a.aufruf('leistungSpeichern', leistung)).fehler, /schon als Leistung/);
+
+  // abgelehnt und zurückgeholt: Verknüpfung wandert zurück in die Leistungen
+  await k.rita.ok('ablehnen', note.id, 'Bitte Betrag prüfen');
+  await a.ok('leistungenZurueckholen', note.id);
+  assert.equal((await a.ok('meineLeistungen')).filter((p) => p.artikel_url === url).length, 1);
+  assert.equal((await a.ok('meineArtikel')).artikel[0].erfasst, true);
+
+  // Artikeldaten liegen in der Datenbank; die Artikelseiten werden nicht erneut geholt
+  const vorher = campusSeiten.abrufe;
+  await a.ok('meineArtikel', { neu: true });
+  assert.equal(campusSeiten.abrufe - vorher, 1, 'nur die erste Listenseite (keine neuen Artikel)');
+});
+
+test('Artikel: campus-a-college.at nicht erreichbar', async () => {
+  campusSeiten.kaputt = true;
+  try {
+    const r = await k.anna.aufruf('meineArtikel', { neu: true });
+    assert.equal(r.status, 502);
+    assert.match(r.fehler, /nicht erreichbar/);
+  } finally {
+    campusSeiten.kaputt = false;
+  }
 });
 
 test('Auftraggeberkonto für SEPA: nur Buchhaltung und Admin', async () => {

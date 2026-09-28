@@ -48,9 +48,15 @@ Lokal starten: `npm run dev` → http://localhost:5173
    Honorarnote automatisch übernommen.
 2. **Meine Leistungen:** Jeden Beitrag speichern, sobald er erschienen ist – als *Kolumne* oder
    *außerordentliches Honorar* (mit „Vereinbart mit“), jeweils mit Titel, Veröffentlichungsdatum
-   und Betrag. Bei Kolumnen gibt man die **Art der Kolumne** als freien Text ein (Pflicht),
+   und Betrag. Bei Kolumnen kann man die **Art der Kolumne** als freien Text dazuschreiben (optional),
    bei außerordentlichen Honoraren die **Art des Honorars** (freier Text, Pflicht). Der Betrag ist mit dem **Honorarsatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin
    einstellbar). Gespeicherte Leistungen kann man bearbeiten oder löschen.
+   **Artikel von campus-a-college.at übernehmen:** Wer im **Profil** den Link zur eigenen Profilseite
+   auf campus-a-college.at einträgt (z. B. `https://www.campus-a-college.at/profil/ae10…`), sieht unter
+   „Meine Leistungen“ **alle eigenen Artikel** mit Datum, Ressort und Kategorie (z. B. „Meinung“).
+   „Übernehmen“ füllt Titel und Veröffentlichungsdatum aus und verknüpft die Leistung mit dem Artikel.
+   Jeder Artikel lässt sich nur einmal abrechnen, schon erfasste sind markiert. Die Redaktion sieht in
+   der Honorarnote bei jeder Leistung den Link zum Artikel.
 3. **Monatsabrechnung:** Einmal im Monat die gesammelten Leistungen auswählen und als
    Honorarnote abschicken. Die Nummer folgt der Vorlage: `NACHNAME-VO-JAHR-NN`
    (z. B. `MUSTERFRAU-MA-2026-01`). Wurde im Monat schon eine abgeschickt, kommt ein Hinweis.
@@ -104,6 +110,22 @@ Layout und Formatierung der Vorlage bleiben erhalten.
 (`Maria Musterfrau`, `Musterstraße 1/2`, `1010 Wien`, `AT00 0000 0000 0000 0000`,
 `Wien, 17.07.2026`, `MUSTERFRAU-MA-2026-01`) und die Tabellenüberschriften müssen gleich
 bleiben, weil sie als Platzhalter erkannt werden.
+
+## Artikel von campus-a-college.at
+
+campus-a-college.at läuft mit TYPO3 und hat keine Schnittstelle für Artikeldaten. Der Server liest deshalb
+die normalen Seiten aus ([`server/campus-artikel.js`](server/campus-artikel.js)):
+
+- `/profil/<ID>?fetchNews=1` – Artikelliste der Profilseite (12 pro Seite, der Server blättert alle Seiten durch)
+- `/news/detail/<name>` – Artikelseite mit Datum, Ressort, Region und Kategorie
+
+Beim ersten Aufruf pro Person werden alle Artikelseiten gelesen (bei 150 Artikeln ca. 20 Sekunden).
+Die Artikeldaten landen in der Datenbank, danach wird nur noch die Liste auf neue Artikel geprüft
+(höchstens alle 10 Minuten oder über „Liste aktualisieren“). Der Abruf läuft über den Server, weil der
+Browser fremde Seiten nicht auslesen darf. **In der Demo** (GitHub Pages) gibt es deshalb nur Beispielartikel.
+
+Baut campus-a-college.at seine Seiten um, muss das Auslesen angepasst werden. Leistungen lassen sich
+dann weiterhin von Hand eintragen.
 
 ## Auf einem VPS installieren (echter Betrieb)
 

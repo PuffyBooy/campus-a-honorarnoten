@@ -4,6 +4,7 @@ import {
 } from '../lib/format.js';
 import { honorarnoteHerunterladen } from '../lib/beleg.js';
 import { weichtAb } from '../lib/honorarsaetze.js';
+import { artikelLink, artikelUrlGueltig } from '../lib/campus.js';
 import { fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 
 /**
@@ -18,6 +19,7 @@ export function positionenTabelle(note, { mitKorrektur = false, saetze = null } 
       <tbody>${note.positionen.map((p) => `
         <tr>
           <td data-label="Titel"><span><strong>${esc(p.titel)}</strong>
+            ${artikelUrlGueltig(p.artikel_url) ? `<br><span class="klein">${artikelLink(p.artikel_url)}</span>` : ''}
             ${p.ausgabe ? `<br><span class="klein">${esc(p.ausgabe)}</span>` : ''}
             ${p.notiz ? `<br><span class="klein">Notiz: ${esc(p.notiz)}</span>` : ''}</span></td>
           <td data-label="Kategorie"><span>${esc(KATEGORIE_LABEL[p.kategorie])}<br><span class="klein">${esc(artText(p))}${

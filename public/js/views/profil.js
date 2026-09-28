@@ -1,6 +1,7 @@
 // Profil: Name, Adresse und Bankverbindung einmal speichern – wird für jede Honorarnote übernommen
 import { ROLLEN_LABEL, esc } from '../lib/format.js';
 import { formatIban, ibanFehler, bicIstGueltig } from '../lib/iban.js';
+import { profilIdAusLink, profilLink } from '../lib/campus.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
 
 function feld(name, label, wert, { typ = 'text', pflicht = true, attrs = '' } = {}) {
@@ -40,6 +41,15 @@ export async function render(el, { store, nutzer, navigate, neuLaden }) {
           ${feld('kontoinhaber', 'Kontoinhaber:in', p.kontoinhaber, { attrs: 'autocomplete="name" maxlength="70"' })}
           ${feld('iban', 'IBAN', formatIban(p.iban), { attrs: 'autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="42" placeholder="AT.. .... .... .... ...."' })}
           ${feld('bic', 'BIC', p.bic, { pflicht: false, attrs: 'autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="11"' })}
+        </fieldset>
+        <fieldset>
+          <legend>campus-a-college.at</legend>
+          ${feld('campus_profil', 'Link zu deinem Profil', profilLink(p.campus_profil), {
+            typ: 'url',
+            pflicht: false,
+            attrs: 'autocomplete="off" spellcheck="false" maxlength="200" placeholder="https://www.campus-a-college.at/profil/…"',
+          })}
+          <p class="hinweis">Dann zeigt „Meine Leistungen“ alle deine Artikel zum Übernehmen an.</p>
         </fieldset>
         <aside class="datenschutz" aria-label="Datenschutzhinweis">
           <strong>Datenschutz:</strong> Adresse und Bankverbindung sieht nur die Buchhaltung, sie dienen nur der Auszahlung.
@@ -95,6 +105,9 @@ export async function render(el, { store, nutzer, navigate, neuLaden }) {
       const ibanF = ibanFehler(form.iban.value);
       if (ibanF) f.iban = ibanF;
       if (!bicIstGueltig(form.bic.value)) f.bic = 'Der BIC hat 8 oder 11 Zeichen, z. B. BKAUATWW.';
+      if (profilIdAusLink(form.campus_profil.value) === null) {
+        f.campus_profil = 'Bitte den Link von deiner Profilseite kopieren, z. B. https://www.campus-a-college.at/profil/ae10…';
+      }
     }
     if (Object.keys(f).length) {
       Object.entries(f).forEach(([n, t]) => setFehler(n, t));
@@ -107,7 +120,7 @@ export async function render(el, { store, nutzer, navigate, neuLaden }) {
           vorname: form.vorname.value, nachname: form.nachname.value, email: form.email.value,
           strasse: form.strasse?.value ?? p.strasse, plz_ort: form.plz_ort?.value ?? p.plz_ort,
           kontoinhaber: form.kontoinhaber?.value ?? p.kontoinhaber, iban: form.iban?.value ?? p.iban,
-          bic: form.bic?.value ?? p.bic,
+          bic: form.bic?.value ?? p.bic, campus_profil: form.campus_profil?.value,
         });
         meldung('Profil gespeichert.', 'erfolg');
         if (istAutor && !vollstaendig) navigate('leistungen');
