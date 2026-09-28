@@ -48,7 +48,6 @@ function leereDb() {
       empfaenger: { ...STANDARD_EMPFAENGER },
       datenschutzKontakt: '',
       honorarsaetze: { ...STANDARD_SAETZE },
-      auftraggeber: { name: '', iban: '', bic: '' }, // Konto für SEPA-Sammelüberweisungen
     },
   };
 }
@@ -621,14 +620,30 @@ export function bezahlteNoten(monat) {
 }
 
 export function alsBezahltMarkieren(noteId, datum) {
+  return alleAlsBezahltMarkieren([noteId], datum)[0];
+}
+
+/** Mehrere Noten auf einmal als bezahlt markieren (z. B. eine ganze Woche): alle oder keine */
+export function alleAlsBezahltMarkieren(noteIds, datum) {
   const n = brauche('buchhaltung');
   pruefe(/^\d{4}-\d{2}-\d{2}$/.test(datum ?? '') && datum <= heuteIso(), 'Bitte ein gültiges Zahlungsdatum angeben (nicht in der Zukunft).');
-  const x = noteHolen(noteId);
-  pruefe(x.status === 'angenommen', 'Nur angenommene Honorarnoten können als bezahlt markiert werden.');
-  Object.assign(x, { status: 'bezahlt', bezahlt_am: datum });
-  verlauf(x.id, n, 'bezahlt', { datum });
+  pruefe(Array.isArray(noteIds) && noteIds.length, 'Bitte mindestens eine Honorarnote auswählen.');
+  const noten = noteIds.map(noteHolen);
+  for (const x of noten) pruefe(x.status === 'angenommen', `${x.nummer}: Nur angenommene Honorarnoten können als bezahlt markiert werden.`);
+  for (const x of noten) {
+    Object.assign(x, { status: 'bezahlt', bezahlt_am: datum });
+    verlauf(x.id, n, 'bezahlt', { datum });
+  }
   speichern();
-  return sicht(n, x);
+  return noten.map((x) => sicht(n, x));
+}
+
+/** Bezahlte Noten ab einem Zahlungsdatum ("JJJJ-MM-TT") */
+export function bezahlteNotenSeit(datum) {
+  const n = brauche('buchhaltung');
+  return db.noten.filter((x) => x.status === 'bezahlt' && x.bezahlt_am >= datum)
+    .sort((a, b) => a.bezahlt_am.localeCompare(b.bezahlt_am) || a.nummer.localeCompare(b.nummer))
+    .map((x) => sicht(n, x));
 }
 
 // ------------------------------------------------------------------ Admin
@@ -704,11 +719,9 @@ export function loeschprotokoll() {
   return kopie(db.loeschprotokoll).sort((a, b) => b.am.localeCompare(a.am));
 }
 
-/** Einstellungen; das Auftraggeberkonto sehen nur Buchhaltung und Admin */
 export function einstellungen() {
   const e = { ...leereDb().einstellungen, ...kopie(db.einstellungen) };
-  const n = sitzungsNutzer();
-  if (!n || !hat(n, 'buchhaltung')) delete e.auftraggeber;
+  delete e.auftraggeber; // früheres SEPA-Konto, nicht mehr verwendet
   return e;
 }
 
@@ -729,19 +742,6 @@ export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorar
     },
     datenschutzKontakt: trim(datenschutzKontakt),
     honorarsaetze: saetze,
-  };
-  speichern();
-}
-
-/** Konto, von dem die Buchhaltung Sammelüberweisungen macht */
-export function auftraggeberSpeichern({ name, iban, bic }) {
-  brauche('buchhaltung');
-  pruefe(!leer(name), 'Bitte den Kontoinhaber angeben.');
-  pruefe(!ibanFehler(iban), ibanFehler(iban));
-  pruefe(bicIstGueltig(bic), 'Der BIC ist ungültig.');
-  db.einstellungen = {
-    ...db.einstellungen,
-    auftraggeber: { name: trim(name).slice(0, 70), iban: normalizeIban(iban), bic: normalizeBic(bic) },
   };
   speichern();
 }

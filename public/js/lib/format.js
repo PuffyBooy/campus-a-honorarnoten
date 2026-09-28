@@ -110,13 +110,6 @@ export function parseBetrag(eingabe) {
   return Number.isFinite(n) && n > 0 ? Math.round(n * 100) / 100 : null;
 }
 
-/** Verwendungszweck, max. 140 Zeichen (SEPA-Grenze) */
-export function verwendungszweck(nummer, zusatz) {
-  const z = String(zusatz ?? '').replace(/\s+/g, ' ').trim();
-  const text = z ? `Honorar ${nummer} - ${z}` : `Honorar ${nummer}`;
-  return text.length > 140 ? text.slice(0, 139) + '…' : text;
-}
-
 const HTML_ESCAPE = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 
 /** Für alle Nutzereingaben in HTML-Templates verwenden! */

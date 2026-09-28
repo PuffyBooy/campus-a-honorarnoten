@@ -2,8 +2,8 @@
 
 Web-App für die Honorarnoten der Jugendzeitung **campus a college**:
 Autor:innen speichern ihre Beiträge laufend und schicken sie **einmal im Monat gesammelt
-als Honorarnote** ab. Die Redaktion prüft, die Buchhaltung überweist. Beim Bezahlen wird die
-Honorarnote automatisch als Word-Datei **aus der offiziellen Vorlage** erzeugt.
+als Honorarnote** ab. Die Redaktion prüft, die Buchhaltung lädt jede Woche alle angenommenen
+Honorarnoten als **ein PDF** herunter, überweist und markiert die Woche als bezahlt.
 
 Die App läuft in zwei Betriebsarten – derselbe Code, nur die Datenhaltung ist anders:
 
@@ -65,22 +65,16 @@ Lokal starten: `npm run dev` → http://localhost:5173
    Pflicht), interne Kommentare, Verlauf. **IBAN und Adresse sind ausgeblendet.**
 5. **Abgelehnt?** Die Autor:in holt die Leistungen mit einem Klick zurück, korrigiert sie und
    schickt sie neu ab.
-6. **Buchhaltung:** Nur angenommene Noten. Kopier-Buttons für Empfänger, IBAN, BIC, Betrag und
-   Verwendungszweck, „Alles kopieren“, GiroCode (QR-Code) für die Banking-App.
-   **„Als bezahlt markieren“ erzeugt automatisch die Honorarnote als Word-Datei** aus
-   [`public/vorlage/honorarnote-vorlage.docx`](public/vorlage/honorarnote-vorlage.docx).
-   Im Reiter „Bezahlt“ gibt es pro Monat den CSV-Export und alle Honorarnoten als ZIP.
+6. **Buchhaltung:** Das Bezahl-Terminal zeigt die angenommenen Honorarnoten **nach Kalenderwoche**
+   (der Woche, in der die Redaktion sie angenommen hat), mit Summe pro Woche. Pro Woche gibt es zwei
+   Knöpfe:
+   - **„PDF herunterladen“:** alle Honorarnoten der Woche in einer PDF-Datei, jede Note ab einer
+     neuen Seite, im Aufbau der offiziellen Vorlage (mit Adresse und IBAN zum Überweisen).
+   - **„Woche als bezahlt markieren“:** markiert alle Honorarnoten der Woche mit heutigem Datum als
+     bezahlt (alle oder keine).
 
-   **SEPA-Sammelüberweisung:** Oben im Reiter „Offen“ die Zahlungen auswählen und eine Datei im
-   Format `pain.001` herunterladen. Die lädt man im Online-Banking beim Import von Sammelaufträgen
-   hoch und gibt alle Überweisungen auf einmal frei. Danach ein Klick auf „… als bezahlt markieren“,
-   dann sind alle erledigt und die Honorarnoten kommen gesammelt als ZIP. Beim ersten Mal fragt die
-   App nach dem Konto, von dem überwiesen wird (nur für Buchhaltung und Admin sichtbar).
-   Zwei Formate stehen zur Wahl: `pain.001.001.03` (Standard, von praktisch allen Banken angenommen)
-   und `pain.001.001.09` (neueres Format). Falls die Bank eine Datei ablehnt, das andere Format
-   probieren. Umlaute werden für die Bank umgeschrieben (ö → oe), weil SEPA nur einen
-   eingeschränkten Zeichensatz erlaubt. Beide Formate werden in den Tests gegen die offiziellen
-   ISO-20022-Schemas geprüft (`tests/schemas/`).
+   Im Reiter „Bezahlt“ stehen die bezahlten Wochen der letzten 12 Wochen, das PDF lässt sich dort
+   erneut herunterladen.
 7. **Admin-Terminal:** Zugangsanfragen freischalten oder ablehnen (offene Anfragen werden in der
    Navigation gezählt), Personen direkt anlegen, Rollen vergeben (Checkboxen), Konten
    deaktivieren oder löschen, Passwort zurücksetzen (neues Startpasswort). Honorarnoten löschen
@@ -110,6 +104,11 @@ Layout und Formatierung der Vorlage bleiben erhalten.
 (`Maria Musterfrau`, `Musterstraße 1/2`, `1010 Wien`, `AT00 0000 0000 0000 0000`,
 `Wien, 17.07.2026`, `MUSTERFRAU-MA-2026-01`) und die Tabellenüberschriften müssen gleich
 bleiben, weil sie als Platzhalter erkannt werden.
+
+**PDF für die Buchhaltung:** [`public/js/lib/honorarnote-pdf.js`](public/js/lib/honorarnote-pdf.js)
+baut dieselben Inhalte mit [pdf-lib](https://pdf-lib.js.org) direkt im Browser als PDF nach
+(Word-Dateien lassen sich im Browser nicht in PDF umwandeln). Ändert sich die Vorlage, muss das
+PDF-Layout dort mit angepasst werden.
 
 ## Artikel von campus-a-college.at
 
@@ -243,7 +242,7 @@ Das Logo in [`public/index.html`](public/index.html) an der markierten Stelle ei
 npm run dev          # Demo lokal auf Port 5173
 npm run dev:server   # Server-Modus lokal auf Port 3000
 npm test             # alle Tests: Hilfsfunktionen und Server (Rechte, Abläufe, Schutz)
-bash scripts/vendor.sh   # JSZip und QR-Generator aktualisieren
+bash scripts/vendor.sh   # JSZip und pdf-lib aktualisieren
 ```
 
 Aufbau: `public/` ist die Oberfläche (ohne Framework, ohne Build-Schritt), `server/` der Server

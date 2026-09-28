@@ -248,7 +248,6 @@ section.fehlerbox { border: 0; }
 /* ---------- Filter ---------- */
 .filterleiste { display: grid; gap: 0 1rem; padding-bottom: .15rem; }
 @media (min-width: 700px) { .filterleiste { grid-template-columns: 1fr 1.4fr 1fr; } }
-.feld-knopf { display: flex; align-items: flex-end; }
 .treffer { margin: .25rem 0 .6rem; }
 
 /* ---------- Detailansicht ---------- */
@@ -293,8 +292,6 @@ section.fehlerbox { border: 0; }
 @media (min-width: 700px) {
   .kopierzeile { grid-template-columns: 10rem 1fr auto; grid-template-areas: "label wert knopf"; }
 }
-.qr { text-align: center; padding: .5rem 0; }
-.qr img { width: 220px; max-width: 80%; height: auto; image-rendering: pixelated; border: 1px solid var(--rand); }
 .bezahlt-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem 1rem; border-top: 1px solid var(--rand); padding-top: .75rem; }
 .bezahlt-form label { flex: 1 1 12rem; margin: 0; }
 .bezahlt-form input { margin-top: .25rem; }
@@ -354,6 +351,11 @@ section.fehlerbox { border: 0; }
   background: none; border: 0; padding: 0; font: inherit; color: var(--marke);
   text-decoration: underline; cursor: pointer;
 }
+/* Bezahl-Terminal: eine Karte pro Kalenderwoche */
+.woche-kopf { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; }
+.woche-kopf h2 { margin: 0; }
+.woche-summe { margin: 0; }
+.woche .tabelle { margin: .75rem 0 .25rem; }
 .summenzeile { text-align: right; margin: .75rem 0 0; font-size: 1.05rem; }
 .abschicken { border-top: 4px solid var(--akzent); }
 .angaben.kompakt { margin-bottom: 1rem; }
@@ -382,9 +384,6 @@ section.fehlerbox { border: 0; }
 .aktionen.eng { margin: 0; gap: .3rem; }
 tr.inaktiv { opacity: .6; }
 .badge-rolle { background: var(--marke-hell); color: var(--text); border: 1px solid var(--rand); }
-.filter-zwei { grid-template-columns: 1fr; }
-@media (min-width: 700px) { .filter-zwei { grid-template-columns: 1fr 2fr; } }
-.feld-knopf { gap: .5rem; flex-wrap: wrap; }
 label.btn { margin: 0; font-weight: 600; }
 
 /* ---------- Fußzeile ---------- */
@@ -457,11 +456,5 @@ body.modus-demo .fuss { display: block; }
 #neu-anlegen form { margin-top: .75rem; }
 #neu-anlegen summary { font-size: 1rem; }
 
-/* ---------- Honorarsätze & SEPA ---------- */
+/* ---------- Honorarsätze ---------- */
 .abweichung { display: inline-block; margin-top: .15rem; font-size: .8rem; font-weight: 600; color: var(--warnung); }
-.sammel { border-top: 4px solid var(--marke); }
-.sammel-auswahl { display: flex; align-items: center; gap: .5rem; font-weight: 600; margin: 0 0 .5rem; }
-.sammel-auswahl input { width: auto; accent-color: var(--akzent); }
-.zahl-karte.nicht-gewaehlt { opacity: .65; }
-.schritte { margin: .5rem 0 0; padding-left: 1.25rem; }
-.schritte li { margin-bottom: .35rem; }

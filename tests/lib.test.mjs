@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ibanFehler, ibanIstGueltig, formatIban, bicIstGueltig } from '../public/js/lib/iban.js';
-import { parseBetrag, verwendungszweck, formatBetragPlain, formatDatum, esc } from '../public/js/lib/format.js';
-import { epcPayload, utf8BinaryString } from '../public/js/lib/epc.js';
-import { toCsv } from '../public/js/lib/csv.js';
+import { parseBetrag, formatBetragPlain, formatDatum, esc } from '../public/js/lib/format.js';
 import { honorarnoteNummer, namensteil, initialen } from '../public/js/lib/nummer.js';
 import { summe, formatMonat, formatBetragDokument, artText, artNormalisieren } from '../public/js/lib/format.js';
 import { ortAusPlzOrt } from '../public/js/lib/honorarnote-docx.js';
+import { kalenderwoche, nachWoche, wienerDatum, wocheText } from '../public/js/lib/woche.js';
+import { honorarnotenPdf } from '../public/js/lib/honorarnote-pdf.js';
+import * as PDFLib from '../public/vendor/pdf-lib.mjs';
 
 test('IBAN-Prüfung', () => {
   assert.ok(ibanIstGueltig('AT61 1904 3002 3457 3201'));
@@ -43,13 +44,6 @@ test('Formatierung', () => {
   assert.equal(esc('<b>"x"&</b>'), '&lt;b&gt;&quot;x&quot;&amp;&lt;/b&gt;');
 });
 
-test('Verwendungszweck', () => {
-  assert.equal(verwendungszweck('MUSTERFRAU-MA-2026-01', 'Maria  Musterfrau September 2026'),
-    'Honorar MUSTERFRAU-MA-2026-01 - Maria Musterfrau September 2026');
-  assert.equal(verwendungszweck('MUSTERFRAU-MA-2026-01'), 'Honorar MUSTERFRAU-MA-2026-01');
-  assert.equal(verwendungszweck('X', 'x'.repeat(300)).length, 140);
-});
-
 test('Nummer laut Vorlage: NACHNAME-Initialen-Jahr-laufende Nummer', () => {
   assert.equal(honorarnoteNummer({ vorname: 'Maria', nachname: 'Musterfrau', jahr: 2026, laufendeNummer: 1 }), 'MUSTERFRAU-MA-2026-01');
   assert.equal(honorarnoteNummer({ vorname: 'Maria', nachname: 'Musterfrau', jahr: 2026, laufendeNummer: 2 }), 'MUSTERFRAU-MA-2026-02');
@@ -77,26 +71,41 @@ test('Ort aus PLZ und Ort', () => {
   assert.equal(ortAusPlzOrt(''), 'Wien');
 });
 
-test('EPC-QR-Payload', () => {
-  const p = epcPayload({ name: 'Anna Autorin', iban: 'AT61 1904 3002 3457 3201', bic: 'bkauatww', betrag: 120.5, zweck: 'Honorar CC-2026-0001 - Test' });
-  assert.deepEqual(p.split('\n'), ['BCD', '002', '1', 'SCT', 'BKAUATWW', 'Anna Autorin',
-    'AT611904300234573201', 'EUR120.50', '', '', 'Honorar CC-2026-0001 - Test']);
-  assert.equal(epcPayload({ name: 'A', iban: 'AT611904300234573201', betrag: 1, zweck: '' }).split('\n')[4], '');
-  assert.throws(() => epcPayload({ name: 'A', iban: 'X', betrag: 0, zweck: '' }));
-  assert.equal(utf8BinaryString('ä'), '\xC3\xA4');
-});
-
-test('CSV', () => {
-  const csv = toCsv(['A', 'B'], [['x;y', '=SUMME(1)'], ['Zeile\n2', 'ok "q"']]);
-  assert.ok(csv.startsWith('﻿A;B\r\n'));
-  assert.ok(csv.includes('"x;y";\'=SUMME(1)'));
-  assert.ok(csv.includes('"Zeile\n2";"ok ""q"""'));
-});
-
 test('Art der Kolumne / Art des Honorars', () => {
   assert.equal(artText({ kategorie: 'kolumne', kolumnenart: 'Kultur', art: 'foto' }), 'Kultur');
   assert.equal(artText({ kategorie: 'ausserordentlich', art: 'foto' }), 'Foto', 'alte feste Werte schön benannt');
   assert.equal(artText({ kategorie: 'ausserordentlich', art: 'Reportage' }), 'Reportage', 'freier Text');
   assert.equal(artNormalisieren('  Foto \n und   Text '), 'Foto und Text');
   assert.equal(artNormalisieren('x'.repeat(300)).length, 100);
+});
+
+test('Kalenderwochen (ISO 8601)', () => {
+  assert.deepEqual(kalenderwoche('2026-09-28'), { schluessel: '2026-W40', jahr: 2026, kw: 40, montag: '2026-09-28', sonntag: '2026-10-04' });
+  assert.equal(kalenderwoche('2026-10-04').schluessel, '2026-W40', 'Sonntag gehört zur selben Woche');
+  assert.equal(kalenderwoche('2025-12-29').schluessel, '2026-W01', 'Jahreswechsel');
+  assert.equal(kalenderwoche('2021-01-03').schluessel, '2020-W53');
+  assert.equal(kalenderwoche('2026-09-27T22:30:00Z').schluessel, '2026-W40', 'Zeitstempel nach Wiener Zeit (00:30 am Montag)');
+  assert.equal(wienerDatum(Date.UTC(2026, 8, 27, 21, 59)), '2026-09-27');
+  assert.equal(wocheText(kalenderwoche('2026-09-28')), 'KW 40 · 28.09.–04.10.2026');
+  assert.equal(wocheText(kalenderwoche('2025-12-31')), 'KW 1 · 29.12.2025–04.01.2026');
+  const gruppen = nachWoche([{ d: '2026-09-30' }, { d: '2026-09-21' }, { d: '2026-09-28' }], (x) => x.d);
+  assert.deepEqual(gruppen.map((g) => [g.woche.kw, g.noten.length]), [[39, 1], [40, 2]]);
+});
+
+test('Honorarnoten als PDF: eine Datei, jede Note ab neuer Seite', async () => {
+  const note = (nummer, anzahl) => ({
+    nummer, eingereicht_am: '2026-09-22T10:00:00Z',
+    autor: { vorname: 'Maria', nachname: 'Musterfrau', strasse: 'Musterstraße 1/2', plz_ort: '1010 Wien' },
+    zahlung: { iban: 'AT611904300234573201' },
+    empfaenger: { name: 'campus a Medien GmbH', strasse: 'Stiftgasse 6/1/2', plz_ort: '1070 Wien', uid: 'ATU81242718' },
+    positionen: [
+      ...Array.from({ length: anzahl }, (_, i) => ({ kategorie: 'kolumne', titel: `Kolumne ${i} – „Schule“ 😀 €`, veroeffentlichung: '2026-09-10', betrag: 15 })),
+      { kategorie: 'ausserordentlich', titel: 'Interview', veroeffentlichung: '2026-09-12', vereinbart_mit: 'Rita', betrag: 60.5 },
+    ],
+  });
+  const bytes = await honorarnotenPdf([note('A-1', 2), note('B-2', 60)], PDFLib);
+  assert.equal(new TextDecoder().decode(bytes.slice(0, 5)), '%PDF-');
+  const pdf = await PDFLib.PDFDocument.load(bytes);
+  assert.ok(pdf.getPageCount() >= 3, 'zweite Note mit 60 Kolumnen braucht mehr als eine Seite');
+  assert.equal(pdf.getTitle(), 'Honorarnoten (2)');
 });
