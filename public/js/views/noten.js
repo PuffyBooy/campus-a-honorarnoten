@@ -4,11 +4,12 @@ import {
 } from '../lib/format.js';
 import { honorarnoteHerunterladen } from '../lib/beleg.js';
 import { weichtAb } from '../lib/honorarsaetze.js';
-import { artikelLink, hatArtikel } from '../lib/campus.js';
+import { hatArtikel, titelLink } from '../lib/campus.js';
 import { fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 
 /**
- * Tabelle der Leistungen einer Honorarnote. Titel mit Artikel sind Links (neuer Tab).
+ * Tabelle der Leistungen einer Honorarnote. Jeder Titel ist ein Link (neuer Tab): zum verknüpften
+ * Artikel oder zur Suche nach dem Titel auf campus-a-college.at.
  * saetze: wenn angegeben, wird markiert, wo der eingereichte Betrag vom Standardsatz abweicht (für die Redaktion)
  * pruefen: Leistungen ohne Artikel-Link kennzeichnen (für Redaktion und Buchhaltung)
  */
@@ -19,9 +20,8 @@ export function positionenTabelle(note, { mitKorrektur = false, saetze = null, p
         ${mitKorrektur ? '<th><span class="sr-only">Aktion</span></th>' : ''}</tr></thead>
       <tbody>${note.positionen.map((p) => `
         <tr>
-          <td data-label="Titel"><span>${hatArtikel(p.artikel_url)
-            ? `<strong>${artikelLink(p.artikel_url, p.titel, 'artikel-titel')}</strong> <span aria-hidden="true">↗</span>`
-            : `<strong>${esc(p.titel)}</strong>${pruefen ? '<br><span class="ohne-link">ohne Artikel-Link</span>' : ''}`}
+          <td data-label="Titel"><span><strong>${titelLink(p.artikel_url, p.titel)}</strong> <span aria-hidden="true">↗</span>
+            ${!hatArtikel(p.artikel_url) && pruefen ? '<br><span class="ohne-link">nicht verknüpft – Klick sucht den Titel</span>' : ''}
             ${p.ausgabe ? `<br><span class="klein">${esc(p.ausgabe)}</span>` : ''}
             ${p.notiz ? `<br><span class="klein">Notiz: ${esc(p.notiz)}</span>` : ''}</span></td>
           <td data-label="Kategorie"><span>${esc(KATEGORIE_LABEL[p.kategorie])}<br><span class="klein">${esc(artText(p))}${

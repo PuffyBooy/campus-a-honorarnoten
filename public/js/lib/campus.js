@@ -40,3 +40,16 @@ export function artikelLink(url, text = 'Artikel ansehen', klasse = '') {
   const titel = echt ? 'Artikel auf campus-a-college.at öffnen (neuer Tab)' : 'Demo: Beispielartikel – der Link führt zur Startseite von campus-a-college.at';
   return `<a href="${esc(ziel)}" target="_blank" rel="noopener noreferrer"${klasse ? ` class="${esc(klasse)}"` : ''} title="${esc(titel)}">${esc(text)}</a>`;
 }
+
+/** Suche auf campus-a-college.at nach einem Titel */
+export const artikelSuche = (titel) => `${CAMPUS_BASIS}/suchergebnisse?tx_solr%5Bq%5D=${encodeURIComponent(String(titel ?? '').trim())}`;
+
+/**
+ * Titel einer Leistung, immer klickbar (neuer Tab): verknüpfter Artikel direkt, sonst die Suche
+ * nach dem Titel auf campus-a-college.at.
+ */
+export function titelLink(url, titel, klasse = 'artikel-titel') {
+  if (hatArtikel(url)) return artikelLink(url, titel, klasse);
+  return `<a href="${esc(artikelSuche(titel))}" target="_blank" rel="noopener noreferrer" class="${esc(klasse)}"`
+    + ` title="Nicht verknüpft – auf campus-a-college.at nach diesem Titel suchen (neuer Tab)">${esc(titel)}</a>`;
+}
