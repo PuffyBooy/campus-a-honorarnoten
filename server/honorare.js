@@ -96,9 +96,10 @@ function einstellungenLaden(db) {
     empfaenger: { ...STANDARD_EMPFAENGER },
     datenschutzKontakt: '',
     honorarsaetze: { ...STANDARD_SAETZE },
-    auftraggeber: { name: '', iban: '', bic: '' }, // Konto für SEPA-Sammelüberweisungen
   };
-  for (const { schluessel, wert } of db.prepare('select * from einstellungen').all()) e[schluessel] = JSON.parse(wert);
+  for (const { schluessel, wert } of db.prepare('select * from einstellungen').all()) {
+    if (schluessel !== 'auftraggeber') e[schluessel] = JSON.parse(wert); // früheres SEPA-Konto, nicht mehr verwendet
+  }
   return e;
 }
 
@@ -249,21 +250,8 @@ export const funktionen = {
   },
 
   einstellungen(ctx) {
-    const n = ich(ctx);
-    const e = einstellungenLaden(ctx.db);
-    // das Auftraggeberkonto (IBAN der Firma) sehen nur Buchhaltung und Admin
-    if (!hat(n, 'buchhaltung')) delete e.auftraggeber;
-    return e;
-  },
-
-  auftraggeberSpeichern(ctx, d = {}) {
-    brauche(ctx, 'buchhaltung');
-    pruefe(!leer(d.name), 'Bitte den Kontoinhaber angeben.');
-    pruefe(!ibanFehler(d.iban), ibanFehler(d.iban));
-    pruefe(bicIstGueltig(d.bic), 'Der BIC ist ungültig.');
-    ctx.db.prepare('insert into einstellungen (schluessel, wert) values (?, ?) on conflict(schluessel) do update set wert = excluded.wert')
-      .run('auftraggeber', JSON.stringify({ name: trim(d.name).slice(0, 70), iban: normalizeIban(d.iban), bic: normalizeBic(d.bic) }));
-    return true;
+    ich(ctx);
+    return einstellungenLaden(ctx.db);
   },
 
   // ---------------------------------------------------------------- Leistungen (Entwürfe)
@@ -493,16 +481,29 @@ export const funktionen = {
     return notenListe(ctx.db, n, "where status = 'bezahlt' and bezahlt_am like ?", [`${monat}-%`], 'bezahlt_am, nummer');
   },
 
+  /** Bezahlte Noten ab einem Zahlungsdatum ("JJJJ-MM-TT"), z. B. für die letzten Wochen */
+  bezahlteNotenSeit(ctx, datum) {
+    const n = brauche(ctx, 'buchhaltung');
+    pruefe(/^\d{4}-\d{2}-\d{2}$/.test(String(datum ?? '')), 'Ungültiges Datum.');
+    return notenListe(ctx.db, n, "where status = 'bezahlt' and bezahlt_am >= ?", [datum], 'bezahlt_am, nummer');
+  },
+
   alsBezahltMarkieren(ctx, noteId, datum) {
+    return funktionen.alleAlsBezahltMarkieren(ctx, [noteId], datum)[0];
+  },
+
+  /** Mehrere Noten auf einmal als bezahlt markieren (z. B. eine ganze Woche): alle oder keine */
+  alleAlsBezahltMarkieren(ctx, noteIds, datum) {
     const n = brauche(ctx, 'buchhaltung');
     pruefe(/^\d{4}-\d{2}-\d{2}$/.test(String(datum ?? '')) && datum <= heuteIso(), 'Bitte ein gültiges Zahlungsdatum angeben (nicht in der Zukunft).');
-    return transaktion(ctx.db, () => {
+    pruefe(Array.isArray(noteIds) && noteIds.length && noteIds.length <= 500, 'Bitte mindestens eine Honorarnote auswählen.');
+    return transaktion(ctx.db, () => noteIds.map((noteId) => {
       const x = noteHolen(ctx.db, noteId);
-      pruefe(x.status === 'angenommen', 'Nur angenommene Honorarnoten können als bezahlt markiert werden.');
+      pruefe(x.status === 'angenommen', `${x.nummer}: Nur angenommene Honorarnoten können als bezahlt markiert werden.`);
       ctx.db.prepare("update noten set status = 'bezahlt', bezahlt_am = ? where id = ?").run(datum, x.id);
       verlaufEintragen(ctx.db, x.id, n, 'bezahlt', { datum });
       return sicht(n, noteHolen(ctx.db, x.id));
-    });
+    }));
   },
 
   // ---------------------------------------------------------------- Admin: Anfragen & Konten

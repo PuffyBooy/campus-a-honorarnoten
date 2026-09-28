@@ -1,4 +1,4 @@
-// Honorarnoten als Word-Datei herunterladen (einzeln oder mehrere als ZIP)
+// Honorarnoten herunterladen: einzeln als Word-Datei (aus der Vorlage) oder mehrere als ein PDF
 import JSZip from '../../vendor/jszip.mjs';
 import { honorarnoteDocx, docxDateiname } from './honorarnote-docx.js';
 import { downloadBlob } from './csv.js';
@@ -8,9 +8,11 @@ export async function honorarnoteHerunterladen(note) {
   downloadBlob(docxDateiname(note), blob);
 }
 
-export async function honorarnotenAlsZip(noten, dateiname) {
-  const vorlage = await (await fetch(new URL('../../vorlage/honorarnote-vorlage.docx', import.meta.url))).arrayBuffer();
-  const zip = new JSZip();
-  for (const n of noten) zip.file(docxDateiname(n), await honorarnoteDocx(n, { JSZip, vorlage }));
-  downloadBlob(dateiname, await zip.generateAsync({ type: 'blob' }));
+/** Mehrere Honorarnoten als ein PDF herunterladen (jede Note ab einer neuen Seite) */
+export async function honorarnotenPdfHerunterladen(noten, dateiname) {
+  const [PDFLib, { honorarnotenPdf }] = await Promise.all([
+    import('../../vendor/pdf-lib.mjs'), import('./honorarnote-pdf.js'),
+  ]);
+  const bytes = await honorarnotenPdf(noten, PDFLib);
+  downloadBlob(dateiname, new Blob([bytes], { type: 'application/pdf' }));
 }

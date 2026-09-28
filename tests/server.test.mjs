@@ -297,19 +297,29 @@ test('Artikel: campus-a-college.at nicht erreichbar', async () => {
   }
 });
 
-test('Auftraggeberkonto für SEPA: nur Buchhaltung und Admin', async () => {
-  const konto = { name: 'campus a Medien GmbH', iban: 'AT32 2011 1823 4567 8901', bic: '' };
-  assert.equal((await k.anna.aufruf('auftraggeberSpeichern', konto)).status, 403);
-  assert.equal((await k.rita.aufruf('auftraggeberSpeichern', konto)).status, 403);
-  assert.match((await k.kasse.aufruf('auftraggeberSpeichern', { ...konto, iban: 'AT00' })).fehler, /IBAN|Format/);
-  await k.kasse.ok('auftraggeberSpeichern', konto);
-  assert.equal((await k.kasse.ok('einstellungen')).auftraggeber.iban, 'AT322011182345678901');
-  assert.equal((await k.admin.ok('einstellungen')).auftraggeber.iban, 'AT322011182345678901');
-  assert.equal((await k.anna.ok('einstellungen')).auftraggeber, undefined, 'Autor:in sieht die Firmen-IBAN nicht');
-  assert.equal((await k.rita.ok('einstellungen')).auftraggeber, undefined, 'Redaktion sieht die Firmen-IBAN nicht');
-  // Admin-Einstellungen speichern überschreibt das Konto nicht
-  await k.admin.ok('einstellungenSpeichern', { empfaenger: { name: 'campus a Medien GmbH' } });
-  assert.equal((await k.kasse.ok('einstellungen')).auftraggeber.iban, 'AT322011182345678901');
+test('Buchhaltung: ganze Woche als bezahlt markieren (alle oder keine)', async () => {
+  const heute = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Vienna' }).format(new Date());
+  const note = async (titel) => {
+    await k.anna.ok('leistungSpeichern', { kategorie: 'kolumne', titel, veroeffentlichung: '2026-09-20', betrag: 15 });
+    const p = (await k.anna.ok('meineLeistungen')).find((x) => x.titel === titel);
+    return k.anna.ok('abrechnungAbschicken', [p.id]);
+  };
+  const [a, b, c] = [await note('Woche A'), await note('Woche B'), await note('Woche C')];
+  await k.rita.ok('annehmen', a.id);
+  await k.rita.ok('annehmen', b.id); // c bleibt eingereicht
+
+  assert.equal((await k.rita.aufruf('alleAlsBezahltMarkieren', [a.id], heute)).status, 403);
+  assert.match((await k.kasse.aufruf('alleAlsBezahltMarkieren', [a.id, c.id], heute)).fehler, /Nur angenommene/);
+  assert.equal((await k.kasse.ok('offeneZahlungen')).filter((n) => [a.id, b.id].includes(n.id)).length, 2, 'nichts geändert');
+  assert.match((await k.kasse.aufruf('alleAlsBezahltMarkieren', [], heute)).fehler, /mindestens eine/);
+
+  const bezahlt = await k.kasse.ok('alleAlsBezahltMarkieren', [a.id, b.id], heute);
+  assert.deepEqual(bezahlt.map((n) => [n.nummer, n.status, n.bezahlt_am]), [[a.nummer, 'bezahlt', heute], [b.nummer, 'bezahlt', heute]]);
+  assert.equal(bezahlt[0].zahlung.iban, AT_IBAN, 'für das PDF: IBAN und Adresse dabei');
+  const seit = await k.kasse.ok('bezahlteNotenSeit', heute);
+  assert.ok([a.id, b.id].every((id) => seit.some((n) => n.id === id)));
+  assert.match((await k.kasse.aufruf('bezahlteNotenSeit', 'gestern')).fehler, /Datum/);
+  await k.rita.ok('ablehnen', c.id, 'Test');
 });
 
 test('Admin: Note löschen mit Protokoll, Export ohne Passwörter', async () => {

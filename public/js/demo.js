@@ -121,6 +121,4 @@ export async function demoDaten(db, { passwortHash }) {
   );
 
   db.einstellungen.datenschutzKontakt = 'office@campus-a-college.at';
-  // Beispielkonto für die SEPA-Sammelüberweisung (keine echte Bankverbindung)
-  db.einstellungen.auftraggeber = { name: 'campus a Medien GmbH', iban: 'AT322011182345678901', bic: '' };
 }
