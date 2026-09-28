@@ -9,6 +9,8 @@ import { artNormalisieren, heuteIso } from '../public/js/lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from '../public/js/lib/iban.js';
 import { honorarnoteNummer } from '../public/js/lib/nummer.js';
 import { STANDARD_SAETZE, saetzeNormalisieren } from '../public/js/lib/honorarsaetze.js';
+import { artikelUrlGueltig, profilIdAusLink } from '../public/js/lib/campus.js';
+import { artikelVonProfil } from './campus-artikel.js';
 
 export const STANDARD_EMPFAENGER = {
   name: 'campus a Medien GmbH',
@@ -32,6 +34,7 @@ const leer = (s) => !trim(s);
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const ROLLEN = ['autor', 'redaktion', 'buchhaltung', 'admin'];
 const erlaubteRollen = (r) => ROLLEN.filter((x) => Array.isArray(r) && r.includes(x));
+const PROFIL_LINK_FEHLER = 'Bitte den Link zu deinem Profil auf campus-a-college.at einfügen, z. B. https://www.campus-a-college.at/profil/…';
 const anzeigename = (n) => `${n.vorname} ${n.nachname}`.trim() || n.email;
 
 /** Betrag in Euro (Zahl) -> Cent; wirft bei ungültigem Wert */
@@ -55,7 +58,10 @@ function nutzerAusZeile(z) {
     rollen: JSON.parse(z.rollen),
     aktiv: Boolean(z.aktiv),
     muss_passwort_aendern: Boolean(z.muss_passwort_aendern),
-    profil: { strasse: z.strasse, plz_ort: z.plz_ort, kontoinhaber: z.kontoinhaber, iban: z.iban, bic: z.bic },
+    profil: {
+      strasse: z.strasse, plz_ort: z.plz_ort, kontoinhaber: z.kontoinhaber, iban: z.iban, bic: z.bic,
+      campus_profil: z.campus_profil ?? '',
+    },
     erstellt_am: z.erstellt_am,
     letzter_login: z.letzter_login,
   };
@@ -101,7 +107,7 @@ function einstellungenLaden(db) {
 function positionAusZeile(p) {
   return {
     id: p.id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel, veroeffentlichung: p.veroeffentlichung,
-    ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
+    artikel_url: p.artikel_url ?? '', ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
     betrag: euro(p.betrag_cent), betrag_eingereicht: euro(p.betrag_eingereicht_cent), betrag_vermerk: p.betrag_vermerk,
   };
 }
@@ -232,10 +238,13 @@ export const funktionen = {
     pruefe(!ctx.db.prepare('select 1 from nutzer where email = ? and id <> ?').get(email, n.id), 'Diese E-Mail-Adresse wird schon verwendet.');
     if (!leer(d.iban)) pruefe(!ibanFehler(d.iban), ibanFehler(d.iban));
     pruefe(bicIstGueltig(d.bic), 'Der BIC ist ungültig.');
+    // ohne Angabe bleibt eine bestehende Verknüpfung erhalten
+    const campusProfil = d.campus_profil === undefined ? n.profil.campus_profil : profilIdAusLink(d.campus_profil);
+    pruefe(campusProfil !== null, PROFIL_LINK_FEHLER);
     ctx.db.prepare(`update nutzer set vorname = ?, nachname = ?, email = ?, strasse = ?, plz_ort = ?,
-        kontoinhaber = ?, iban = ?, bic = ? where id = ?`)
+        kontoinhaber = ?, iban = ?, bic = ?, campus_profil = ? where id = ?`)
       .run(trim(d.vorname).slice(0, 100), trim(d.nachname).slice(0, 100), email, trim(d.strasse).slice(0, 150),
-        trim(d.plz_ort).slice(0, 100), trim(d.kontoinhaber).slice(0, 70), normalizeIban(d.iban), normalizeBic(d.bic), n.id);
+        trim(d.plz_ort).slice(0, 100), trim(d.kontoinhaber).slice(0, 70), normalizeIban(d.iban), normalizeBic(d.bic), campusProfil, n.id);
     return nutzerLaden(ctx.db, n.id);
   },
 
@@ -269,10 +278,11 @@ export const funktionen = {
     const istKolumne = d.kategorie === 'kolumne';
     const p = {
       kategorie: d.kategorie,
-      // Kolumnen haben eine Art der Kolumne (freier Text), außerordentliche Honorare eine Art des Honorars
+      // Kolumnen haben eine Art der Kolumne (freier Text, optional), außerordentliche Honorare eine Art des Honorars
       art: istKolumne ? '' : artNormalisieren(d.art),
       kolumnenart: istKolumne ? artNormalisieren(d.kolumnenart) : '',
       titel: trim(d.titel).slice(0, 200),
+      artikel_url: trim(d.artikel_url),
       veroeffentlichung: String(d.veroeffentlichung ?? ''),
       ausgabe: trim(d.ausgabe).slice(0, 100),
       vereinbart_mit: d.kategorie === 'ausserordentlich' ? trim(d.vereinbart_mit).slice(0, 100) : '',
@@ -280,21 +290,26 @@ export const funktionen = {
     };
     pruefe(['kolumne', 'ausserordentlich'].includes(p.kategorie), 'Bitte wählen, ob Kolumne oder außerordentliches Honorar.');
     pruefe(!leer(p.titel), 'Bitte den Titel des Beitrags angeben.');
-    if (istKolumne) pruefe(!leer(p.kolumnenart), 'Bitte die Art der Kolumne angeben.');
-    else pruefe(!leer(p.art), 'Bitte die Art des Honorars angeben.');
+    if (!istKolumne) pruefe(!leer(p.art), 'Bitte die Art des Honorars angeben.');
+    if (p.artikel_url) {
+      pruefe(artikelUrlGueltig(p.artikel_url), 'Der Link zum Artikel ist ungültig.');
+      pruefe(!artikelSchonVerwendet(ctx.db, n.id, p.artikel_url, d.id ? String(d.id) : null), ARTIKEL_DOPPELT);
+    }
     pruefe(/^\d{4}-\d{2}-\d{2}$/.test(p.veroeffentlichung) && !Number.isNaN(Date.parse(p.veroeffentlichung)), 'Bitte das Datum der Veröffentlichung angeben.');
     if (p.kategorie === 'ausserordentlich') pruefe(!leer(p.vereinbart_mit), 'Bitte angeben, mit wem aus der Redaktion das Honorar vereinbart wurde.');
     const betragCent = cent(d.betrag);
     if (d.id) {
       const r = ctx.db.prepare(`update positionen set kategorie = ?, art = ?, kolumnenart = ?, titel = ?, veroeffentlichung = ?, ausgabe = ?,
-          vereinbart_mit = ?, notiz = ?, betrag_cent = ?, geaendert_am = ? where id = ? and autor_id = ?`)
-        .run(p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz, betragCent, jetzt(), String(d.id), n.id);
+          vereinbart_mit = ?, notiz = ?, betrag_cent = ?, artikel_url = ?, geaendert_am = ? where id = ? and autor_id = ?`)
+        .run(p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz, betragCent,
+          p.artikel_url, jetzt(), String(d.id), n.id);
       pruefe(r.changes === 1, 'Diese Leistung gibt es nicht (mehr).', 404);
     } else {
       pruefe(ctx.db.prepare('select count(*) c from positionen where autor_id = ?').get(n.id).c < 500, 'Zu viele gespeicherte Leistungen.');
       ctx.db.prepare(`insert into positionen (id, autor_id, kategorie, art, kolumnenart, titel, veroeffentlichung, ausgabe, vereinbart_mit,
-          notiz, betrag_cent, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-        .run(id(), n.id, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz, betragCent, jetzt());
+          notiz, betrag_cent, artikel_url, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+        .run(id(), n.id, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz, betragCent,
+          p.artikel_url, jetzt());
     }
     return true;
   },
@@ -304,6 +319,25 @@ export const funktionen = {
     const r = ctx.db.prepare('delete from positionen where id = ? and autor_id = ?').run(String(pid), n.id);
     pruefe(r.changes === 1, 'Diese Leistung gibt es nicht (mehr).', 404);
     return true;
+  },
+
+  /** Alle Artikel der Autor:in auf campus-a-college.at, mit Vermerk, ob schon als Leistung erfasst */
+  async meineArtikel(ctx, { neu = false } = {}) {
+    const n = brauche(ctx, 'autor');
+    const profilId = n.profil.campus_profil;
+    if (!profilId) return { verknuepft: false, artikel: [] };
+    let artikel;
+    try {
+      artikel = await artikelVonProfil(ctx.db, profilId, { holen: ctx.campusHolen, neu: Boolean(neu) });
+    } catch {
+      throw new Fehler('campus-a-college.at ist gerade nicht erreichbar. Bitte später erneut versuchen.', 502);
+    }
+    const verwendet = verwendeteArtikel(ctx.db, n.id);
+    return {
+      verknuepft: true,
+      profil: profilId,
+      artikel: artikel.map((a) => ({ ...a, erfasst: verwendet.has(a.url) })),
+    };
   },
 
   naechsteNummer(ctx) {
@@ -335,9 +369,9 @@ export const funktionen = {
           JSON.stringify({ kontoinhaber: n.profil.kontoinhaber, iban: n.profil.iban, bic: n.profil.bic }),
           JSON.stringify(e.empfaenger));
       const einf = ctx.db.prepare(`insert into note_positionen (id, note_id, reihenfolge, kategorie, art, kolumnenart, titel, veroeffentlichung,
-          ausgabe, vereinbart_mit, notiz, betrag_cent, betrag_eingereicht_cent) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          ausgabe, vereinbart_mit, notiz, betrag_cent, betrag_eingereicht_cent, artikel_url) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       positionen.forEach((p, i) => einf.run(p.id, noteId, i, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe,
-        p.vereinbart_mit, p.notiz, p.betrag_cent, p.betrag_cent));
+        p.vereinbart_mit, p.notiz, p.betrag_cent, p.betrag_cent, p.artikel_url));
       ctx.db.prepare(`delete from positionen where autor_id = ? and id in (${ids.map(() => '?').join(',')})`).run(n.id, ...ids);
       const summe = positionen.reduce((s, p) => s + p.betrag_cent, 0);
       verlaufEintragen(ctx.db, noteId, n, 'eingereicht', { betrag: euro(summe), positionen: positionen.length });
@@ -358,10 +392,10 @@ export const funktionen = {
       pruefe(note.status === 'abgelehnt', 'Nur abgelehnte Honorarnoten können überarbeitet werden.');
       pruefe(!note.zurueckgeholt_am, 'Die Leistungen wurden bereits zurückgeholt.');
       const einf = ctx.db.prepare(`insert into positionen (id, autor_id, kategorie, art, kolumnenart, titel, veroeffentlichung, ausgabe,
-          vereinbart_mit, notiz, betrag_cent, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          vereinbart_mit, notiz, betrag_cent, artikel_url, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       for (const p of note.positionen) {
         einf.run(id(), n.id, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz,
-          cent(p.betrag_eingereicht), jetzt());
+          cent(p.betrag_eingereicht), p.artikel_url, jetzt());
       }
       ctx.db.prepare('update noten set zurueckgeholt_am = ? where id = ?').run(jetzt(), note.id);
       verlaufEintragen(ctx.db, note.id, n, 'zurueckgeholt');
@@ -660,6 +694,22 @@ export const funktionen = {
 };
 
 // ------------------------------------------------------------------ interne Helfer
+
+const ARTIKEL_DOPPELT = 'Dieser Artikel ist schon als Leistung gespeichert oder abgerechnet.';
+
+/**
+ * Artikel-Adressen, die schon erfasst sind: gespeicherte Leistungen und abgeschickte Honorarnoten.
+ * Ausgenommen sind abgelehnte Noten, deren Leistungen zurückgeholt wurden (die stehen wieder in den Leistungen).
+ */
+function verwendeteArtikel(db, autorId, ohnePosition = null) {
+  const urls = db.prepare(`select artikel_url u from positionen where autor_id = ? and artikel_url <> '' and id is not ?
+    union select np.artikel_url from note_positionen np join noten n on n.id = np.note_id
+    where n.autor_id = ? and np.artikel_url <> '' and not (n.status = 'abgelehnt' and n.zurueckgeholt_am is not null)`)
+    .all(autorId, ohnePosition, autorId);
+  return new Set(urls.map((z) => z.u));
+}
+
+const artikelSchonVerwendet = (db, autorId, url, ohnePosition) => verwendeteArtikel(db, autorId, ohnePosition).has(url);
 
 function naechsteNummer(db, n, jahr = Number(heuteIso().slice(0, 4))) {
   const { m } = db.prepare('select coalesce(max(laufende_nummer), 0) m from noten where autor_id = ? and jahr = ?').get(n.id, jahr);

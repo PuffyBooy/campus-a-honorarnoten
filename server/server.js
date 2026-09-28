@@ -184,7 +184,8 @@ async function api(req, res, db, cfg, name) {
     return json(res, 429, { fehler: 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.' });
   }
 
-  const ctx = { db, nutzer, token: nutzerId ? token : null };
+  // campusHolen: nur in Tests gesetzt (Abruf von campus-a-college.at ersetzen)
+  const ctx = { db, nutzer, token: nutzerId ? token : null, campusHolen: cfg.campusHolen };
   const daten = await funktionen[name](ctx, ...args);
   if (ctx.neueSitzung) cookieSetzen(res, ctx.neueSitzung, cfg);
   if (ctx.sitzungLoeschen) cookieSetzen(res, null, cfg);

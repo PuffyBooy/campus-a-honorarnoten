@@ -139,6 +139,24 @@ const MIGRATIONEN = [
   alter table positionen add column kolumnenart text not null default '';
   alter table note_positionen add column kolumnenart text not null default '';
   `,
+  // Version 3: Verknüpfung mit den Artikeln auf campus-a-college.at
+  `
+  alter table nutzer add column campus_profil text not null default '';     -- Profil-ID auf campus-a-college.at
+  alter table positionen add column artikel_url text not null default '';
+  alter table note_positionen add column artikel_url text not null default '';
+  create index positionen_artikel on positionen(artikel_url);
+
+  -- zwischengespeicherte Artikeldaten von campus-a-college.at
+  create table artikel (
+    url       text primary key,
+    titel     text not null,
+    datum     text not null,
+    ressort   text not null default '',
+    region    text not null default '',
+    kategorie text not null default '',
+    geholt_am text not null
+  );
+  `,
 ];
 
 export function oeffneDatenbank(pfad) {

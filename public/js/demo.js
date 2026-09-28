@@ -24,7 +24,8 @@ export async function demoDaten(db, { passwortHash }) {
   });
 
   const maria = nutzer('demo-maria', 'maria@demo.at', 'Maria', 'Musterfrau', ['autor'],
-    { strasse: 'Musterstraße 1/2', plz_ort: '1010 Wien', iban: 'AT611904300234573201', bic: 'BKAUATWW' });
+    { strasse: 'Musterstraße 1/2', plz_ort: '1010 Wien', iban: 'AT611904300234573201', bic: 'BKAUATWW',
+      campus_profil: 'de00000000000000a001' }); // Beispiel-Verknüpfung mit campus-a-college.at
   const jonas = nutzer('demo-jonas', 'jonas@demo.at', 'Jonas', 'Weiß', ['autor'],
     { strasse: 'Lindengasse 12', plz_ort: '8010 Graz', iban: 'DE89370400440532013000', bic: '' });
   const rita = nutzer('demo-rita', 'redaktion@demo.at', 'Rita', 'Redaktion', ['redaktion', 'autor']);
