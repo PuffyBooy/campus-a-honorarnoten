@@ -1,6 +1,13 @@
 // Bearbeiter-Terminal – alle Honorarnoten mit Filter, Suche und Sortierung
 import { STATUS_LABEL, esc, formatDatum, formatEuro, formatMonat, vollerName } from '../lib/format.js';
 import { statusBadge } from '../lib/ui.js';
+import { hatArtikel } from '../lib/campus.js';
+
+/** „· 2 mit Artikel-Link“ – zeigt, wie viele Leistungen sich direkt anschauen lassen */
+function linkText(n) {
+  const mit = n.positionen.filter((p) => hatArtikel(p.artikel_url)).length;
+  return mit ? ` · ${mit} mit Artikel-Link` : '';
+}
 
 // Filter bleiben erhalten, wenn man aus der Detailansicht zurückkommt
 const filter = { status: 'eingereicht', suche: '', sortierung: 'eingereicht_desc' };
@@ -70,7 +77,7 @@ export async function render(el, { store, istAktuell }) {
               <td data-label="Nummer"><a href="#/redaktion/${esc(n.id)}" class="nummer">${esc(n.nummer)}</a></td>
               <td data-label="Name">${esc(vollerName(n.autor))}</td>
               <td data-label="Abrechnung"><span>${esc(formatMonat(n.monat))}<br><span class="klein">${n.positionen.length}
-                ${n.positionen.length === 1 ? 'Leistung' : 'Leistungen'}</span></span></td>
+                ${n.positionen.length === 1 ? 'Leistung' : 'Leistungen'}${linkText(n)}</span></span></td>
               <td data-label="Abgeschickt">${esc(formatDatum(n.eingereicht_am.slice(0, 10)))}</td>
               <td data-label="Betrag" class="rechts">${esc(formatEuro(n.betrag))}</td>
               <td data-label="Status">${statusBadge(n.status)}</td>

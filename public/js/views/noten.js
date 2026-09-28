@@ -4,22 +4,24 @@ import {
 } from '../lib/format.js';
 import { honorarnoteHerunterladen } from '../lib/beleg.js';
 import { weichtAb } from '../lib/honorarsaetze.js';
-import { artikelLink, artikelUrlGueltig } from '../lib/campus.js';
+import { artikelLink, hatArtikel } from '../lib/campus.js';
 import { fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 
 /**
- * Tabelle der Leistungen einer Honorarnote.
+ * Tabelle der Leistungen einer Honorarnote. Titel mit Artikel sind Links (neuer Tab).
  * saetze: wenn angegeben, wird markiert, wo der eingereichte Betrag vom Standardsatz abweicht (für die Redaktion)
+ * pruefen: Leistungen ohne Artikel-Link kennzeichnen (für Redaktion und Buchhaltung)
  */
-export function positionenTabelle(note, { mitKorrektur = false, saetze = null } = {}) {
+export function positionenTabelle(note, { mitKorrektur = false, saetze = null, pruefen = false } = {}) {
   return `
     <table class="tabelle positionen-tabelle">
       <thead><tr><th>Titel des Beitrags</th><th>Kategorie</th><th>Veröffentlichung</th><th class="rechts">Betrag</th>
         ${mitKorrektur ? '<th><span class="sr-only">Aktion</span></th>' : ''}</tr></thead>
       <tbody>${note.positionen.map((p) => `
         <tr>
-          <td data-label="Titel"><span><strong>${esc(p.titel)}</strong>
-            ${artikelUrlGueltig(p.artikel_url) ? `<br><span class="klein">${artikelLink(p.artikel_url)}</span>` : ''}
+          <td data-label="Titel"><span>${hatArtikel(p.artikel_url)
+            ? `<strong>${artikelLink(p.artikel_url, p.titel, 'artikel-titel')}</strong> <span aria-hidden="true">↗</span>`
+            : `<strong>${esc(p.titel)}</strong>${pruefen ? '<br><span class="ohne-link">ohne Artikel-Link</span>' : ''}`}
             ${p.ausgabe ? `<br><span class="klein">${esc(p.ausgabe)}</span>` : ''}
             ${p.notiz ? `<br><span class="klein">Notiz: ${esc(p.notiz)}</span>` : ''}</span></td>
           <td data-label="Kategorie"><span>${esc(KATEGORIE_LABEL[p.kategorie])}<br><span class="klein">${esc(artText(p))}${

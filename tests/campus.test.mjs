@@ -1,7 +1,7 @@
 // Tests für die Verknüpfung mit campus-a-college.at: Links prüfen und Seiten auslesen
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { artikelLink, artikelUrlGueltig, profilIdAusLink, profilLink } from '../public/js/lib/campus.js';
+import { artikelLink, artikelUrlGueltig, hatArtikel, profilIdAusLink, profilLink } from '../public/js/lib/campus.js';
 import { artikelParsen, artikelVonProfil, listeParsen } from '../server/campus-artikel.js';
 import { artikelSeite, listeSeite1, listeSeite2 } from './campus-fixtures.mjs';
 
@@ -25,8 +25,20 @@ test('Artikel-Adressen: nur echte Artikel auf campus-a-college.at', () => {
   assert.ok(!artikelUrlGueltig('https://www.campus-a-college.at/news/detail/x?y=1'));
   assert.ok(!artikelUrlGueltig('javascript:alert(1)'));
   assert.ok(!artikelUrlGueltig('demo:artikel-1'));
-  assert.equal(artikelLink('demo:artikel-1', 'Titel <b>'), 'Titel &lt;b&gt;', 'ohne gültige Adresse nur Text');
-  assert.match(artikelLink('https://www.campus-a-college.at/news/detail/x', 'Ansehen'), /^<a href="https:\/\/www\.campus-a-college\.at\/news\/detail\/x" target="_blank" rel="noopener noreferrer">Ansehen<\/a>$/);
+  assert.equal(artikelLink('', 'Titel <b>'), 'Titel &lt;b&gt;', 'ohne Artikel nur Text');
+  assert.equal(artikelLink('javascript:alert(1)', 'X'), 'X');
+  assert.match(artikelLink('https://www.campus-a-college.at/news/detail/x', 'Ansehen'),
+    /^<a href="https:\/\/www\.campus-a-college\.at\/news\/detail\/x" target="_blank" rel="noopener noreferrer" title="[^"]+">Ansehen<\/a>$/);
+  assert.match(artikelLink('demo:artikel-1', 'Titel <b>', 'artikel-titel'),
+    /^<a href="https:\/\/www\.campus-a-college\.at\/" target="_blank" rel="noopener noreferrer" class="artikel-titel" title="Demo:[^"]+">Titel &lt;b&gt;<\/a>$/, 'Demo: Link zur Startseite');
+});
+
+test('hatArtikel: echte Artikel und Beispielartikel der Demo', () => {
+  assert.ok(hatArtikel('https://www.campus-a-college.at/news/detail/x'));
+  assert.ok(hatArtikel('demo:beitrag-1'));
+  assert.ok(!hatArtikel(''));
+  assert.ok(!hatArtikel(undefined));
+  assert.ok(!hatArtikel('https://example.org/news/detail/x'));
 });
 
 test('Artikelliste einer Profilseite auslesen', () => {

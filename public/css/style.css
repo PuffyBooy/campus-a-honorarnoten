@@ -347,6 +347,9 @@ section.fehlerbox { border: 0; }
 }
 .artikel.erfasst strong { font-weight: 400; color: var(--text-leise); }
 .artikel .btn, .artikel .badge { flex-shrink: 0; }
+.artikel-titel { color: inherit; text-decoration-color: var(--marke); text-underline-offset: 2px; }
+.artikel-titel:hover { color: var(--marke); }
+.ohne-link { font-size: .8rem; color: var(--text-leise); font-style: italic; }
 .link-knopf {
   background: none; border: 0; padding: 0; font: inherit; color: var(--marke);
   text-decoration: underline; cursor: pointer;
