@@ -1,7 +1,7 @@
 // Tests für die Verknüpfung mit campus-a-college.at: Links prüfen und Seiten auslesen
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { artikelLink, artikelUrlGueltig, hatArtikel, profilIdAusLink, profilLink } from '../public/js/lib/campus.js';
+import { artikelLink, artikelSuche, artikelUrlGueltig, hatArtikel, profilIdAusLink, profilLink, titelLink } from '../public/js/lib/campus.js';
 import { artikelParsen, artikelVonProfil, listeParsen } from '../server/campus-artikel.js';
 import { artikelSeite, listeSeite1, listeSeite2 } from './campus-fixtures.mjs';
 
@@ -39,6 +39,14 @@ test('hatArtikel: echte Artikel und Beispielartikel der Demo', () => {
   assert.ok(!hatArtikel(''));
   assert.ok(!hatArtikel(undefined));
   assert.ok(!hatArtikel('https://example.org/news/detail/x'));
+});
+
+test('Titel immer klickbar: Artikel direkt, sonst Suche nach dem Titel', () => {
+  assert.equal(artikelSuche(' Tom & Jerry? '), 'https://www.campus-a-college.at/suchergebnisse?tx_solr%5Bq%5D=Tom%20%26%20Jerry%3F');
+  assert.match(titelLink('https://www.campus-a-college.at/news/detail/x', 'X'), /href="https:\/\/www\.campus-a-college\.at\/news\/detail\/x"/);
+  const suche = titelLink('', 'Graz "von" unten');
+  assert.match(suche, /^<a href="https:\/\/www\.campus-a-college\.at\/suchergebnisse\?tx_solr%5Bq%5D=Graz%20%22von%22%20unten" target="_blank"/);
+  assert.match(suche, />Graz &quot;von&quot; unten<\/a>$/);
 });
 
 test('Artikelliste einer Profilseite auslesen', () => {
