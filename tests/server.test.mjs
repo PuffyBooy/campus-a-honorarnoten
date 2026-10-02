@@ -323,7 +323,17 @@ test('campus a und campus a college: Artikel beider Seiten, getrennte Honorarnot
   assert.match((await b.aufruf('leistungSpeichern', { ...basis, medium: 'college', artikel_url: url })).fehler, /campus-a-college\.at/, 'Artikel passt nicht zum Medium');
   assert.match((await b.aufruf('leistungSpeichern', { ...basis, medium: 'zeitung' })).fehler, /campus a college oder campus a/);
   await b.ok('leistungSpeichern', { ...basis, medium: 'campus-a', artikel_url: url });
-  await b.ok('leistungSpeichern', { ...basis, titel: 'Schulbeitrag' }); // ohne Angabe: campus a college
+  // nur Medien mit Profil-Link: ohne Link zu campus-a-college.at keine Leistung dafür
+  assert.match((await b.aufruf('leistungSpeichern', { ...basis, titel: 'Schulbeitrag', medium: 'college' })).fehler, /kein Profil-Link/);
+  await b.ok('leistungSpeichern', { ...basis, titel: 'Ohne Medium' });
+  const ohne = (await b.ok('meineLeistungen')).find((p) => p.titel === 'Ohne Medium');
+  assert.equal(ohne.medium, 'campus-a', 'ohne Angabe: das verbundene Medium');
+  await b.ok('leistungLoeschen', ohne.id);
+  await b.ok('profilSpeichern', {
+    vorname: 'Bert', nachname: 'Beispiel', email: 'bert@example.org', strasse: 'Weg 2', plz_ort: '8010 Graz',
+    kontoinhaber: 'Bert Beispiel', iban: 'DE89370400440532013000', campus_profil: 'https://www.campus-a-college.at/profil/0123456789ab',
+  });
+  await b.ok('leistungSpeichern', { ...basis, titel: 'Schulbeitrag' }); // mit beiden Links ohne Angabe: campus a college
   const liste = (await b.ok('meineLeistungen')).filter((p) => ['Rankings', 'Schulbeitrag'].includes(p.titel));
   assert.deepEqual(liste.map((p) => p.medium).sort(), ['campus-a', 'college']);
   assert.equal((await b.ok('meineArtikel')).artikel[0].erfasst, true);

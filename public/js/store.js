@@ -10,9 +10,11 @@ import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from './lib/ib
 import { honorarnoteNummer } from './lib/nummer.js';
 import { STANDARD_SAETZE, saetzeNormalisieren } from './lib/honorarsaetze.js';
 import {
-  MEDIEN, MEDIUM_KEYS, PROFIL_FELD, istMedium, mediumName, mediumOder, mediumVonArtikel, profilIdAusLink,
+  MEDIEN, MEDIUM_KEYS, PROFIL_FELD, istMedium, mediumName, mediumOder, mediumVonArtikel, nichtVerbunden, profilIdAusLink,
+  verbundeneMedien,
 } from './lib/campus.js';
 import { KONTO_FEHLT, kontoFertig } from './lib/konto.js';
+import { DEMO_PASSWORT } from './demo-konten.js';
 
 const SPEICHER_KEY = 'campus-a-honorare:v1';
 const SITZUNG_KEY = 'campus-a-honorare:sitzung';
@@ -150,6 +152,29 @@ function nutzerSicht(n) {
 
 export function aktuellerNutzer() {
   return nutzerSicht(sitzungsNutzer());
+}
+
+/**
+ * Nur Demo: Konto für „Erstes Anmelden“ frisch anlegen – mit dem Demo-Passwort als Startpasswort,
+ * ohne Adresse, Bankverbindung und Profil-Links. Frühere Daten dieses Kontos werden entfernt.
+ */
+export async function demoKontoFrisch(email) {
+  email = trim(email).toLowerCase();
+  const alt = db.nutzer.find((x) => x.email === email);
+  if (alt) {
+    const noten = new Set(db.noten.filter((x) => x.autor_id === alt.id).map((x) => x.id));
+    db.nutzer = db.nutzer.filter((x) => x.id !== alt.id);
+    db.positionen = db.positionen.filter((x) => x.autor_id !== alt.id);
+    db.noten = db.noten.filter((x) => !noten.has(x.id));
+    db.verlauf = db.verlauf.filter((x) => !noten.has(x.note_id));
+    db.kommentare = db.kommentare.filter((x) => !noten.has(x.note_id));
+  }
+  db.nutzer.push({
+    id: `demo-neu-${id()}`, email, vorname: 'Nora', nachname: 'Neu', rollen: ['autor'], aktiv: true,
+    muss_passwort_aendern: true, passwort: await passwortHash(DEMO_PASSWORT), erstellt_am: jetzt(),
+    profil: { strasse: '', plz_ort: '', kontoinhaber: '', iban: '', bic: '', campus_profil: '', campus_a_profil: '' },
+  });
+  speichern();
 }
 
 export async function anmelden(email, passwort) {
@@ -358,7 +383,8 @@ export function leistungSpeichern(daten) {
     kolumnenart: istKolumne ? artNormalisieren(daten.kolumnenart) : '',
     titel: trim(daten.titel),
     artikel_url: trim(daten.artikel_url),
-    medium: daten.medium ?? 'college',
+    // ohne Angabe: das (erste) Medium mit Profil-Link
+    medium: daten.medium ?? verbundeneMedien(n.profil)[0] ?? 'college',
     veroeffentlichung: daten.veroeffentlichung,
     ausgabe: trim(daten.ausgabe),
     vereinbart_mit: daten.kategorie === 'ausserordentlich' ? trim(daten.vereinbart_mit) : '',
@@ -368,6 +394,9 @@ export function leistungSpeichern(daten) {
   positionPruefen(p);
   if (!istKolumne) pruefe(p.art, 'Bitte die Art des Honorars angeben.');
   pruefe(istMedium(p.medium), 'Bitte wählen, ob für campus a college oder campus a.');
+  // nur Medien mit Profil-Link; eine ältere Leistung darf ihr bisheriges Medium behalten
+  const bisher = daten.id ? db.positionen.find((x) => x.id === daten.id && x.autor_id === n.id) : null;
+  pruefe(verbundeneMedien(n.profil).includes(p.medium) || (bisher && mediumOder(bisher.medium) === p.medium), nichtVerbunden(p.medium));
   if (p.artikel_url) {
     pruefe(mediumVonArtikel(p.artikel_url) === p.medium || p.artikel_url.startsWith(`${DEMO_ARTIKEL}${p.medium}-`),
       `Der Link zum Artikel ist ungültig (erwartet: ein Artikel auf ${MEDIEN[p.medium].seite}).`);
@@ -473,7 +502,7 @@ function verwendeteArtikel(autorId, ohnePosition = null) {
 
 export async function meineArtikel() {
   const n = brauche('autor');
-  const medien = MEDIUM_KEYS.filter((m) => n.profil?.[PROFIL_FELD[m]]);
+  const medien = verbundeneMedien(n.profil);
   if (!medien.length) return { verknuepft: false, artikel: [] };
   const verwendet = verwendeteArtikel(n.id);
   const artikel = medien.flatMap(demoArtikel).sort((x, y) => y.datum.localeCompare(x.datum))

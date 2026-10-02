@@ -10,7 +10,8 @@ import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from '../publi
 import { honorarnoteNummer } from '../public/js/lib/nummer.js';
 import { STANDARD_SAETZE, saetzeNormalisieren } from '../public/js/lib/honorarsaetze.js';
 import {
-  MEDIEN, MEDIUM_KEYS, PROFIL_FELD, istMedium, mediumName, mediumOder, mediumVonArtikel, profilIdAusLink,
+  MEDIEN, MEDIUM_KEYS, PROFIL_FELD, istMedium, mediumName, mediumOder, mediumVonArtikel, nichtVerbunden, profilIdAusLink,
+  verbundeneMedien,
 } from '../public/js/lib/campus.js';
 import { KONTO_FEHLT, kontoFertig } from '../public/js/lib/konto.js';
 import { artikelVonProfil } from './campus-artikel.js';
@@ -277,7 +278,8 @@ export const funktionen = {
       kolumnenart: istKolumne ? artNormalisieren(d.kolumnenart) : '',
       titel: trim(d.titel).slice(0, 200),
       artikel_url: trim(d.artikel_url),
-      medium: d.medium ?? 'college',
+      // ohne Angabe: das (erste) Medium mit Profil-Link
+      medium: d.medium ?? verbundeneMedien(n.profil)[0] ?? 'college',
       veroeffentlichung: String(d.veroeffentlichung ?? ''),
       ausgabe: trim(d.ausgabe).slice(0, 100),
       vereinbart_mit: d.kategorie === 'ausserordentlich' ? trim(d.vereinbart_mit).slice(0, 100) : '',
@@ -287,6 +289,9 @@ export const funktionen = {
     pruefe(!leer(p.titel), 'Bitte den Titel des Beitrags angeben.');
     if (!istKolumne) pruefe(!leer(p.art), 'Bitte die Art des Honorars angeben.');
     pruefe(istMedium(p.medium), 'Bitte wählen, ob für campus a college oder campus a.');
+    // nur Medien mit Profil-Link; eine ältere Leistung darf ihr bisheriges Medium behalten
+    const bisher = d.id ? ctx.db.prepare('select medium from positionen where id = ? and autor_id = ?').get(String(d.id), n.id) : null;
+    pruefe(verbundeneMedien(n.profil).includes(p.medium) || bisher?.medium === p.medium, nichtVerbunden(p.medium));
     if (p.artikel_url) {
       pruefe(mediumVonArtikel(p.artikel_url) === p.medium, `Der Link zum Artikel ist ungültig (erwartet: ein Artikel auf ${MEDIEN[p.medium].seite}).`);
       pruefe(!artikelSchonVerwendet(ctx.db, n.id, p.artikel_url, d.id ? String(d.id) : null), ARTIKEL_DOPPELT);
@@ -323,7 +328,7 @@ export const funktionen = {
    */
   async meineArtikel(ctx, { neu = false } = {}) {
     const n = brauche(ctx, 'autor');
-    const medien = MEDIUM_KEYS.filter((m) => n.profil[PROFIL_FELD[m]]);
+    const medien = verbundeneMedien(n.profil);
     if (!medien.length) return { verknuepft: false, artikel: [] };
     const ergebnisse = await Promise.allSettled(medien.map((m) =>
       artikelVonProfil(ctx.db, n.profil[PROFIL_FELD[m]], { medium: m, holen: ctx.campusHolen, neu: Boolean(neu) })));
