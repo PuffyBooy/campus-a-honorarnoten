@@ -20,14 +20,7 @@ export const kontoFertig = (n) => kontoFehlt(n).length === 0;
 
 export const KONTO_FEHLT = 'Bitte zuerst dein Konto einrichten (Adresse, Bankverbindung und Profil-Link).';
 
-// Rollen; „Redigieren“ ist eine Zusatzberechtigung für campus a college und setzt „Autor:in“ voraus
-// (abgerechnet wird über die eigenen Honorarnoten, dafür braucht es Adresse und Bankverbindung).
-export const ROLLEN = ['autor', 'redaktion', 'buchhaltung', 'admin', 'redigieren'];
+// Rollen, die der Admin vergeben kann
+export const ROLLEN = ['autor', 'redaktion', 'buchhaltung', 'admin'];
 
-export function rollenNormalisieren(rollen) {
-  const r = ROLLEN.filter((x) => Array.isArray(rollen) && rollen.includes(x));
-  if (r.includes('redigieren') && !r.includes('autor')) r.unshift('autor');
-  return r;
-}
-
-export const darfRedigieren = (n) => Boolean(n?.rollen?.includes('redigieren'));
+export const rollenNormalisieren = (rollen) => ROLLEN.filter((x) => Array.isArray(rollen) && rollen.includes(x));

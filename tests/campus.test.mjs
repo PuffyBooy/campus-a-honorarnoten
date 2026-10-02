@@ -156,13 +156,12 @@ test('Honorarsätze pro Medium', async () => {
   assert.ok(weichtAb({ medium: 'college', kategorie: 'redigieren', anzahl: 6, betrag: 2 }, r));
 });
 
-test('Redigieren: Rollen und Bezeichnung', async () => {
+test('Redigieren: Bezeichnung auf der Honorarnote', async () => {
   const { rollenNormalisieren } = await import('../public/js/lib/konto.js');
-  const { redigierText, artText } = await import('../public/js/lib/format.js');
-  assert.deepEqual(rollenNormalisieren(['redigieren']), ['autor', 'redigieren'], 'Redigieren braucht Autor:in');
+  const { redigierBeschreibung, artText } = await import('../public/js/lib/format.js');
+  assert.deepEqual(rollenNormalisieren(['redigieren', 'autor']), ['autor'], 'keine eigene Rolle fürs Redigieren');
   assert.deepEqual(rollenNormalisieren(['admin', 'quatsch']), ['admin']);
-  assert.equal(redigierText({ titel: 'Redigieren (1 Text)', anzahl: 1 }), 'Redigieren (1 Text)');
-  assert.equal(redigierText({ titel: 'September', anzahl: 7 }), 'Redigieren (7 Texte): September');
-  assert.equal(redigierText({ titel: 'Redigieren September', anzahl: 7 }), 'Redigieren September (7 Texte)');
+  assert.equal(redigierBeschreibung({ titel: 'Redigieren (1 Text)', anzahl: 1 }), 'Redigieren', 'ohne eigene Beschreibung');
+  assert.equal(redigierBeschreibung({ titel: 'September-Ausgabe', anzahl: 7 }), 'September-Ausgabe');
   assert.equal(artText({ kategorie: 'redigieren', anzahl: 7 }), '7 Texte');
 });

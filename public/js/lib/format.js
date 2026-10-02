@@ -26,7 +26,6 @@ export const ROLLEN_LABEL = {
   redaktion: 'Redaktion',
   buchhaltung: 'Buchhaltung',
   admin: 'Admin',
-  redigieren: 'Redigieren (campus a college)',
 };
 
 export const AKTION_LABEL = {
@@ -131,12 +130,12 @@ export function artText(p) {
 /** „1 Text“ / „5 Texte“ (Redigieren) */
 export const textAnzahl = (n) => `${Number(n) || 0} ${Number(n) === 1 ? 'Text' : 'Texte'}`;
 
-/** Bezeichnung einer Redigier-Leistung für Word und PDF: immer mit Anzahl der Texte */
-export function redigierText(p) {
-  const anzahl = `Redigieren (${textAnzahl(p.anzahl)})`;
-  if (!p.titel || p.titel === anzahl) return anzahl;
-  // „Redigieren September“ -> „Redigieren September (7 Texte)“, sonst „Redigieren (7 Texte): …“
-  return /^redigier/i.test(p.titel) ? `${p.titel} (${textAnzahl(p.anzahl)})` : `${anzahl}: ${p.titel}`;
+/**
+ * Beschreibung einer Redigier-Leistung auf der Honorarnote (Word und PDF; die Anzahl steht dort in
+ * einer eigenen Spalte): die eigene Beschreibung oder einfach „Redigieren“
+ */
+export function redigierBeschreibung(p) {
+  return p.titel && !/^Redigieren \(\d+ Texte?\)$/.test(p.titel) ? p.titel : 'Redigieren';
 }
 
 /** Freitext für Art der Kolumne / Art des Honorars: Leerraum zusammenfassen, max. 100 Zeichen */

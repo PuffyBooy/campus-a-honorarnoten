@@ -16,7 +16,8 @@ import * as generator from './views/generator.js';
 // Demo: Daten im Browser (store.js). Server: Daten über die API (api.js).
 const IST_DEMO = MODUS !== 'server';
 const store = IST_DEMO ? await import('./store.js') : await import('./api.js');
-const demoDaten = IST_DEMO ? (await import('./demo.js')).demoDaten : null;
+const demoModul = IST_DEMO ? await import('./demo.js') : null;
+const demoDaten = demoModul?.demoDaten ?? null;
 
 const main = document.getElementById('app');
 const nav = document.getElementById('nav');
@@ -207,7 +208,7 @@ async function start() {
     return;
   }
   document.body.classList.toggle('modus-demo', IST_DEMO);
-  await store.initialisieren({ demoDaten });
+  await store.initialisieren({ demoDaten, demoAktualisieren: demoModul?.demoKontenAktualisieren });
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); });
   // Demo: Änderung in einem anderen Tab -> neu zeichnen, außer man tippt gerade etwas
   // oder ist nicht angemeldet (Login-Seite zeigt keine Daten an)

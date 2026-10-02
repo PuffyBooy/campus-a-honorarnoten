@@ -26,7 +26,7 @@ Auf der Startseite gibt es **Demo-Zugänge** für jede Rolle (Passwort jeweils `
 | Rolle | Konto | Was man sieht |
 |---|---|---|
 | Erstes Anmelden | `neu@demo.at` | „Konto einrichten“ wie mit einem Startpasswort – startet bei jedem Klick frisch |
-| Autor:in | `maria@demo.at` | Meine Leistungen (darf auch Redigieren), Meine Honorarnoten, Profil |
+| Autor:in | `maria@demo.at` | Meine Leistungen (inkl. Redigieren), Meine Honorarnoten, Profil |
 | Redaktion | `redaktion@demo.at` | Bearbeiter-Terminal |
 | Buchhaltung | `buchhaltung@demo.at` | Bezahl-Terminal |
 | Admin | `admin@demo.at` | Admin-Terminal + alles andere |
@@ -81,13 +81,13 @@ Lokal starten: `npm run dev` → http://localhost:5173
    Überarbeiten“ und der Begründung. Die Autor:in korrigiert sie und schickt sie als neue Honorarnote
    ab; die abgelehnte Note bleibt mit ihrer Nummer als „Abgelehnt“ stehen und kann nicht mehr
    angenommen werden (damit nichts doppelt abgerechnet wird).
-   **Redigieren (campus a college):** Wer vom Admin die Rolle **„Redigieren“** bekommt (beim
-   Freischalten oder in der Benutzerliste; Autor:in wird automatisch dazugegeben), kann unter
-   „Meine Leistungen“ die Kategorie *Redigieren* wählen und gibt nur die **Anzahl der Texte** ein.
-   Der Betrag wird berechnet: Anzahl × Satz pro Text (Standard **2 €**, im Admin unter
-   „Honorarsätze“ einstellbar); der Server rechnet selbst nach. Redigieren läuft immer über
-   campus a college. In der Word-Honorarnote steht es bei den außerordentlichen Honoraren (die
-   Vorlage hat keine eigene Tabelle dafür), im PDF in einem eigenen Abschnitt „3. Redigieren“.
+   **Redigieren (campus a college):** Neben *Kolumne* und *außerordentlichem Honorar* gibt es die
+   Kategorie *Redigieren* – für alle mit Profil-Link zu campus-a-college.at, ohne eigene Freischaltung.
+   Redigieren erscheint nicht auf der Webseite, es wird nur verrechnet: Man gibt die **Anzahl der
+   Texte** ein (Beschreibung optional), der Betrag wird berechnet: Anzahl × Satz pro Text (Standard
+   **2 €**, im Admin unter „Honorarsätze“ einstellbar); der Server rechnet selbst nach. Auf der
+   Honorarnote (Word und PDF) steht es in einem eigenen Abschnitt „3. Redigieren“ mit Beschreibung,
+   Datum, Anzahl Texte und Betrag.
 6. **Buchhaltung:** Das Bezahl-Terminal zeigt die angenommenen Honorarnoten **nach Kalenderwoche**
    (der Woche, in der die Redaktion sie angenommen hat), mit Summe pro Woche. Pro Woche gibt es zwei
    Knöpfe:

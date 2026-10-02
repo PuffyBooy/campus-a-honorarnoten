@@ -13,7 +13,7 @@ import {
   MEDIEN, MEDIUM_KEYS, PROFIL_FELD, istMedium, mediumName, mediumOder, mediumVonArtikel, nichtVerbunden, profilIdAusLink,
   verbundeneMedien,
 } from './lib/campus.js';
-import { KONTO_FEHLT, darfRedigieren, kontoFertig, rollenNormalisieren } from './lib/konto.js';
+import { KONTO_FEHLT, kontoFertig, rollenNormalisieren } from './lib/konto.js';
 import { DEMO_PASSWORT } from './demo-konten.js';
 
 const SPEICHER_KEY = 'campus-a-honorare:v1';
@@ -85,12 +85,14 @@ window.addEventListener('storage', (ev) => {
   }
 });
 
-export async function initialisieren({ demoDaten } = {}) {
+export async function initialisieren({ demoDaten, demoAktualisieren } = {}) {
   db = laden();
   if (!db) {
     db = leereDb();
     if (demoDaten) await demoDaten(db, { passwortHash });
     speichern();
+  } else if (demoAktualisieren?.(db)) {
+    speichern(); // ältere Demo-Daten an die aktuelle Version angepasst
   }
 }
 
@@ -380,7 +382,6 @@ export function leistungSpeichern(daten) {
   const istRedigieren = daten.kategorie === 'redigieren';
   const anzahl = istRedigieren ? Number(daten.anzahl) : 0;
   if (istRedigieren) {
-    pruefe(darfRedigieren(n), 'Redigieren ist für dein Konto nicht freigeschaltet. Bitte wende dich an den Admin.');
     pruefe(Number.isInteger(anzahl) && anzahl >= 1 && anzahl <= 1000, 'Bitte die Anzahl der redigierten Texte angeben (1 bis 1000).');
   }
   const p = {
@@ -403,9 +404,9 @@ export function leistungSpeichern(daten) {
   positionPruefen(p);
   if (p.kategorie === 'ausserordentlich') pruefe(p.art, 'Bitte die Art des Honorars angeben.');
   pruefe(istMedium(p.medium), 'Bitte wählen, ob für campus a college oder campus a.');
-  // nur Medien mit Profil-Link (Redigieren ausgenommen); eine ältere Leistung darf ihr bisheriges Medium behalten
+  // nur Medien mit Profil-Link (Redigieren: campus a college); eine ältere Leistung darf ihr bisheriges Medium behalten
   const bisher = daten.id ? db.positionen.find((x) => x.id === daten.id && x.autor_id === n.id) : null;
-  pruefe(istRedigieren || verbundeneMedien(n.profil).includes(p.medium) || (bisher && mediumOder(bisher.medium) === p.medium),
+  pruefe(verbundeneMedien(n.profil).includes(p.medium) || (bisher && mediumOder(bisher.medium) === p.medium),
     nichtVerbunden(p.medium));
   if (p.artikel_url) {
     pruefe(mediumVonArtikel(p.artikel_url) === p.medium || p.artikel_url.startsWith(`${DEMO_ARTIKEL}${p.medium}-`),

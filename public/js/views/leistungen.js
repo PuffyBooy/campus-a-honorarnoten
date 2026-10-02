@@ -7,7 +7,6 @@ import {
   MEDIEN, MEDIUM_KEYS, STANDARD_MEDIUM, artikelLink, verbundeneMedien, hatArtikel, mediumBadge, mediumName, mediumOder,
 } from '../lib/campus.js';
 import { satzFuer } from '../lib/honorarsaetze.js';
-import { darfRedigieren } from '../lib/konto.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
 
 let bearbeiteId = null; // Leistung, die gerade im Formular bearbeitet wird
@@ -72,8 +71,8 @@ function formularHtml(p, einstellungen, nutzer) {
   const red = kat === 'redigieren';
   const medien = waehlbareMedien(nutzer, p);
   const medium = p ? mediumOder(p.medium) : medien[0];
-  // Redigieren nur mit Freischaltung durch den Admin (oder beim Bearbeiten einer vorhandenen Redigier-Leistung)
-  const redigierenMoeglich = darfRedigieren(nutzer) || red;
+  // Redigieren gibt es nur bei campus a college – also nur mit Profil-Link dort (oder beim Bearbeiten)
+  const redigierenMoeglich = medien.includes('college') || red;
   return `
     <form class="karte" id="l-form" novalidate>
       <h2>${p ? 'Leistung bearbeiten' : 'Neue Leistung speichern'}</h2>
