@@ -63,7 +63,7 @@ export async function render(el, { store, nutzer, params, neuLaden, istAktuell }
         </div>
       </form>
       ${n.status === 'abgelehnt' ? `<p class="fehlerbox"><strong>Ablehnungsgrund:</strong> ${esc(n.ablehnungsgrund)}</p>` : ''}
-      ${n.zurueckgeholt_am ? '<p class="hinweisbox">Zur Überarbeitung zurückgeholt.</p>' : ''}
+      ${n.zurueckgeholt_am ? '<p class="hinweisbox">Die Leistungen sind zur Überarbeitung zurück bei der Autor:in. Sie kommen als neue Honorarnote wieder.</p>' : ''}
     </section>
 
     <div class="spalten">
@@ -76,6 +76,8 @@ export async function render(el, { store, nutzer, params, neuLaden, istAktuell }
             ${kannAblehnen ? '<button type="button" class="btn btn-gefahr" id="d-ablehnen-oeffnen">Ablehnen …</button>' : ''}
           </div>
           <form id="d-ablehnen-form" hidden novalidate>
+            <p class="klein">Die Leistungen gehen damit sofort zurück an die Autor:in zum Überarbeiten und Neu-Abschicken
+              (als neue Honorarnote). Diese Honorarnote bleibt als „Abgelehnt“ stehen.</p>
             <label for="d-grund">Begründung (Pflicht, die Autor:in sieht diesen Text)</label>
             <textarea id="d-grund" rows="3" required maxlength="1000"></textarea>
             <p class="feldfehler" id="d-grund-fehler" role="alert"></p>

@@ -113,4 +113,9 @@ test('Honorarnoten als PDF: eine Datei, jede Note ab neuer Seite', async () => {
   assert.equal(nurCampusA.getTitle(), 'Honorarnote campus a C-3');
   const ohneMedium = await PDFLib.PDFDocument.load(await honorarnotenPdf([note('D-4', 1)], PDFLib));
   assert.equal(ohneMedium.getTitle(), 'Honorarnote campus a college D-4', 'ältere Noten: campus a college');
+  // Redigieren bekommt einen eigenen Abschnitt; die PDF lässt sich erzeugen und hat eine Seite
+  const mitRedigieren = await honorarnotenPdf([{ ...note('E-5', 1), positionen: [
+    ...note('E-5', 1).positionen, { kategorie: 'redigieren', titel: 'Redigieren (7 Texte)', anzahl: 7, veroeffentlichung: '2026-09-30', betrag: 14 },
+  ] }], PDFLib);
+  assert.equal((await PDFLib.PDFDocument.load(mitRedigieren)).getPageCount(), 1);
 });

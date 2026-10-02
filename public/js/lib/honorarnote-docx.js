@@ -1,7 +1,7 @@
 // Erzeugt die Honorarnote als Word-Datei aus der offiziellen Vorlage
 // (public/vorlage/honorarnote-vorlage.docx). Die Vorlage wird nicht verändert,
 // nur ihre Beispielwerte werden ersetzt und die Tabellenzeilen befüllt.
-import { formatBetragDokument, formatDatum, summe } from './format.js';
+import { formatBetragDokument, formatDatum, redigierText, summe } from './format.js';
 import { formatIban } from './iban.js';
 import { mediumName } from './campus.js';
 
@@ -142,7 +142,9 @@ function dokumentBefuellen(xml, note, dom = globalThis) {
 
   const tabellen = kinder(body, 'tbl');
   const kolumnen = note.positionen.filter((p) => p.kategorie === 'kolumne');
-  const ausserord = note.positionen.filter((p) => p.kategorie === 'ausserordentlich');
+  // Redigieren hat in der Vorlage keine eigene Tabelle und steht bei den außerordentlichen Honoraren
+  const ausserord = note.positionen.filter((p) => p.kategorie === 'ausserordentlich' || p.kategorie === 'redigieren')
+    .map((p) => (p.kategorie === 'redigieren' ? { ...p, titel: redigierText(p), vereinbart_mit: '–' } : p));
   for (const tbl of tabellen) {
     const kopf = text(kinder(tbl, 'tr')[0] ?? tbl);
     if (kopf.includes('Titel des Beitrags') && kopf.includes('Vereinbart mit')) {

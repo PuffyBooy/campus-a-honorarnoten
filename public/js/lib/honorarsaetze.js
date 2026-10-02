@@ -1,10 +1,12 @@
 // Standard-Honorarsätze pro Medium und Kategorie (vom Admin einstellbar).
 // null = kein Standardsatz, der Betrag wird individuell vereinbart.
+// Redigieren gibt es nur bei campus a college; der Satz gilt pro redigiertem Text.
 import { MEDIUM_KEYS, mediumOder } from './campus.js';
 
-const KATEGORIEN = ['kolumne', 'ausserordentlich'];
-const STANDARD_PRO_MEDIUM = { kolumne: 15, ausserordentlich: null };
-export const STANDARD_SAETZE = Object.fromEntries(MEDIUM_KEYS.map((m) => [m, { ...STANDARD_PRO_MEDIUM }]));
+const KATEGORIEN = { college: ['kolumne', 'ausserordentlich', 'redigieren'], 'campus-a': ['kolumne', 'ausserordentlich'] };
+const STANDARD = { kolumne: 15, ausserordentlich: null, redigieren: 2 };
+export const STANDARD_SAETZE = Object.fromEntries(MEDIUM_KEYS.map((m) =>
+  [m, Object.fromEntries(KATEGORIEN[m].map((k) => [k, STANDARD[k]]))]));
 
 function satzPruefen(roh) {
   if (roh === null || roh === undefined || roh === '') return null;
@@ -17,15 +19,18 @@ function satzPruefen(roh) {
 }
 
 /**
- * Prüft und normalisiert die Sätze: { college: { kolumne, ausserordentlich }, 'campus-a': { … } }.
+ * Prüft und normalisiert die Sätze: { college: { kolumne, ausserordentlich, redigieren }, 'campus-a': { … } }.
  * Ältere Einstellungen ohne Medium ({ kolumne, ausserordentlich }) gelten für beide Medien.
- * Wirft bei ungültigen Werten.
+ * Ohne Satz fürs Redigieren gilt der Standard (2 € pro Text). Wirft bei ungültigen Werten.
  */
 export function saetzeNormalisieren(saetze = {}) {
-  const flach = KATEGORIEN.some((k) => Object.hasOwn(saetze ?? {}, k));
+  const flach = ['kolumne', 'ausserordentlich'].some((k) => Object.hasOwn(saetze ?? {}, k));
   return Object.fromEntries(MEDIUM_KEYS.map((m) => {
-    const quelle = (flach ? saetze : saetze?.[m]) ?? STANDARD_PRO_MEDIUM;
-    return [m, Object.fromEntries(KATEGORIEN.map((k) => [k, satzPruefen(quelle[k])]))];
+    const quelle = (flach ? saetze : saetze?.[m]) ?? STANDARD_SAETZE[m];
+    return [m, Object.fromEntries(KATEGORIEN[m].map((k) => {
+      const satz = satzPruefen(quelle[k]);
+      return [k, k === 'redigieren' && satz == null ? STANDARD.redigieren : satz];
+    }))];
   }));
 }
 
@@ -35,9 +40,16 @@ export function satzFuer(saetze, medium, kategorie) {
   return s?.[kategorie] ?? null;
 }
 
+/** Erwarteter Betrag laut Standardsatz (Redigieren: Satz × Anzahl Texte) oder null */
+export function standardBetrag(saetze, position) {
+  const satz = satzFuer(saetze, position.medium, position.kategorie);
+  if (satz == null) return null;
+  return position.kategorie === 'redigieren' ? Math.round(satz * 100 * (Number(position.anzahl) || 0)) / 100 : satz;
+}
+
 /** Weicht der eingereichte Betrag vom Standardsatz ab? */
 export function weichtAb(position, saetze) {
-  const satz = satzFuer(saetze, position.medium, position.kategorie);
+  const soll = standardBetrag(saetze, position);
   const betrag = position.betrag_eingereicht ?? position.betrag;
-  return satz != null && Math.round(Number(betrag) * 100) !== Math.round(satz * 100);
+  return soll != null && Math.round(Number(betrag) * 100) !== Math.round(soll * 100);
 }

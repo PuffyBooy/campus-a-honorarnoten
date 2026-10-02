@@ -141,7 +141,8 @@ test('Konto einrichten: was Autor:innen noch fehlt', async () => {
 test('Honorarsätze pro Medium', async () => {
   const { saetzeNormalisieren, satzFuer, weichtAb } = await import('../public/js/lib/honorarsaetze.js');
   assert.deepEqual(saetzeNormalisieren({ kolumne: '16', ausserordentlich: '' }),
-    { college: { kolumne: 16, ausserordentlich: null }, 'campus-a': { kolumne: 16, ausserordentlich: null } }, 'alte Sätze gelten für beide');
+    { college: { kolumne: 16, ausserordentlich: null, redigieren: 2 }, 'campus-a': { kolumne: 16, ausserordentlich: null } },
+    'alte Sätze gelten für beide; Redigieren mit Standard 2 €');
   const s = saetzeNormalisieren({ college: { kolumne: 15 }, 'campus-a': { kolumne: 25, ausserordentlich: 80 } });
   assert.equal(satzFuer(s, 'campus-a', 'kolumne'), 25);
   assert.equal(satzFuer(s, undefined, 'kolumne'), 15);
@@ -149,4 +150,19 @@ test('Honorarsätze pro Medium', async () => {
   assert.ok(weichtAb({ medium: 'campus-a', kategorie: 'kolumne', betrag: 15 }, s));
   assert.ok(!weichtAb({ medium: 'college', kategorie: 'kolumne', betrag: 15 }, s));
   assert.throws(() => saetzeNormalisieren({ college: { kolumne: -1 } }), /Honorarsätze/);
+  // Redigieren: Satz pro Text × Anzahl
+  const r = saetzeNormalisieren({ college: { kolumne: 15, redigieren: 2 } });
+  assert.ok(!weichtAb({ medium: 'college', kategorie: 'redigieren', anzahl: 6, betrag: 12 }, r));
+  assert.ok(weichtAb({ medium: 'college', kategorie: 'redigieren', anzahl: 6, betrag: 2 }, r));
+});
+
+test('Redigieren: Rollen und Bezeichnung', async () => {
+  const { rollenNormalisieren } = await import('../public/js/lib/konto.js');
+  const { redigierText, artText } = await import('../public/js/lib/format.js');
+  assert.deepEqual(rollenNormalisieren(['redigieren']), ['autor', 'redigieren'], 'Redigieren braucht Autor:in');
+  assert.deepEqual(rollenNormalisieren(['admin', 'quatsch']), ['admin']);
+  assert.equal(redigierText({ titel: 'Redigieren (1 Text)', anzahl: 1 }), 'Redigieren (1 Text)');
+  assert.equal(redigierText({ titel: 'September', anzahl: 7 }), 'Redigieren (7 Texte): September');
+  assert.equal(redigierText({ titel: 'Redigieren September', anzahl: 7 }), 'Redigieren September (7 Texte)');
+  assert.equal(artText({ kategorie: 'redigieren', anzahl: 7 }), '7 Texte');
 });
