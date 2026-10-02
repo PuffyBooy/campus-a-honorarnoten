@@ -1,7 +1,7 @@
 // Honorarnoten als PDF – gleicher Inhalt und Aufbau wie die offizielle Word-Vorlage
 // (public/vorlage/honorarnote-vorlage.docx). Mehrere Noten landen in einer Datei,
 // jede Note beginnt auf einer neuen Seite.
-import { formatBetragDokument, formatDatum, redigierText, summe } from './format.js';
+import { formatBetragDokument, formatDatum, redigierBeschreibung, summe } from './format.js';
 import { formatIban } from './iban.js';
 import { ortAusPlzOrt } from './honorarnote-docx.js';
 import { mediumName } from './campus.js';
@@ -203,9 +203,9 @@ function noteSchreiben(d, note) {
   if (redigiert.length) {
     d.absatz('3. Redigieren', { fett: true, groesse: 11, vor: 12, nach: 4 });
     d.tabelle(
-      [{ titel: 'Beschreibung', anteil: 0.46 }, { titel: 'Datum', anteil: 0.18 },
-        { titel: 'Texte', anteil: 0.16, rechts: true }, { titel: 'Betrag in Euro', anteil: 0.2, rechts: true }],
-      redigiert.map((p) => [redigierText(p), formatDatum(p.veroeffentlichung), String(p.anzahl ?? ''), formatBetragDokument(p.betrag)]),
+      [{ titel: 'Beschreibung', anteil: 0.44 }, { titel: 'Datum', anteil: 0.18 },
+        { titel: 'Anzahl Texte', anteil: 0.18, rechts: true }, { titel: 'Betrag in Euro', anteil: 0.2, rechts: true }],
+      redigiert.map((p) => [redigierBeschreibung(p), formatDatum(p.veroeffentlichung), String(p.anzahl ?? ''), formatBetragDokument(p.betrag)]),
       ['Zwischensumme Redigieren', '', '', formatBetragDokument(summe(redigiert))],
     );
   }

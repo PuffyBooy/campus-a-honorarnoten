@@ -399,28 +399,30 @@ test('Buchhaltung: ganze Woche als bezahlt markieren (alle oder keine)', async (
   await k.rita.ok('ablehnen', c.id, 'Test');
 });
 
-test('Redigieren (campus a college): Rolle vom Admin, Anzahl Texte × Satz', async () => {
-  // Redigieren setzt Autor:in voraus – der Server ergänzt die Rolle
-  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Ida', nachname: 'Lektor', email: 'ida@example.org', rollen: ['redigieren'] });
+test('Redigieren (campus a college): Kategorie wie Kolumne, Anzahl Texte × Satz', async () => {
+  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Ida', nachname: 'Lektor', email: 'ida@example.org', rollen: ['autor'] });
   const ida = client();
   await anmeldenMitNeuemPasswort(ida, 'ida@example.org', z.passwort);
-  assert.deepEqual((await ida.ok('aktuellerNutzer')).rollen, ['autor', 'redigieren']);
-  await ida.ok('profilSpeichern', {
+  const profil = {
     vorname: 'Ida', nachname: 'Lektor', email: 'ida@example.org', strasse: 'Weg 3', plz_ort: '1010 Wien',
     kontoinhaber: 'Ida Lektor', iban: AT_IBAN, campus_a_profil: `https://campus-a.at/profil/${CAMPUS_A_PROFIL}`,
-  });
-
+  };
+  await ida.ok('profilSpeichern', profil);
   const red = { kategorie: 'redigieren', veroeffentlichung: '2026-09-30' };
   assert.match((await ida.aufruf('leistungSpeichern', { ...red, anzahl: 0 })).fehler, /Anzahl/);
   assert.match((await ida.aufruf('leistungSpeichern', { ...red, anzahl: 2.5 })).fehler, /Anzahl/);
-  // Betrag rechnet der Server (5 × 2 €), immer campus a college – auch ohne Profil-Link dort
+  // Redigieren gibt es nur bei campus a college – ohne Profil-Link dort nicht
+  assert.match((await ida.aufruf('leistungSpeichern', { ...red, anzahl: 5 })).fehler, /kein Profil-Link/);
+  await ida.ok('profilSpeichern', { ...profil, campus_profil: 'https://www.campus-a-college.at/profil/abcdef123456' });
+  // Betrag rechnet der Server (5 × 2 €), immer campus a college
   await ida.ok('leistungSpeichern', { ...red, anzahl: 5, betrag: 999, medium: 'campus-a' });
   const [p] = await ida.ok('meineLeistungen');
   assert.deepEqual([p.kategorie, p.medium, p.anzahl, p.betrag, p.titel], ['redigieren', 'college', 5, 10, 'Redigieren (5 Texte)']);
-  // ohne Freischaltung kein Redigieren
-  const verboten = await k.anna.aufruf('leistungSpeichern', { ...red, anzahl: 3 });
-  assert.equal(verboten.status, 403);
-  assert.match(verboten.fehler, /nicht freigeschaltet/);
+  // keine eigene Freischaltung nötig: jede Autor:in mit Profil-Link zu campus-a-college.at
+  await k.anna.ok('leistungSpeichern', { ...red, anzahl: 3 });
+  const annas = (await k.anna.ok('meineLeistungen')).find((x) => x.kategorie === 'redigieren');
+  assert.equal(annas.betrag, 6);
+  await k.anna.ok('leistungLoeschen', annas.id);
 
   // Satz einstellbar; bearbeiten rechnet neu
   await k.admin.ok('einstellungenSpeichern', {

@@ -16,6 +16,36 @@ const datum = (d) => {
   return x.toISOString().slice(0, 10);
 };
 
+// Profile der Demo-Konten (Autor:innen brauchen Adresse, Bankverbindung und einen Profil-Link)
+const DEMO_PROFILE = {
+  'maria@demo.at': { strasse: 'Musterstraße 1/2', plz_ort: '1010 Wien', iban: 'AT611904300234573201', bic: 'BKAUATWW',
+    campus_profil: 'de00000000000000a001' }, // Beispiel-Verknüpfung mit campus-a-college.at
+  'jonas@demo.at': { strasse: 'Lindengasse 12', plz_ort: '8010 Graz', iban: 'DE89370400440532013000', bic: '',
+    campus_profil: 'de00000000000000a002', campus_a_profil: 'de00000000000000b002' }, // schreibt für beide Medien
+  'redaktion@demo.at': { strasse: 'Stiftgasse 6/1/2', plz_ort: '1070 Wien', iban: 'AT483200000012345864', bic: '',
+    campus_a_profil: 'de00000000000000b003' },
+};
+
+/**
+ * Ältere Demo-Daten im Browser: fehlende Profilangaben der Demo-Konten ergänzen, damit z. B. Rita
+ * nicht auf „Konto einrichten“ landet. Vorhandene Eingaben bleiben. Liefert true, wenn sich etwas geändert hat.
+ */
+export function demoKontenAktualisieren(db) {
+  let geaendert = false;
+  for (const n of db.nutzer ?? []) {
+    const profil = DEMO_PROFILE[n.email];
+    if (!profil) continue;
+    for (const [feld, wert] of Object.entries(profil)) {
+      if (!String(n.profil?.[feld] ?? '').trim() && wert) {
+        n.profil = { ...n.profil, [feld]: wert };
+        geaendert = true;
+      }
+    }
+    if (!n.profil.kontoinhaber) n.profil.kontoinhaber = `${n.vorname} ${n.nachname}`.trim();
+  }
+  return geaendert;
+}
+
 export async function demoDaten(db, { passwortHash }) {
   const pw = await passwortHash(DEMO_PASSWORT);
   const nutzer = (id, email, vorname, nachname, rollen, profil = {}) => ({
@@ -23,15 +53,9 @@ export async function demoDaten(db, { passwortHash }) {
     profil: { strasse: '', plz_ort: '', kontoinhaber: `${vorname} ${nachname}`, iban: '', bic: '', ...profil },
   });
 
-  const maria = nutzer('demo-maria', 'maria@demo.at', 'Maria', 'Musterfrau', ['autor', 'redigieren'], // darf auch Redigieren verrechnen
-    { strasse: 'Musterstraße 1/2', plz_ort: '1010 Wien', iban: 'AT611904300234573201', bic: 'BKAUATWW',
-      campus_profil: 'de00000000000000a001' }); // Beispiel-Verknüpfung mit campus-a-college.at
-  const jonas = nutzer('demo-jonas', 'jonas@demo.at', 'Jonas', 'Weiß', ['autor'],
-    { strasse: 'Lindengasse 12', plz_ort: '8010 Graz', iban: 'DE89370400440532013000', bic: '',
-      campus_profil: 'de00000000000000a002', campus_a_profil: 'de00000000000000b002' }); // schreibt für beide Medien
-  const rita = nutzer('demo-rita', 'redaktion@demo.at', 'Rita', 'Redaktion', ['redaktion', 'autor'],
-    { strasse: 'Stiftgasse 6/1/2', plz_ort: '1070 Wien', iban: 'AT483200000012345864', bic: '',
-      campus_a_profil: 'de00000000000000b003' });
+  const maria = nutzer('demo-maria', 'maria@demo.at', 'Maria', 'Musterfrau', ['autor'], DEMO_PROFILE['maria@demo.at']);
+  const jonas = nutzer('demo-jonas', 'jonas@demo.at', 'Jonas', 'Weiß', ['autor'], DEMO_PROFILE['jonas@demo.at']);
+  const rita = nutzer('demo-rita', 'redaktion@demo.at', 'Rita', 'Redaktion', ['redaktion', 'autor'], DEMO_PROFILE['redaktion@demo.at']);
   const bernd = nutzer('demo-bernd', 'buchhaltung@demo.at', 'Bernd', 'Buchhaltung', ['buchhaltung']);
   const alex = nutzer('demo-alex', 'admin@demo.at', 'Alex', 'Admin', ['admin']);
   db.nutzer.push(maria, jonas, rita, bernd, alex);

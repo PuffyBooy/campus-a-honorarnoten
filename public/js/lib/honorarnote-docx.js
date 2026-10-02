@@ -1,7 +1,7 @@
 // Erzeugt die Honorarnote als Word-Datei aus der offiziellen Vorlage
 // (public/vorlage/honorarnote-vorlage.docx). Die Vorlage wird nicht verändert,
 // nur ihre Beispielwerte werden ersetzt und die Tabellenzeilen befüllt.
-import { formatBetragDokument, formatDatum, redigierText, summe } from './format.js';
+import { formatBetragDokument, formatDatum, redigierBeschreibung, summe } from './format.js';
 import { formatIban } from './iban.js';
 import { mediumName } from './campus.js';
 
@@ -82,6 +82,34 @@ function idsEntfernen(el) {
   }
 }
 
+/** Text eines Absatzes oder einer Zelle ersetzen und dabei die Formatierung des ersten Laufs behalten */
+function textErsetzen(el, neu) {
+  const t = alle(el, 't');
+  if (!t.length) return;
+  t[0].textContent = neu;
+  t.slice(1).forEach((x) => { x.textContent = ''; });
+}
+
+/**
+ * Abschnitt „3. Redigieren“ als Kopie von „2. Außerordentliche Honorare“ (Überschrift und Tabelle)
+ * hinter dieser Tabelle einfügen; liefert die neue Tabelle.
+ */
+function redigierAbschnitt(body) {
+  const vorlage = kinder(body, 'tbl').find((tbl) => text(kinder(tbl, 'tr')[0] ?? tbl).includes('Vereinbart mit'));
+  const ueberschrift = kinder(body, 'p').find((p) => text(p).trim().startsWith('2. Außerordentliche Honorare'));
+  const neueUeberschrift = ueberschrift.cloneNode(true);
+  const tabelle = vorlage.cloneNode(true);
+  idsEntfernen(neueUeberschrift);
+  idsEntfernen(tabelle);
+  textErsetzen(neueUeberschrift, '3. Redigieren');
+  const kopf = kinder(kinder(tabelle, 'tr')[0], 'tc');
+  ['Beschreibung', 'Datum', 'Anzahl Texte', 'Betrag in Euro'].forEach((t, i) => kopf[i] && textErsetzen(kopf[i], t));
+  const zeilen = kinder(tabelle, 'tr');
+  textErsetzen(kinder(zeilen[zeilen.length - 1], 'tc')[0], 'Zwischensumme Redigieren');
+  vorlage.after(neueUeberschrift, tabelle);
+  return tabelle;
+}
+
 function positionsTabelle(tbl, positionen, spalten) {
   const zeilen = kinder(tbl, 'tr');
   const beispiel = zeilen[1];
@@ -140,11 +168,17 @@ function dokumentBefuellen(xml, note, dom = globalThis) {
   const treffer = alle(doc, 'tc').map((tc) => [tc, text(tc).trim()]).filter(([, t]) => t in werte);
   for (const [tc, t] of treffer) zelleSetzen(tc, werte[t]);
 
-  const tabellen = kinder(body, 'tbl');
   const kolumnen = note.positionen.filter((p) => p.kategorie === 'kolumne');
-  // Redigieren hat in der Vorlage keine eigene Tabelle und steht bei den außerordentlichen Honoraren
-  const ausserord = note.positionen.filter((p) => p.kategorie === 'ausserordentlich' || p.kategorie === 'redigieren')
-    .map((p) => (p.kategorie === 'redigieren' ? { ...p, titel: redigierText(p), vereinbart_mit: '–' } : p));
+  const ausserord = note.positionen.filter((p) => p.kategorie === 'ausserordentlich');
+  const redigiert = note.positionen.filter((p) => p.kategorie === 'redigieren');
+  // Redigieren: eigener Abschnitt „3. Redigieren“ wie die beiden anderen (nur wenn es welche gibt)
+  if (redigiert.length) {
+    const tabelle = redigierAbschnitt(body);
+    positionsTabelle(tabelle, redigiert, [
+      redigierBeschreibung,
+      (p) => formatDatum(p.veroeffentlichung), (p) => String(p.anzahl ?? ''), (p) => formatBetragDokument(p.betrag)]);
+  }
+  const tabellen = kinder(body, 'tbl');
   for (const tbl of tabellen) {
     const kopf = text(kinder(tbl, 'tr')[0] ?? tbl);
     if (kopf.includes('Titel des Beitrags') && kopf.includes('Vereinbart mit')) {
