@@ -5,7 +5,7 @@
 // mehreren Personen auf verschiedenen Geräten braucht es einen Server – die
 // Funktionen hier sind so geschnitten, dass sie 1:1 durch API-Aufrufe
 // ersetzt werden können. Jede Funktion prüft Rolle und erlaubte Statuswechsel.
-import { artNormalisieren, heuteIso, summe } from './lib/format.js';
+import { artNormalisieren, heuteIso, summe, textAnzahl } from './lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from './lib/iban.js';
 import { honorarnoteNummer } from './lib/nummer.js';
 import { STANDARD_SAETZE, saetzeNormalisieren } from './lib/honorarsaetze.js';
@@ -13,7 +13,7 @@ import {
   MEDIEN, MEDIUM_KEYS, PROFIL_FELD, istMedium, mediumName, mediumOder, mediumVonArtikel, nichtVerbunden, profilIdAusLink,
   verbundeneMedien,
 } from './lib/campus.js';
-import { KONTO_FEHLT, kontoFertig } from './lib/konto.js';
+import { KONTO_FEHLT, darfRedigieren, kontoFertig, rollenNormalisieren } from './lib/konto.js';
 import { DEMO_PASSWORT } from './demo-konten.js';
 
 const SPEICHER_KEY = 'campus-a-honorare:v1';
@@ -259,7 +259,7 @@ function anfrageHolen(anfrageId) {
   return a;
 }
 
-const erlaubteRollen = (rollen) => ['autor', 'redaktion', 'buchhaltung', 'admin'].filter((r) => rollen.includes(r));
+const erlaubteRollen = rollenNormalisieren;
 
 /** Anfrage freischalten -> Konto mit Startpasswort. Gibt E-Mail und Startpasswort zurück. */
 export async function anfrageFreischalten(anfrageId, rollen = ['autor']) {
@@ -357,7 +357,7 @@ export async function passwortAendern(alt, neu) {
 // ------------------------------------------------------------------ Leistungen (Entwürfe)
 
 function positionPruefen(p) {
-  pruefe(['kolumne', 'ausserordentlich'].includes(p.kategorie), 'Bitte wählen, ob Kolumne oder außerordentliches Honorar.');
+  pruefe(['kolumne', 'ausserordentlich', 'redigieren'].includes(p.kategorie), 'Bitte wählen, ob Kolumne oder außerordentliches Honorar.');
   pruefe(!leer(p.titel), 'Bitte den Titel des Beitrags angeben.');
   pruefe(/^\d{4}-\d{2}-\d{2}$/.test(p.veroeffentlichung ?? ''), 'Bitte das Datum der Veröffentlichung angeben.');
   if (p.kategorie === 'ausserordentlich') {
@@ -376,27 +376,37 @@ export function meineLeistungen() {
 export function leistungSpeichern(daten) {
   const n = brauche('autor');
   const istKolumne = daten.kategorie === 'kolumne';
+  // Redigieren (nur campus a college): Anzahl der Texte × Satz pro Text
+  const istRedigieren = daten.kategorie === 'redigieren';
+  const anzahl = istRedigieren ? Number(daten.anzahl) : 0;
+  if (istRedigieren) {
+    pruefe(darfRedigieren(n), 'Redigieren ist für dein Konto nicht freigeschaltet. Bitte wende dich an den Admin.');
+    pruefe(Number.isInteger(anzahl) && anzahl >= 1 && anzahl <= 1000, 'Bitte die Anzahl der redigierten Texte angeben (1 bis 1000).');
+  }
   const p = {
     kategorie: daten.kategorie,
     // Kolumnen haben eine Art der Kolumne (freier Text, optional), außerordentliche Honorare eine Art des Honorars
-    art: istKolumne ? '' : artNormalisieren(daten.art),
+    art: daten.kategorie === 'ausserordentlich' ? artNormalisieren(daten.art) : '',
     kolumnenart: istKolumne ? artNormalisieren(daten.kolumnenart) : '',
-    titel: trim(daten.titel),
-    artikel_url: trim(daten.artikel_url),
+    titel: trim(daten.titel) || (istRedigieren ? `Redigieren (${textAnzahl(anzahl)})` : ''),
+    artikel_url: istRedigieren ? '' : trim(daten.artikel_url),
     // ohne Angabe: das (erste) Medium mit Profil-Link
-    medium: daten.medium ?? verbundeneMedien(n.profil)[0] ?? 'college',
+    medium: istRedigieren ? 'college' : (daten.medium ?? verbundeneMedien(n.profil)[0] ?? 'college'),
+    anzahl,
     veroeffentlichung: daten.veroeffentlichung,
     ausgabe: trim(daten.ausgabe),
     vereinbart_mit: daten.kategorie === 'ausserordentlich' ? trim(daten.vereinbart_mit) : '',
-    betrag: Number(daten.betrag),
+    // Redigieren: Betrag = Anzahl × eingestellter Satz pro Text
+    betrag: istRedigieren ? Math.round(anzahl * einstellungen().honorarsaetze.college.redigieren * 100) / 100 : Number(daten.betrag),
     notiz: trim(daten.notiz),
   };
   positionPruefen(p);
-  if (!istKolumne) pruefe(p.art, 'Bitte die Art des Honorars angeben.');
+  if (p.kategorie === 'ausserordentlich') pruefe(p.art, 'Bitte die Art des Honorars angeben.');
   pruefe(istMedium(p.medium), 'Bitte wählen, ob für campus a college oder campus a.');
-  // nur Medien mit Profil-Link; eine ältere Leistung darf ihr bisheriges Medium behalten
+  // nur Medien mit Profil-Link (Redigieren ausgenommen); eine ältere Leistung darf ihr bisheriges Medium behalten
   const bisher = daten.id ? db.positionen.find((x) => x.id === daten.id && x.autor_id === n.id) : null;
-  pruefe(verbundeneMedien(n.profil).includes(p.medium) || (bisher && mediumOder(bisher.medium) === p.medium), nichtVerbunden(p.medium));
+  pruefe(istRedigieren || verbundeneMedien(n.profil).includes(p.medium) || (bisher && mediumOder(bisher.medium) === p.medium),
+    nichtVerbunden(p.medium));
   if (p.artikel_url) {
     pruefe(mediumVonArtikel(p.artikel_url) === p.medium || p.artikel_url.startsWith(`${DEMO_ARTIKEL}${p.medium}-`),
       `Der Link zum Artikel ist ungültig (erwartet: ein Artikel auf ${MEDIEN[p.medium].seite}).`);
@@ -550,7 +560,7 @@ export function abrechnungAbschicken(positionIds) {
     empfaenger: { ...db.einstellungen.empfaenger },
     positionen: positionen.map((p) => ({
       id: p.id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel, veroeffentlichung: p.veroeffentlichung,
-      artikel_url: p.artikel_url ?? '', medium, ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
+      artikel_url: p.artikel_url ?? '', medium, anzahl: p.anzahl ?? 0, ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
       betrag: p.betrag, betrag_eingereicht: p.betrag, betrag_vermerk: '',
     })),
     ablehnungsgrund: '',
@@ -569,21 +579,33 @@ export function meineNoten() {
 }
 
 /** Abgelehnte Note: Leistungen zurück in die Entwürfe holen, um sie korrigiert neu abzuschicken */
+/**
+ * Leistungen einer abgelehnten Note zurück in „Meine Leistungen“ der Autor:in (mit eingereichtem Betrag,
+ * Medium, Artikel-Link und der Begründung als Hinweis). Die Note gilt danach als zurückgeholt.
+ */
+function zurueckAnAutor(note, akteur) {
+  if (db.nutzer.some((x) => x.id === note.autor_id)) {
+    for (const p of note.positionen) {
+      db.positionen.push({
+        id: id(), autor_id: note.autor_id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel,
+        veroeffentlichung: p.veroeffentlichung, artikel_url: p.artikel_url ?? '', medium: mediumOder(note.medium), anzahl: p.anzahl ?? 0,
+        ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, betrag: p.betrag_eingereicht, notiz: p.notiz,
+        zurueck_nummer: note.nummer, zurueck_grund: note.ablehnungsgrund ?? '', erstellt_am: jetzt(),
+      });
+    }
+  }
+  note.zurueckgeholt_am = jetzt();
+  verlauf(note.id, akteur, 'zurueckgeholt');
+}
+
+/** Ältere abgelehnte Noten (vor der automatischen Rückgabe): Leistungen selbst zurückholen */
 export function leistungenZurueckholen(noteId) {
   const n = brauche('autor');
   const note = noteHolen(noteId);
   pruefe(note.autor_id === n.id, 'Dafür fehlt dir die Berechtigung.');
   pruefe(note.status === 'abgelehnt', 'Nur abgelehnte Honorarnoten können überarbeitet werden.');
   pruefe(!note.zurueckgeholt_am, 'Die Leistungen wurden bereits zurückgeholt.');
-  for (const p of note.positionen) {
-    db.positionen.push({
-      id: id(), autor_id: n.id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel,
-      veroeffentlichung: p.veroeffentlichung, artikel_url: p.artikel_url ?? '', medium: mediumOder(note.medium),
-      ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, betrag: p.betrag_eingereicht, notiz: p.notiz, erstellt_am: jetzt(),
-    });
-  }
-  note.zurueckgeholt_am = jetzt();
-  verlauf(note.id, n, 'zurueckgeholt');
+  zurueckAnAutor(note, n);
   speichern();
 }
 
@@ -620,6 +642,8 @@ export function ablehnen(noteId, grund) {
   const vorher = x.status;
   Object.assign(x, { status: 'abgelehnt', ablehnungsgrund: trim(grund), entschieden_am: jetzt() });
   verlauf(x.id, n, 'abgelehnt', { vorher, grund: trim(grund) });
+  // die Leistungen gehen sofort zurück an die Autor:in zum Überarbeiten
+  zurueckAnAutor(x, n);
   speichern();
 }
 

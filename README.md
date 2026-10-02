@@ -26,7 +26,7 @@ Auf der Startseite gibt es **Demo-Zugänge** für jede Rolle (Passwort jeweils `
 | Rolle | Konto | Was man sieht |
 |---|---|---|
 | Erstes Anmelden | `neu@demo.at` | „Konto einrichten“ wie mit einem Startpasswort – startet bei jedem Klick frisch |
-| Autor:in | `maria@demo.at` | Meine Leistungen, Meine Honorarnoten, Profil |
+| Autor:in | `maria@demo.at` | Meine Leistungen (darf auch Redigieren), Meine Honorarnoten, Profil |
 | Redaktion | `redaktion@demo.at` | Bearbeiter-Terminal |
 | Buchhaltung | `buchhaltung@demo.at` | Bezahl-Terminal |
 | Admin | `admin@demo.at` | Admin-Terminal + alles andere |
@@ -76,8 +76,18 @@ Lokal starten: `npm run dev` → http://localhost:5173
 4. **Redaktion:** Filter nach Status und Medium, Suche nach Name oder Nummer, Sortierung nach Datum und
    Betrag. Annehmen, Ablehnen (Begründung Pflicht), Betrag pro Leistung korrigieren (Vermerk
    Pflicht), interne Kommentare, Verlauf. **IBAN und Adresse sind ausgeblendet.**
-5. **Abgelehnt?** Die Autor:in holt die Leistungen mit einem Klick zurück, korrigiert sie und
-   schickt sie neu ab.
+5. **Abgelehnt?** Beim Ablehnen (Begründung Pflicht) gehen die Leistungen **sofort zurück an die
+   Autor:in**: Sie stehen wieder unter „Meine Leistungen“, mit dem Hinweis „Zurück aus <Nummer> zum
+   Überarbeiten“ und der Begründung. Die Autor:in korrigiert sie und schickt sie als neue Honorarnote
+   ab; die abgelehnte Note bleibt mit ihrer Nummer als „Abgelehnt“ stehen und kann nicht mehr
+   angenommen werden (damit nichts doppelt abgerechnet wird).
+   **Redigieren (campus a college):** Wer vom Admin die Rolle **„Redigieren“** bekommt (beim
+   Freischalten oder in der Benutzerliste; Autor:in wird automatisch dazugegeben), kann unter
+   „Meine Leistungen“ die Kategorie *Redigieren* wählen und gibt nur die **Anzahl der Texte** ein.
+   Der Betrag wird berechnet: Anzahl × Satz pro Text (Standard **2 €**, im Admin unter
+   „Honorarsätze“ einstellbar); der Server rechnet selbst nach. Redigieren läuft immer über
+   campus a college. In der Word-Honorarnote steht es bei den außerordentlichen Honoraren (die
+   Vorlage hat keine eigene Tabelle dafür), im PDF in einem eigenen Abschnitt „3. Redigieren“.
 6. **Buchhaltung:** Das Bezahl-Terminal zeigt die angenommenen Honorarnoten **nach Kalenderwoche**
    (der Woche, in der die Redaktion sie angenommen hat), mit Summe pro Woche. Pro Woche gibt es zwei
    Knöpfe:

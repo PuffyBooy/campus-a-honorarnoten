@@ -264,6 +264,10 @@ async function einstellungen(inhalt, { store, neuLaden }) {
         <div class="feld"><label for="e-satz-${m}-ausser">Außerordentliches Honorar (EUR)</label>
           <input id="e-satz-${m}-ausser" name="satz_${m}_ausserordentlich" inputmode="decimal" autocomplete="off" placeholder="individuell"
                  value="${wert('ausserordentlich')}"></div>
+        ${Object.hasOwn(s, 'redigieren') ? `
+        <div class="feld"><label for="e-satz-${m}-redigieren">Redigieren pro Text (EUR)</label>
+          <input id="e-satz-${m}-redigieren" name="satz_${m}_redigieren" inputmode="decimal" autocomplete="off" placeholder="2,00"
+                 value="${wert('redigieren')}"></div>` : ''}
       </div>`;
       }).join('')}
       <h2 class="abstand-oben">Datenschutz</h2>
@@ -289,6 +293,8 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       honorarsaetze = Object.fromEntries(MEDIUM_KEYS.map((m) => [m, {
         kolumne: satz(form.elements[`satz_${m}_kolumne`]),
         ausserordentlich: satz(form.elements[`satz_${m}_ausserordentlich`]),
+        // Redigieren gibt es nur bei campus a college; leer = Standard (2 € pro Text)
+        ...(form.elements[`satz_${m}_redigieren`] ? { redigieren: satz(form.elements[`satz_${m}_redigieren`]) } : {}),
       }]));
       fehler.textContent = '';
     } catch (e) {

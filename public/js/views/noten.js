@@ -3,7 +3,7 @@ import {
   KATEGORIE_LABEL, artText, esc, formatDatum, formatEuro, formatMonat, formatZeitpunkt,
 } from '../lib/format.js';
 import { honorarnoteHerunterladen } from '../lib/beleg.js';
-import { satzFuer, weichtAb } from '../lib/honorarsaetze.js';
+import { standardBetrag, weichtAb } from '../lib/honorarsaetze.js';
 import { hatArtikel, mediumBadge, titelLink } from '../lib/campus.js';
 import { fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 
@@ -20,8 +20,8 @@ export function positionenTabelle(note, { mitKorrektur = false, saetze = null, p
         ${mitKorrektur ? '<th><span class="sr-only">Aktion</span></th>' : ''}</tr></thead>
       <tbody>${note.positionen.map((p) => `
         <tr>
-          <td data-label="Titel"><span><strong>${titelLink(p.artikel_url, p.titel, 'artikel-titel', note.medium)}</strong> <span aria-hidden="true">↗</span>
-            ${!hatArtikel(p.artikel_url) && pruefen ? '<br><span class="ohne-link">nicht verknüpft – Klick sucht den Titel</span>' : ''}
+          <td data-label="Titel"><span>${p.kategorie === 'redigieren' ? `<strong>${esc(p.titel)}</strong>` : `<strong>${titelLink(p.artikel_url, p.titel, 'artikel-titel', note.medium)}</strong> <span aria-hidden="true">↗</span>
+            ${!hatArtikel(p.artikel_url) && pruefen ? '<br><span class="ohne-link">nicht verknüpft – Klick sucht den Titel</span>' : ''}`}
             ${p.ausgabe ? `<br><span class="klein">${esc(p.ausgabe)}</span>` : ''}
             ${p.notiz ? `<br><span class="klein">Notiz: ${esc(p.notiz)}</span>` : ''}</span></td>
           <td data-label="Kategorie"><span>${esc(KATEGORIE_LABEL[p.kategorie])}<br><span class="klein">${esc(artText(p))}${
@@ -29,7 +29,7 @@ export function positionenTabelle(note, { mitKorrektur = false, saetze = null, p
           <td data-label="Veröffentlichung">${esc(formatDatum(p.veroeffentlichung))}</td>
           <td data-label="Betrag" class="rechts"><span>${esc(formatEuro(p.betrag))}
             ${p.betrag !== p.betrag_eingereicht ? `<br><span class="durchgestrichen">${esc(formatEuro(p.betrag_eingereicht))}</span>` : ''}
-            ${saetze && weichtAb({ ...p, medium: note.medium }, saetze) ? `<br><span class="abweichung" title="Eingereichter Betrag weicht vom Standardsatz ab">⚠ Standardsatz ${esc(formatEuro(satzFuer(saetze, note.medium, p.kategorie)))}</span>` : ''}</span></td>
+            ${saetze && weichtAb({ ...p, medium: note.medium }, saetze) ? `<br><span class="abweichung" title="Eingereichter Betrag weicht vom Standardsatz ab">⚠ Standardsatz ${esc(formatEuro(standardBetrag(saetze, { ...p, medium: note.medium })))}</span>` : ''}</span></td>
           ${mitKorrektur ? `<td data-label="">${note.status !== 'bezahlt'
             ? `<button type="button" class="btn btn-klein" data-korrigieren="${esc(p.id)}">Betrag ändern</button>` : ''}</td>` : ''}
         </tr>
@@ -64,7 +64,7 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
           ${n.positionen.length === 1 ? 'Leistung' : 'Leistungen'})</span></p>
         ${n.status === 'abgelehnt' ? `<div class="fehlerbox"><strong>Begründung der Ablehnung:</strong> ${esc(n.ablehnungsgrund)}
           ${n.zurueckgeholt_am
-            ? '<p class="klein">Zur Überarbeitung zurückgeholt.</p>'
+            ? '<p>Die Leistungen sind zurück unter <a href="#/leistungen">Meine Leistungen</a> – dort überarbeiten und neu abschicken.</p>'
             : '<p><button type="button" class="btn btn-klein" data-zurueck>Leistungen überarbeiten und neu abschicken</button></p>'}
           </div>` : ''}
         <details class="aufklapp">

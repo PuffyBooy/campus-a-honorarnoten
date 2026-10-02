@@ -23,7 +23,7 @@ export async function demoDaten(db, { passwortHash }) {
     profil: { strasse: '', plz_ort: '', kontoinhaber: `${vorname} ${nachname}`, iban: '', bic: '', ...profil },
   });
 
-  const maria = nutzer('demo-maria', 'maria@demo.at', 'Maria', 'Musterfrau', ['autor'],
+  const maria = nutzer('demo-maria', 'maria@demo.at', 'Maria', 'Musterfrau', ['autor', 'redigieren'], // darf auch Redigieren verrechnen
     { strasse: 'Musterstraße 1/2', plz_ort: '1010 Wien', iban: 'AT611904300234573201', bic: 'BKAUATWW',
       campus_profil: 'de00000000000000a001' }); // Beispiel-Verknüpfung mit campus-a-college.at
   const jonas = nutzer('demo-jonas', 'jonas@demo.at', 'Jonas', 'Weiß', ['autor'],
@@ -97,6 +97,8 @@ export async function demoDaten(db, { passwortHash }) {
   db.positionen.push(
     { ...pos('kolumne', 'Erste Schulwoche: ein Rückblick', 12, 15), autor_id: maria.id, erstellt_am: iso(tageZurueck(12)) },
     { ...pos('kolumne', 'Was Social Media mit uns macht', 5, 15), autor_id: maria.id, erstellt_am: iso(tageZurueck(5)) },
+    // Redigieren: Anzahl der Texte × 2 € (nur campus a college)
+    { ...pos('redigieren', 'Redigieren September', 3, 14, { anzahl: 7, artikel_url: '' }), art: '', kolumnenart: '', autor_id: maria.id, erstellt_am: iso(tageZurueck(3)) },
   );
 
   // Jonas: abgelehnt, danach neu eingereicht
@@ -105,6 +107,13 @@ export async function demoDaten(db, { passwortHash }) {
       pos('ausserordentlich', 'Fotostrecke Schulball', 24, 120, { art: 'foto', vereinbart_mit: 'Rita Redaktion', artikel_url: '' }),
     ], 'abgelehnt', { entschieden_am: iso(tageZurueck(18)), ablehnungsgrund: 'Die Fotostrecke wurde nicht veröffentlicht. Bitte nur erschienene Beiträge abrechnen.' });
     v(18, rita, 'abgelehnt', { vorher: 'eingereicht', grund: n.ablehnungsgrund });
+    // beim Ablehnen gehen die Leistungen automatisch zurück an die Autor:in
+    n.zurueckgeholt_am = iso(tageZurueck(18));
+    v(18, rita, 'zurueckgeholt');
+    db.positionen.push(...n.positionen.map((p) => ({
+      ...p, id: `${p.id}-zurueck`, autor_id: jonas.id, betrag: p.betrag_eingereicht,
+      zurueck_nummer: n.nummer, zurueck_grund: n.ablehnungsgrund, erstellt_am: iso(tageZurueck(18)),
+    })));
   }
   {
     const { n } = note(jonas, 2, [

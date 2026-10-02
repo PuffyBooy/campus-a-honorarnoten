@@ -165,6 +165,39 @@ const MIGRATIONEN = [
   alter table noten add column medium text not null default 'college';
   create index noten_medium on noten(medium);
   `,
+  // Version 5: Redigieren (Anzahl Texte) und Rückgabe abgelehnter Leistungen an die Autor:in.
+  // positionen wird neu angelegt, weil SQLite die Prüfung der Kategorie nicht ändern kann.
+  `
+  create table positionen_neu (
+    id                text primary key,
+    autor_id          text not null references nutzer(id) on delete cascade,
+    kategorie         text not null check (kategorie in ('kolumne', 'ausserordentlich', 'redigieren')),
+    art               text not null,
+    titel             text not null,
+    veroeffentlichung text not null,
+    ausgabe           text not null default '',
+    vereinbart_mit    text not null default '',
+    betrag_cent       integer not null check (betrag_cent > 0),
+    notiz             text not null default '',
+    erstellt_am       text not null,
+    geaendert_am      text,
+    kolumnenart       text not null default '',
+    artikel_url       text not null default '',
+    medium            text not null default 'college',
+    anzahl            integer not null default 0,     -- Redigieren: Anzahl der Texte
+    zurueck_nummer    text not null default '',       -- aus welcher abgelehnten Honorarnote zurückgekommen
+    zurueck_grund     text not null default ''        -- Begründung der Ablehnung (Hinweis für die Autor:in)
+  );
+  insert into positionen_neu (id, autor_id, kategorie, art, titel, veroeffentlichung, ausgabe, vereinbart_mit, betrag_cent,
+      notiz, erstellt_am, geaendert_am, kolumnenart, artikel_url, medium)
+    select id, autor_id, kategorie, art, titel, veroeffentlichung, ausgabe, vereinbart_mit, betrag_cent,
+      notiz, erstellt_am, geaendert_am, kolumnenart, artikel_url, medium from positionen;
+  drop table positionen;
+  alter table positionen_neu rename to positionen;
+  create index positionen_autor on positionen(autor_id);
+  create index positionen_artikel on positionen(artikel_url);
+  alter table note_positionen add column anzahl integer not null default 0;
+  `,
 ];
 
 export function oeffneDatenbank(pfad) {

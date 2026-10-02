@@ -47,6 +47,8 @@ h3 { font-size: 1rem; margin: 1rem 0 .25rem; }
 a { color: var(--marke); }
 code { font-family: var(--mono); font-size: .9em; }
 
+/* hidden-Attribut gilt immer, auch wenn eine Klasse display setzt */
+[hidden] { display: none !important; }
 .skip { position: absolute; left: -999px; }
 .skip:focus { left: 1rem; top: 1rem; z-index: 10; background: #fff; padding: .5rem; }
 .sr-only, .offscreen {
@@ -467,3 +469,4 @@ body.modus-demo .fuss { display: block; }
 .medium-fest-hinweis { margin: -.25rem 0 1rem; }
 .medium-fest { margin: 0 0 .5rem; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
 .demo-frisch { border-color: var(--marke); border-style: dashed; }
+.zurueck-hinweis { display: inline-block; margin: .15rem 0; padding: .1rem .45rem; border-radius: 6px; font-size: .8rem; background: var(--gefahr-hell); color: #7a1a12; }

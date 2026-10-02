@@ -7,6 +7,7 @@ import {
   MEDIEN, MEDIUM_KEYS, STANDARD_MEDIUM, artikelLink, verbundeneMedien, hatArtikel, mediumBadge, mediumName, mediumOder,
 } from '../lib/campus.js';
 import { satzFuer } from '../lib/honorarsaetze.js';
+import { darfRedigieren } from '../lib/konto.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
 
 let bearbeiteId = null; // Leistung, die gerade im Formular bearbeitet wird
@@ -15,6 +16,7 @@ const satzText = (satz) => (satz != null ? formatBetragPlain(satz) : '');
 
 function satzHinweis(medium, kategorie, saetze) {
   const satz = satzFuer(saetze, medium, kategorie);
+  if (kategorie === 'redigieren') return `Wird berechnet: Anzahl × ${formatEuro(satz ?? 0)} pro Text`;
   if (satz == null) return kategorie === 'ausserordentlich' ? 'Betrag laut Vereinbarung mit der Redaktion.' : '';
   return `Standardsatz ${mediumName(medium)}: ${formatEuro(satz)}`;
 }
@@ -58,14 +60,26 @@ function artikelKarteHtml(daten) {
     <button type="button" class="link-knopf" id="artikel-neu">Liste aktualisieren</button>`;
 }
 
+// Titel einer Redigier-Leistung ohne eigene Beschreibung (wird beim Bearbeiten nicht als Beschreibung angezeigt)
+const AUTO_REDIGIER_TITEL = /^Redigieren \(\d+ Texte?\)$/;
+
+/** Betrag fürs Redigieren: Anzahl × Satz pro Text */
+const redigierBetrag = (anzahl, saetze) => Math.round((Number(anzahl) || 0) * (satzFuer(saetze, 'college', 'redigieren') ?? 0) * 100) / 100;
+
 function formularHtml(p, einstellungen, nutzer) {
   const saetze = einstellungen.honorarsaetze;
   const kat = p?.kategorie ?? 'kolumne';
+  const red = kat === 'redigieren';
   const medien = waehlbareMedien(nutzer, p);
   const medium = p ? mediumOder(p.medium) : medien[0];
+  // Redigieren nur mit Freischaltung durch den Admin (oder beim Bearbeiten einer vorhandenen Redigier-Leistung)
+  const redigierenMoeglich = darfRedigieren(nutzer) || red;
   return `
     <form class="karte" id="l-form" novalidate>
       <h2>${p ? 'Leistung bearbeiten' : 'Neue Leistung speichern'}</h2>
+      <p class="medium-fest" id="l-redigieren-medium" ${red ? '' : 'hidden'}>Für ${mediumBadge('college')}
+        <span class="klein">Redigieren gibt es nur bei campus a college.</span></p>
+      <div id="l-medium-bereich" ${red ? 'hidden' : ''}>
       ${medien.length > 1 ? `
       <fieldset class="kategorie medium-wahl">
         <legend>Für</legend>
@@ -77,22 +91,33 @@ function formularHtml(p, einstellungen, nutzer) {
       <p class="medium-fest">Für ${mediumBadge(medium)}</p>
       <p class="klein medium-fest-hinweis">Schreibst du auch für ${esc(mediumName(MEDIUM_KEYS.find((m) => m !== medium)))}?
         Dann im <a href="#/profil">Profil</a> den zweiten Profil-Link eintragen.</p>`}
+      </div>
       <fieldset class="kategorie">
         <legend class="sr-only">Kategorie</legend>
         <label class="radio"><input type="radio" name="kategorie" value="kolumne" ${kat === 'kolumne' ? 'checked' : ''}>
           <span><strong>Kolumne</strong></span></label>
         <label class="radio"><input type="radio" name="kategorie" value="ausserordentlich" ${kat === 'ausserordentlich' ? 'checked' : ''}>
           <span><strong>Außerordentliches Honorar</strong></span></label>
+        ${redigierenMoeglich ? `
+        <label class="radio"><input type="radio" name="kategorie" value="redigieren" ${red ? 'checked' : ''}>
+          <span><strong>Redigieren</strong><br><span class="klein">campus a college · ${esc(formatEuro(satzFuer(saetze, 'college', 'redigieren')))} pro Text</span></span></label>` : ''}
       </fieldset>
+      <div class="feld" id="l-anzahl-feld" ${red ? '' : 'hidden'}>
+        <label for="l-anzahl">Anzahl redigierter Texte <span class="pflicht" aria-hidden="true">*</span></label>
+        <input id="l-anzahl" name="anzahl" type="number" inputmode="numeric" min="1" max="1000" step="1" value="${red ? esc(p.anzahl) : ''}">
+        <p class="feldfehler" data-fehler="anzahl"></p>
+      </div>
       <div class="feld">
-        <label for="l-titel">Titel des Beitrags <span class="pflicht" aria-hidden="true">*</span></label>
-        <input id="l-titel" name="titel" required maxlength="200" value="${esc(p?.titel)}">
+        <label for="l-titel"><span id="l-titel-label">${red ? 'Beschreibung' : 'Titel des Beitrags'}</span>
+          <span class="pflicht" aria-hidden="true" ${red ? 'hidden' : ''}>*</span><span class="optional" ${red ? '' : 'hidden'}>(optional)</span></label>
+        <input id="l-titel" name="titel" maxlength="200" value="${esc(red && AUTO_REDIGIER_TITEL.test(p.titel) ? '' : p?.titel)}"
+               placeholder="${red ? 'z. B. Redigieren September' : ''}">
         <p class="feldfehler" data-fehler="titel"></p>
         <input type="hidden" name="artikel_url" value="${esc(p?.artikel_url)}">
         <p class="klein" id="l-artikel" ${p?.artikel_url ? '' : 'hidden'}>${p?.artikel_url ? artikelVermerk(p.artikel_url, medium) : ''}</p>
       </div>
       <div class="zeile">
-        <div class="feld" id="l-art-feld" ${kat === 'kolumne' ? 'hidden' : ''}>
+        <div class="feld" id="l-art-feld" ${kat === 'ausserordentlich' ? '' : 'hidden'}>
           <label for="l-art">Art des Honorars <span class="pflicht" aria-hidden="true">*</span></label>
           <input id="l-art" name="art" maxlength="100" autocomplete="off" placeholder="z. B. Interview, Reportage, Fotostrecke"
                  value="${esc(p ? artText(p) : '')}">
@@ -104,7 +129,7 @@ function formularHtml(p, einstellungen, nutzer) {
           <p class="feldfehler" data-fehler="kolumnenart"></p>
         </div>
         <div class="feld">
-          <label for="l-datum">Veröffentlichung <span class="pflicht" aria-hidden="true">*</span></label>
+          <label for="l-datum"><span id="l-datum-label">${red ? 'Datum' : 'Veröffentlichung'}</span> <span class="pflicht" aria-hidden="true">*</span></label>
           <input id="l-datum" name="veroeffentlichung" type="date" required value="${esc(p?.veroeffentlichung ?? heuteIso())}">
           <p class="feldfehler" data-fehler="veroeffentlichung"></p>
         </div>
@@ -112,9 +137,9 @@ function formularHtml(p, einstellungen, nutzer) {
       <div class="zeile">
         <div class="feld">
           <label for="l-betrag">Betrag in EUR <span class="pflicht" aria-hidden="true">*</span></label>
-          <input id="l-betrag" name="betrag" inputmode="decimal" autocomplete="off" placeholder="15,00" required
+          <input id="l-betrag" name="betrag" inputmode="decimal" autocomplete="off" placeholder="15,00" required ${red ? 'readonly' : ''}
                  value="${p ? esc(formatBetragPlain(p.betrag)) : esc(satzText(satzFuer(saetze, medium, kat)))}" aria-describedby="l-satz-hinweis">
-          <p class="hinweis" id="l-satz-hinweis">${esc(satzHinweis(medium, kat, saetze))}</p>
+          <p class="hinweis" id="l-satz-hinweis">${esc(satzHinweis(red ? 'college' : medium, kat, saetze))}</p>
           <p class="feldfehler" data-fehler="betrag"></p>
         </div>
         <div class="feld" id="l-vereinbart-feld" ${kat === 'ausserordentlich' ? '' : 'hidden'}>
@@ -182,6 +207,8 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
                   <input type="checkbox" name="pos" value="${esc(p.id)}" checked aria-label="${esc(p.titel)} abrechnen">
                   <span>
                     <strong>${esc(p.titel)}</strong><br>
+                    ${p.zurueck_nummer ? `<span class="zurueck-hinweis">Zurück aus ${esc(p.zurueck_nummer)} zum Überarbeiten${
+                      p.zurueck_grund ? `: „${esc(p.zurueck_grund)}“` : ''}</span><br>` : ''}
                     <span class="klein">${[KATEGORIE_LABEL[p.kategorie], artText(p), formatDatum(p.veroeffentlichung)].filter(Boolean).map(esc).join(' · ')}
                       ${p.vereinbart_mit ? ` · vereinbart mit ${esc(p.vereinbart_mit)}` : ''}
                       ${hatArtikel(p.artikel_url) ? ` · ${artikelLink(p.artikel_url, 'Artikel ansehen', '', medium)}` : ''}</span>
@@ -214,19 +241,39 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
   form.addEventListener('input', (ev) => ev.target.name && fehler(ev.target.name, ''));
   // Medium oder Kategorie gewechselt: Standardsatz übernehmen, solange der Betrag nicht selbst geändert wurde
   const saetze = einstellungen.honorarsaetze ?? {};
-  let letzterSatz = satzFuer(saetze, form.medium.value, form.kategorie.value);
+  let letzterSatz = form.kategorie.value === 'redigieren' ? null : satzFuer(saetze, form.medium.value, form.kategorie.value);
   const auswahlAnpassen = () => {
     const kat = form.kategorie.value;
-    const medium = form.medium.value;
+    const red = kat === 'redigieren';
+    // Redigieren gilt immer für campus a college
+    const medium = red ? 'college' : form.medium.value;
     el.querySelector('#l-vereinbart-feld').hidden = kat !== 'ausserordentlich';
-    el.querySelector('#l-art-feld').hidden = kat === 'kolumne';
+    el.querySelector('#l-art-feld').hidden = kat !== 'ausserordentlich';
     el.querySelector('#l-kolumnenart-feld').hidden = kat !== 'kolumne';
+    el.querySelector('#l-anzahl-feld').hidden = !red;
+    el.querySelector('#l-medium-bereich').hidden = red;
+    el.querySelector('#l-redigieren-medium').hidden = !red;
+    el.querySelector('#l-titel-label').textContent = red ? 'Beschreibung' : 'Titel des Beitrags';
+    el.querySelector('label[for=l-titel] .pflicht').hidden = red;
+    el.querySelector('label[for=l-titel] .optional').hidden = !red;
+    form.titel.placeholder = red ? 'z. B. Redigieren September' : '';
+    el.querySelector('#l-datum-label').textContent = red ? 'Datum' : 'Veröffentlichung';
     el.querySelector('#l-satz-hinweis').textContent = satzHinweis(medium, kat, saetze);
+    form.betrag.readOnly = red;
+    if (red) {
+      if (form.artikel_url.value) artikelSetzen('');
+      form.betrag.value = satzText(redigierBetrag(form.anzahl.value, saetze));
+      letzterSatz = null;
+      return;
+    }
     const satz = satzFuer(saetze, medium, kat);
     const bisher = form.betrag.value.trim();
-    if (!bisher || parseBetrag(bisher) === letzterSatz) form.betrag.value = satzText(satz);
+    if (!bisher || parseBetrag(bisher) === letzterSatz || letzterSatz === null) form.betrag.value = satzText(satz);
     letzterSatz = satz;
   };
+  form.anzahl.addEventListener('input', () => {
+    if (form.kategorie.value === 'redigieren') form.betrag.value = satzText(redigierBetrag(form.anzahl.value, saetze));
+  });
   form.addEventListener('change', (ev) => {
     if (ev.target.name === 'kategorie') auswahlAnpassen();
     if (ev.target.name === 'medium') {
@@ -270,6 +317,10 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     const knopf = ev.target.closest('[data-uebernehmen]');
     const a = knopf && artikelDaten?.artikel?.[Number(knopf.dataset.uebernehmen)];
     if (!a) return;
+    if (form.kategorie.value === 'redigieren') {
+      form.kategorie.value = 'kolumne';
+      auswahlAnpassen();
+    }
     form.titel.value = a.titel;
     if (a.datum) form.veroeffentlichung.value = a.datum;
     if (form.medium.value !== a.medium) {
@@ -286,12 +337,15 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    ['titel', 'art', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'formular'].forEach((n) => fehler(n, ''));
+    ['titel', 'art', 'anzahl', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'formular'].forEach((n) => fehler(n, ''));
+    const red = form.kategorie.value === 'redigieren';
     const betrag = parseBetrag(form.betrag.value);
+    const anzahl = Number(form.anzahl.value);
     const f = {};
-    if (!form.titel.value.trim()) f.titel = 'Bitte den Titel angeben.';
+    if (red && !(Number.isInteger(anzahl) && anzahl >= 1 && anzahl <= 1000)) f.anzahl = 'Bitte die Anzahl der Texte angeben (1 bis 1000).';
+    if (!red && !form.titel.value.trim()) f.titel = 'Bitte den Titel angeben.';
     if (!form.veroeffentlichung.value) f.veroeffentlichung = 'Bitte Datum wählen.';
-    if (!betrag) f.betrag = 'Bitte einen Betrag wie 15 oder 15,50 eingeben.';
+    if (!red && !betrag) f.betrag = 'Bitte einen Betrag wie 15 oder 15,50 eingeben.';
     if (form.kategorie.value === 'ausserordentlich' && !form.art.value.trim()) f.art = 'Bitte die Art des Honorars angeben.';
     if (form.kategorie.value === 'ausserordentlich' && !form.vereinbart_mit.value.trim()) {
       f.vereinbart_mit = 'Mit wem aus der Redaktion wurde das vereinbart?';
@@ -306,7 +360,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     try {
       await store.leistungSpeichern({
         id: bearbeiteId ?? undefined,
-        medium: form.medium.value, kategorie: form.kategorie.value, art: form.art.value, kolumnenart: form.kolumnenart.value, titel: form.titel.value,
+        medium: form.medium.value, kategorie: form.kategorie.value, art: form.art.value, anzahl: red ? anzahl : undefined, kolumnenart: form.kolumnenart.value, titel: form.titel.value,
         artikel_url: form.artikel_url.value,
         veroeffentlichung: form.veroeffentlichung.value, betrag, vereinbart_mit: form.vereinbart_mit.value,
         ausgabe: form.ausgabe.value, notiz: form.notiz.value,

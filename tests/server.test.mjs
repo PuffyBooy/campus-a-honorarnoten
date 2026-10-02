@@ -204,12 +204,22 @@ test('Abgelehnte Note überarbeiten', async () => {
   });
   await k.bert.ok('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: 'Stadt', titel: 'Graz', veroeffentlichung: '2026-09-02', betrag: 15 });
   const note = await k.bert.ok('abrechnungAbschicken', (await k.bert.ok('meineLeistungen')).map((p) => p.id));
+  assert.equal((await k.bert.ok('meineLeistungen')).length, 0);
   await k.rita.ok('ablehnen', note.id, 'Nicht erschienen');
-  assert.equal((await k.bert.ok('meineNoten'))[0].ablehnungsgrund, 'Nicht erschienen');
-  await k.bert.ok('leistungenZurueckholen', note.id);
-  assert.equal((await k.bert.ok('meineLeistungen')).length, 1);
+  const abgelehnt = (await k.bert.ok('meineNoten'))[0];
+  assert.equal(abgelehnt.ablehnungsgrund, 'Nicht erschienen');
+  assert.ok(abgelehnt.zurueckgeholt_am, 'Ablehnen gibt die Leistungen sofort zurück');
+  // die Leistungen sind sofort wieder bei Bert, mit Hinweis auf Note und Begründung
+  const zurueck = await k.bert.ok('meineLeistungen');
+  assert.deepEqual(zurueck.map((p) => [p.titel, p.betrag, p.zurueck_nummer, p.zurueck_grund]), [['Graz', 15, note.nummer, 'Nicht erschienen']]);
   assert.match((await k.bert.aufruf('leistungenZurueckholen', note.id)).fehler, /bereits/);
   assert.match((await k.rita.aufruf('annehmen', note.id)).fehler, /überarbeitet/);
+  assert.ok((await k.rita.ok('verlaufVon', note.id)).some((v) => v.aktion === 'zurueckgeholt' && v.akteur_name === 'Rita Redaktion'));
+  // überarbeiten und als neue Honorarnote abschicken
+  await k.bert.ok('leistungSpeichern', { ...zurueck[0], titel: 'Graz (korrigiert)' });
+  const neu = await k.bert.ok('abrechnungAbschicken', [zurueck[0].id]);
+  assert.notEqual(neu.nummer, note.nummer);
+  assert.equal(neu.positionen[0].titel, 'Graz (korrigiert)');
 });
 
 test('Admin: Rollen, letzter Admin, Deaktivieren beendet Sitzungen', async () => {
@@ -227,15 +237,15 @@ test('Admin: Rollen, letzter Admin, Deaktivieren beendet Sitzungen', async () =>
 test('Honorarsätze: Admin legt fest, alle sehen sie, ungültige Werte abgelehnt', async () => {
   const basisDaten = { empfaenger: { name: 'campus a Medien GmbH' }, datenschutzKontakt: '' };
   assert.deepEqual((await k.anna.ok('einstellungen')).honorarsaetze, {
-    college: { kolumne: 15, ausserordentlich: null }, 'campus-a': { kolumne: 15, ausserordentlich: null },
-  }, 'Standardsätze ab Werk, für beide Medien');
+    college: { kolumne: 15, ausserordentlich: null, redigieren: 2 }, 'campus-a': { kolumne: 15, ausserordentlich: null },
+  }, 'Standardsätze ab Werk, für beide Medien (Redigieren nur campus a college)');
   assert.equal((await k.rita.aufruf('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { college: { kolumne: 20 } } })).status, 403);
   assert.match((await k.admin.aufruf('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { 'campus-a': { kolumne: -5 } } })).fehler, /Honorarsätze/);
   await k.admin.ok('einstellungenSpeichern', {
     ...basisDaten, honorarsaetze: { college: { kolumne: 17.5, ausserordentlich: '' }, 'campus-a': { kolumne: 25, ausserordentlich: 80 } },
   });
   assert.deepEqual((await k.anna.ok('einstellungen')).honorarsaetze, {
-    college: { kolumne: 17.5, ausserordentlich: null }, 'campus-a': { kolumne: 25, ausserordentlich: 80 },
+    college: { kolumne: 17.5, ausserordentlich: null, redigieren: 2 }, 'campus-a': { kolumne: 25, ausserordentlich: 80 },
   });
   // ältere Einstellungen ohne Medium gelten für beide
   db.prepare("update einstellungen set wert = ? where schluessel = 'honorarsaetze'").run(JSON.stringify({ kolumne: 16, ausserordentlich: null }));
@@ -299,7 +309,6 @@ test('Artikel von campus-a-college.at: Profil verknüpfen, alle Artikel sehen, �
 
   // abgelehnt und zurückgeholt: Verknüpfung wandert zurück in die Leistungen
   await k.rita.ok('ablehnen', note.id, 'Bitte Betrag prüfen');
-  await a.ok('leistungenZurueckholen', note.id);
   assert.equal((await a.ok('meineLeistungen')).filter((p) => p.artikel_url === url).length, 1);
   assert.equal((await a.ok('meineArtikel')).artikel[0].erfasst, true);
 
@@ -350,7 +359,6 @@ test('campus a und campus a college: Artikel beider Seiten, getrennte Honorarnot
 
   // abgelehnt und zurückgeholt: Medium bleibt erhalten
   await k.rita.ok('ablehnen', noteA.id, 'Test');
-  await b.ok('leistungenZurueckholen', noteA.id);
   assert.equal((await b.ok('meineLeistungen')).find((p) => p.titel === 'Rankings').medium, 'campus-a');
   await k.rita.ok('ablehnen', noteC.id, 'Test');
 });
@@ -389,6 +397,46 @@ test('Buchhaltung: ganze Woche als bezahlt markieren (alle oder keine)', async (
   assert.ok([a.id, b.id].every((id) => seit.some((n) => n.id === id)));
   assert.match((await k.kasse.aufruf('bezahlteNotenSeit', 'gestern')).fehler, /Datum/);
   await k.rita.ok('ablehnen', c.id, 'Test');
+});
+
+test('Redigieren (campus a college): Rolle vom Admin, Anzahl Texte × Satz', async () => {
+  // Redigieren setzt Autor:in voraus – der Server ergänzt die Rolle
+  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Ida', nachname: 'Lektor', email: 'ida@example.org', rollen: ['redigieren'] });
+  const ida = client();
+  await anmeldenMitNeuemPasswort(ida, 'ida@example.org', z.passwort);
+  assert.deepEqual((await ida.ok('aktuellerNutzer')).rollen, ['autor', 'redigieren']);
+  await ida.ok('profilSpeichern', {
+    vorname: 'Ida', nachname: 'Lektor', email: 'ida@example.org', strasse: 'Weg 3', plz_ort: '1010 Wien',
+    kontoinhaber: 'Ida Lektor', iban: AT_IBAN, campus_a_profil: `https://campus-a.at/profil/${CAMPUS_A_PROFIL}`,
+  });
+
+  const red = { kategorie: 'redigieren', veroeffentlichung: '2026-09-30' };
+  assert.match((await ida.aufruf('leistungSpeichern', { ...red, anzahl: 0 })).fehler, /Anzahl/);
+  assert.match((await ida.aufruf('leistungSpeichern', { ...red, anzahl: 2.5 })).fehler, /Anzahl/);
+  // Betrag rechnet der Server (5 × 2 €), immer campus a college – auch ohne Profil-Link dort
+  await ida.ok('leistungSpeichern', { ...red, anzahl: 5, betrag: 999, medium: 'campus-a' });
+  const [p] = await ida.ok('meineLeistungen');
+  assert.deepEqual([p.kategorie, p.medium, p.anzahl, p.betrag, p.titel], ['redigieren', 'college', 5, 10, 'Redigieren (5 Texte)']);
+  // ohne Freischaltung kein Redigieren
+  const verboten = await k.anna.aufruf('leistungSpeichern', { ...red, anzahl: 3 });
+  assert.equal(verboten.status, 403);
+  assert.match(verboten.fehler, /nicht freigeschaltet/);
+
+  // Satz einstellbar; bearbeiten rechnet neu
+  await k.admin.ok('einstellungenSpeichern', {
+    empfaenger: { name: 'campus a Medien GmbH' }, honorarsaetze: { college: { kolumne: 15, redigieren: 2.5 }, 'campus-a': { kolumne: 15 } },
+  });
+  await ida.ok('leistungSpeichern', { ...red, id: p.id, anzahl: 4, titel: 'Redigieren September' });
+  const [p2] = await ida.ok('meineLeistungen');
+  assert.deepEqual([p2.anzahl, p2.betrag, p2.titel], [4, 10, 'Redigieren September']);
+
+  const note = await ida.ok('abrechnungAbschicken', [p2.id]);
+  assert.equal(note.medium, 'college');
+  assert.deepEqual([note.positionen[0].kategorie, note.positionen[0].anzahl, note.betrag], ['redigieren', 4, 10]);
+  // abgelehnt: kommt mit Anzahl zurück
+  await k.rita.ok('ablehnen', note.id, 'Bitte Zeitraum angeben');
+  const [zurueck] = await ida.ok('meineLeistungen');
+  assert.deepEqual([zurueck.kategorie, zurueck.anzahl, zurueck.betrag, zurueck.zurueck_grund], ['redigieren', 4, 10, 'Bitte Zeitraum angeben']);
 });
 
 test('Admin: Note löschen mit Protokoll, Export ohne Passwörter', async () => {

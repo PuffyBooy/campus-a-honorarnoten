@@ -5,7 +5,7 @@ import { transaktion } from './db.js';
 import {
   passwortHash, passwortPasst, startpasswort, sitzungErstellen, sitzungBeenden, alleSitzungenBeenden,
 } from './auth.js';
-import { artNormalisieren, heuteIso } from '../public/js/lib/format.js';
+import { artNormalisieren, heuteIso, textAnzahl } from '../public/js/lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from '../public/js/lib/iban.js';
 import { honorarnoteNummer } from '../public/js/lib/nummer.js';
 import { STANDARD_SAETZE, saetzeNormalisieren } from '../public/js/lib/honorarsaetze.js';
@@ -13,7 +13,7 @@ import {
   MEDIEN, MEDIUM_KEYS, PROFIL_FELD, istMedium, mediumName, mediumOder, mediumVonArtikel, nichtVerbunden, profilIdAusLink,
   verbundeneMedien,
 } from '../public/js/lib/campus.js';
-import { KONTO_FEHLT, kontoFertig } from '../public/js/lib/konto.js';
+import { KONTO_FEHLT, darfRedigieren, kontoFertig, rollenNormalisieren } from '../public/js/lib/konto.js';
 import { artikelVonProfil } from './campus-artikel.js';
 
 export const STANDARD_EMPFAENGER = {
@@ -36,8 +36,7 @@ const jetzt = () => new Date().toISOString();
 const trim = (s) => String(s ?? '').trim();
 const leer = (s) => !trim(s);
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
-const ROLLEN = ['autor', 'redaktion', 'buchhaltung', 'admin'];
-const erlaubteRollen = (r) => ROLLEN.filter((x) => Array.isArray(r) && r.includes(x));
+const erlaubteRollen = rollenNormalisieren;
 const profilLinkFehler = (m) => `Bitte den Link zu deinem Profil auf ${MEDIEN[m].seite} einfügen, z. B. ${MEDIEN[m].basis}/profil/…`;
 const anzeigename = (n) => `${n.vorname} ${n.nachname}`.trim() || n.email;
 
@@ -110,7 +109,8 @@ function einstellungenLaden(db) {
 function positionAusZeile(p) {
   return {
     id: p.id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel, veroeffentlichung: p.veroeffentlichung,
-    artikel_url: p.artikel_url ?? '', medium: mediumOder(p.medium), ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
+    artikel_url: p.artikel_url ?? '', medium: mediumOder(p.medium), anzahl: p.anzahl ?? 0,
+    zurueck_nummer: p.zurueck_nummer ?? '', zurueck_grund: p.zurueck_grund ?? '', ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
     betrag: euro(p.betrag_cent), betrag_eingereicht: euro(p.betrag_eingereicht_cent), betrag_vermerk: p.betrag_vermerk,
   };
 }
@@ -271,46 +271,55 @@ export const funktionen = {
   leistungSpeichern(ctx, d = {}) {
     const n = brauche(ctx, 'autor');
     const istKolumne = d.kategorie === 'kolumne';
+    // Redigieren (nur campus a college): Anzahl der Texte × Satz pro Text
+    const istRedigieren = d.kategorie === 'redigieren';
+    const anzahl = istRedigieren ? Number(d.anzahl) : 0;
     const p = {
       kategorie: d.kategorie,
       // Kolumnen haben eine Art der Kolumne (freier Text, optional), außerordentliche Honorare eine Art des Honorars
-      art: istKolumne ? '' : artNormalisieren(d.art),
+      art: d.kategorie === 'ausserordentlich' ? artNormalisieren(d.art) : '',
       kolumnenart: istKolumne ? artNormalisieren(d.kolumnenart) : '',
-      titel: trim(d.titel).slice(0, 200),
-      artikel_url: trim(d.artikel_url),
+      titel: (trim(d.titel) || (istRedigieren ? redigierTitel(anzahl) : '')).slice(0, 200),
+      artikel_url: istRedigieren ? '' : trim(d.artikel_url),
       // ohne Angabe: das (erste) Medium mit Profil-Link
-      medium: d.medium ?? verbundeneMedien(n.profil)[0] ?? 'college',
+      medium: istRedigieren ? 'college' : (d.medium ?? verbundeneMedien(n.profil)[0] ?? 'college'),
+      anzahl,
       veroeffentlichung: String(d.veroeffentlichung ?? ''),
       ausgabe: trim(d.ausgabe).slice(0, 100),
       vereinbart_mit: d.kategorie === 'ausserordentlich' ? trim(d.vereinbart_mit).slice(0, 100) : '',
       notiz: trim(d.notiz).slice(0, 1000),
     };
-    pruefe(['kolumne', 'ausserordentlich'].includes(p.kategorie), 'Bitte wählen, ob Kolumne oder außerordentliches Honorar.');
+    pruefe(['kolumne', 'ausserordentlich', 'redigieren'].includes(p.kategorie), 'Bitte wählen, ob Kolumne oder außerordentliches Honorar.');
+    if (istRedigieren) {
+      pruefe(darfRedigieren(n), 'Redigieren ist für dein Konto nicht freigeschaltet. Bitte wende dich an den Admin.', 403);
+      pruefe(Number.isInteger(anzahl) && anzahl >= 1 && anzahl <= 1000, 'Bitte die Anzahl der redigierten Texte angeben (1 bis 1000).');
+    }
     pruefe(!leer(p.titel), 'Bitte den Titel des Beitrags angeben.');
-    if (!istKolumne) pruefe(!leer(p.art), 'Bitte die Art des Honorars angeben.');
+    if (p.kategorie === 'ausserordentlich') pruefe(!leer(p.art), 'Bitte die Art des Honorars angeben.');
     pruefe(istMedium(p.medium), 'Bitte wählen, ob für campus a college oder campus a.');
-    // nur Medien mit Profil-Link; eine ältere Leistung darf ihr bisheriges Medium behalten
+    // nur Medien mit Profil-Link (Redigieren ausgenommen); eine ältere Leistung darf ihr bisheriges Medium behalten
     const bisher = d.id ? ctx.db.prepare('select medium from positionen where id = ? and autor_id = ?').get(String(d.id), n.id) : null;
-    pruefe(verbundeneMedien(n.profil).includes(p.medium) || bisher?.medium === p.medium, nichtVerbunden(p.medium));
+    pruefe(istRedigieren || verbundeneMedien(n.profil).includes(p.medium) || bisher?.medium === p.medium, nichtVerbunden(p.medium));
     if (p.artikel_url) {
       pruefe(mediumVonArtikel(p.artikel_url) === p.medium, `Der Link zum Artikel ist ungültig (erwartet: ein Artikel auf ${MEDIEN[p.medium].seite}).`);
       pruefe(!artikelSchonVerwendet(ctx.db, n.id, p.artikel_url, d.id ? String(d.id) : null), ARTIKEL_DOPPELT);
     }
     pruefe(/^\d{4}-\d{2}-\d{2}$/.test(p.veroeffentlichung) && !Number.isNaN(Date.parse(p.veroeffentlichung)), 'Bitte das Datum der Veröffentlichung angeben.');
     if (p.kategorie === 'ausserordentlich') pruefe(!leer(p.vereinbart_mit), 'Bitte angeben, mit wem aus der Redaktion das Honorar vereinbart wurde.');
-    const betragCent = cent(d.betrag);
+    // Redigieren: Betrag rechnet der Server aus (Anzahl × eingestellter Satz pro Text)
+    const betragCent = istRedigieren ? anzahl * cent(einstellungenLaden(ctx.db).honorarsaetze.college.redigieren) : cent(d.betrag);
     if (d.id) {
       const r = ctx.db.prepare(`update positionen set kategorie = ?, art = ?, kolumnenart = ?, titel = ?, veroeffentlichung = ?, ausgabe = ?,
-          vereinbart_mit = ?, notiz = ?, betrag_cent = ?, artikel_url = ?, medium = ?, geaendert_am = ? where id = ? and autor_id = ?`)
+          vereinbart_mit = ?, notiz = ?, betrag_cent = ?, artikel_url = ?, medium = ?, anzahl = ?, geaendert_am = ? where id = ? and autor_id = ?`)
         .run(p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz, betragCent,
-          p.artikel_url, p.medium, jetzt(), String(d.id), n.id);
+          p.artikel_url, p.medium, p.anzahl, jetzt(), String(d.id), n.id);
       pruefe(r.changes === 1, 'Diese Leistung gibt es nicht (mehr).', 404);
     } else {
       pruefe(ctx.db.prepare('select count(*) c from positionen where autor_id = ?').get(n.id).c < 500, 'Zu viele gespeicherte Leistungen.');
       ctx.db.prepare(`insert into positionen (id, autor_id, kategorie, art, kolumnenart, titel, veroeffentlichung, ausgabe, vereinbart_mit,
-          notiz, betrag_cent, artikel_url, medium, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          notiz, betrag_cent, artikel_url, medium, anzahl, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id(), n.id, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz, betragCent,
-          p.artikel_url, p.medium, jetzt());
+          p.artikel_url, p.medium, p.anzahl, jetzt());
     }
     return true;
   },
@@ -378,9 +387,10 @@ export const funktionen = {
           JSON.stringify({ kontoinhaber: n.profil.kontoinhaber, iban: n.profil.iban, bic: n.profil.bic }),
           JSON.stringify(e.empfaenger));
       const einf = ctx.db.prepare(`insert into note_positionen (id, note_id, reihenfolge, kategorie, art, kolumnenart, titel, veroeffentlichung,
-          ausgabe, vereinbart_mit, notiz, betrag_cent, betrag_eingereicht_cent, artikel_url, medium) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          ausgabe, vereinbart_mit, notiz, betrag_cent, betrag_eingereicht_cent, artikel_url, medium, anzahl)
+          values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       positionen.forEach((p, i) => einf.run(p.id, noteId, i, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe,
-        p.vereinbart_mit, p.notiz, p.betrag_cent, p.betrag_cent, p.artikel_url, medium));
+        p.vereinbart_mit, p.notiz, p.betrag_cent, p.betrag_cent, p.artikel_url, medium, p.anzahl ?? 0));
       ctx.db.prepare(`delete from positionen where autor_id = ? and id in (${ids.map(() => '?').join(',')})`).run(n.id, ...ids);
       const summe = positionen.reduce((s, p) => s + p.betrag_cent, 0);
       verlaufEintragen(ctx.db, noteId, n, 'eingereicht', { betrag: euro(summe), positionen: positionen.length, medium: mediumName(medium) });
@@ -393,6 +403,7 @@ export const funktionen = {
     return notenListe(ctx.db, n, 'where autor_id = ?', [n.id]);
   },
 
+  /** Ältere abgelehnte Noten (vor der automatischen Rückgabe): Leistungen selbst zurückholen */
   leistungenZurueckholen(ctx, noteId) {
     const n = brauche(ctx, 'autor');
     return transaktion(ctx.db, () => {
@@ -400,14 +411,7 @@ export const funktionen = {
       pruefe(note.autor_id === n.id, 'Dafür fehlt dir die Berechtigung.', 403);
       pruefe(note.status === 'abgelehnt', 'Nur abgelehnte Honorarnoten können überarbeitet werden.');
       pruefe(!note.zurueckgeholt_am, 'Die Leistungen wurden bereits zurückgeholt.');
-      const einf = ctx.db.prepare(`insert into positionen (id, autor_id, kategorie, art, kolumnenart, titel, veroeffentlichung, ausgabe,
-          vereinbart_mit, notiz, betrag_cent, artikel_url, medium, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
-      for (const p of note.positionen) {
-        einf.run(id(), n.id, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz,
-          cent(p.betrag_eingereicht), p.artikel_url, note.medium, jetzt());
-      }
-      ctx.db.prepare('update noten set zurueckgeholt_am = ? where id = ?').run(jetzt(), note.id);
-      verlaufEintragen(ctx.db, note.id, n, 'zurueckgeholt');
+      zurueckAnAutor(ctx.db, note, n);
       return true;
     });
   },
@@ -446,6 +450,8 @@ export const funktionen = {
       pruefe(['eingereicht', 'angenommen'].includes(x.status), 'Diese Honorarnote kann nicht abgelehnt werden.');
       ctx.db.prepare("update noten set status = 'abgelehnt', ablehnungsgrund = ?, entschieden_am = ? where id = ?").run(g, jetzt(), x.id);
       verlaufEintragen(ctx.db, x.id, n, 'abgelehnt', { vorher: x.status, grund: g });
+      // die Leistungen gehen sofort zurück an die Autor:in zum Überarbeiten
+      zurueckAnAutor(ctx.db, { ...x, ablehnungsgrund: g }, n);
       return true;
     });
   },
@@ -716,6 +722,27 @@ export const funktionen = {
 };
 
 // ------------------------------------------------------------------ interne Helfer
+
+/**
+ * Leistungen einer abgelehnten Note zurück in „Meine Leistungen“ der Autor:in (mit eingereichtem Betrag,
+ * Medium, Artikel-Link und der Begründung als Hinweis). Die Note gilt danach als zurückgeholt.
+ */
+function zurueckAnAutor(db, note, akteur) {
+  if (note.autor_id && db.prepare('select 1 from nutzer where id = ?').get(note.autor_id)) {
+    const einf = db.prepare(`insert into positionen (id, autor_id, kategorie, art, kolumnenart, titel, veroeffentlichung, ausgabe,
+        vereinbart_mit, notiz, betrag_cent, artikel_url, medium, anzahl, zurueck_nummer, zurueck_grund, erstellt_am)
+        values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const p of note.positionen) {
+      einf.run(id(), note.autor_id, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit,
+        p.notiz, cent(p.betrag_eingereicht), p.artikel_url, note.medium, p.anzahl ?? 0, note.nummer, note.ablehnungsgrund ?? '', jetzt());
+    }
+  }
+  db.prepare('update noten set zurueckgeholt_am = ? where id = ?').run(jetzt(), note.id);
+  verlaufEintragen(db, note.id, akteur, 'zurueckgeholt');
+}
+
+/** Titel einer Redigier-Leistung ohne eigene Beschreibung */
+const redigierTitel = (anzahl) => `Redigieren (${textAnzahl(anzahl)})`;
 
 const ARTIKEL_DOPPELT = 'Dieser Artikel ist schon als Leistung gespeichert oder abgerechnet.';
 

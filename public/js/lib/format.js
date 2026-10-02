@@ -18,6 +18,7 @@ const ART_LABEL = {
 export const KATEGORIE_LABEL = {
   kolumne: 'Kolumne',
   ausserordentlich: 'Außerordentliches Honorar',
+  redigieren: 'Redigieren',
 };
 
 export const ROLLEN_LABEL = {
@@ -25,6 +26,7 @@ export const ROLLEN_LABEL = {
   redaktion: 'Redaktion',
   buchhaltung: 'Buchhaltung',
   admin: 'Admin',
+  redigieren: 'Redigieren (campus a college)',
 };
 
 export const AKTION_LABEL = {
@@ -34,7 +36,7 @@ export const AKTION_LABEL = {
   betrag_korrigiert: 'Betrag korrigiert',
   kommentar: 'Interner Kommentar',
   bezahlt: 'Als bezahlt markiert',
-  zurueckgeholt: 'Leistungen zur Überarbeitung zurückgeholt',
+  zurueckgeholt: 'Leistungen zur Überarbeitung an die Autor:in zurückgegeben',
 };
 
 const MONATE = ['Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August',
@@ -122,7 +124,19 @@ export function esc(value) {
  * Honorars (freier Text; ältere Einträge mit festen Werten wie „foto“ werden schön benannt).
  */
 export function artText(p) {
+  if (p.kategorie === 'redigieren') return textAnzahl(p.anzahl);
   return p.kategorie === 'kolumne' ? (p.kolumnenart ?? '') : (ART_LABEL[p.art] ?? p.art ?? '');
+}
+
+/** „1 Text“ / „5 Texte“ (Redigieren) */
+export const textAnzahl = (n) => `${Number(n) || 0} ${Number(n) === 1 ? 'Text' : 'Texte'}`;
+
+/** Bezeichnung einer Redigier-Leistung für Word und PDF: immer mit Anzahl der Texte */
+export function redigierText(p) {
+  const anzahl = `Redigieren (${textAnzahl(p.anzahl)})`;
+  if (!p.titel || p.titel === anzahl) return anzahl;
+  // „Redigieren September“ -> „Redigieren September (7 Texte)“, sonst „Redigieren (7 Texte): …“
+  return /^redigier/i.test(p.titel) ? `${p.titel} (${textAnzahl(p.anzahl)})` : `${anzahl}: ${p.titel}`;
 }
 
 /** Freitext für Art der Kolumne / Art des Honorars: Leerraum zusammenfassen, max. 100 Zeichen */
