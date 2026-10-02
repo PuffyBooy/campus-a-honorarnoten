@@ -3,8 +3,8 @@ import {
   KATEGORIE_LABEL, artText, esc, formatDatum, formatEuro, formatMonat, formatZeitpunkt,
 } from '../lib/format.js';
 import { honorarnoteHerunterladen } from '../lib/beleg.js';
-import { weichtAb } from '../lib/honorarsaetze.js';
-import { hatArtikel, titelLink } from '../lib/campus.js';
+import { satzFuer, weichtAb } from '../lib/honorarsaetze.js';
+import { hatArtikel, mediumBadge, titelLink } from '../lib/campus.js';
 import { fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 
 /**
@@ -20,7 +20,7 @@ export function positionenTabelle(note, { mitKorrektur = false, saetze = null, p
         ${mitKorrektur ? '<th><span class="sr-only">Aktion</span></th>' : ''}</tr></thead>
       <tbody>${note.positionen.map((p) => `
         <tr>
-          <td data-label="Titel"><span><strong>${titelLink(p.artikel_url, p.titel)}</strong> <span aria-hidden="true">↗</span>
+          <td data-label="Titel"><span><strong>${titelLink(p.artikel_url, p.titel, 'artikel-titel', note.medium)}</strong> <span aria-hidden="true">↗</span>
             ${!hatArtikel(p.artikel_url) && pruefen ? '<br><span class="ohne-link">nicht verknüpft – Klick sucht den Titel</span>' : ''}
             ${p.ausgabe ? `<br><span class="klein">${esc(p.ausgabe)}</span>` : ''}
             ${p.notiz ? `<br><span class="klein">Notiz: ${esc(p.notiz)}</span>` : ''}</span></td>
@@ -29,7 +29,7 @@ export function positionenTabelle(note, { mitKorrektur = false, saetze = null, p
           <td data-label="Veröffentlichung">${esc(formatDatum(p.veroeffentlichung))}</td>
           <td data-label="Betrag" class="rechts"><span>${esc(formatEuro(p.betrag))}
             ${p.betrag !== p.betrag_eingereicht ? `<br><span class="durchgestrichen">${esc(formatEuro(p.betrag_eingereicht))}</span>` : ''}
-            ${saetze && weichtAb(p, saetze) ? `<br><span class="abweichung" title="Eingereichter Betrag weicht vom Standardsatz ab">⚠ Standardsatz ${esc(formatEuro(saetze[p.kategorie]))}</span>` : ''}</span></td>
+            ${saetze && weichtAb({ ...p, medium: note.medium }, saetze) ? `<br><span class="abweichung" title="Eingereichter Betrag weicht vom Standardsatz ab">⚠ Standardsatz ${esc(formatEuro(satzFuer(saetze, note.medium, p.kategorie)))}</span>` : ''}</span></td>
           ${mitKorrektur ? `<td data-label="">${note.status !== 'bezahlt'
             ? `<button type="button" class="btn btn-klein" data-korrigieren="${esc(p.id)}">Betrag ändern</button>` : ''}</td>` : ''}
         </tr>
@@ -56,7 +56,7 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
       <li class="karte note-karte${flash?.neu === n.nummer ? ' neu' : ''}" data-id="${esc(n.id)}">
         <div class="note-kopf">
           <span class="nummer">${esc(n.nummer)}</span>
-          ${statusBadge(n.status)}
+          <span>${mediumBadge(n.medium)} ${statusBadge(n.status)}</span>
         </div>
         <p class="meta">Monatsabrechnung ${esc(formatMonat(n.monat))} · abgeschickt am ${esc(formatZeitpunkt(n.eingereicht_am))}
           ${n.bezahlt_am ? ` · <strong>überwiesen am ${esc(formatDatum(n.bezahlt_am))}</strong>` : ''}</p>

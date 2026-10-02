@@ -1,6 +1,7 @@
 # campus a college – Honorarnoten
 
-Web-App für die Honorarnoten der Jugendzeitung **campus a college**:
+Web-App für die Honorarnoten von **campus a college** (Schüler*innenzeitung) und **campus a**
+(Studentenmagazin). Beide Medien werden getrennt abgerechnet:
 Autor:innen speichern ihre Beiträge laufend und schicken sie **einmal im Monat gesammelt
 als Honorarnote** ab. Die Redaktion prüft, die Buchhaltung lädt jede Woche alle angenommenen
 Honorarnoten als **ein PDF** herunter, überweist und markiert die Woche als bezahlt.
@@ -43,24 +44,34 @@ Lokal starten: `npm run dev` → http://localhost:5173
 1. **Zugang anfragen:** Selbst registrieren geht nicht. Neue Personen schicken auf der Startseite
    eine Anfrage (Name, E-Mail, optional eine Nachricht). Ein Admin schaltet sie im Reiter
    „Anfragen“ frei, wählt die Rollen und bekommt ein **Startpasswort**. Das gibt er weiter, per
-   „E-Mail vorbereiten“ oder „Text kopieren“. Beim ersten Anmelden legt die Person ein eigenes
-   Passwort fest und trägt einmal im **Profil** Adresse und IBAN ein. Diese Daten werden für jede
-   Honorarnote automatisch übernommen.
-2. **Meine Leistungen:** Jeden Beitrag speichern, sobald er erschienen ist – als *Kolumne* oder
+   „E-Mail vorbereiten“ oder „Text kopieren“.
+
+   **Konto einrichten (Pflicht beim ersten Anmelden):** Mit dem Startpasswort kommt man nur auf die
+   Seite „Konto einrichten“ und muss dort alles auf einmal anlegen: eigenes Passwort, Name, Adresse,
+   Bankverbindung (Kontoinhaber:in, IBAN, BIC optional) und **mindestens einen Profil-Link** – auf
+   campus-a-college.at und/oder campus-a.at, je nachdem, wofür man schreibt. Vorher geht nichts
+   anderes, auch nicht über die API (der Server prüft es). Redaktion, Buchhaltung und Admin ohne
+   Autor:innen-Rolle legen nur das Passwort fest. Fehlt einer bestehenden Autor:in etwas (z. B. nach
+   dem Update der Profil-Link), erscheint die Seite beim nächsten Anmelden ebenfalls, mit den
+   vorhandenen Daten vorausgefüllt. Die Daten werden für jede Honorarnote automatisch übernommen.
+2. **Meine Leistungen:** Jeden Beitrag speichern, sobald er erschienen ist – **für campus a college
+   oder campus a** (vorausgewählt ist das Medium mit hinterlegtem Profil-Link), als *Kolumne* oder
    *außerordentliches Honorar* (mit „Vereinbart mit“), jeweils mit Titel, Veröffentlichungsdatum
    und Betrag. Bei Kolumnen kann man die **Art der Kolumne** als freien Text dazuschreiben (optional),
    bei außerordentlichen Honoraren die **Art des Honorars** (freier Text, Pflicht). Der Betrag ist mit dem **Honorarsatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin
-   einstellbar). Gespeicherte Leistungen kann man bearbeiten oder löschen.
-   **Artikel von campus-a-college.at übernehmen:** Wer im **Profil** den Link zur eigenen Profilseite
-   auf campus-a-college.at einträgt (z. B. `https://www.campus-a-college.at/profil/ae10…`), sieht unter
-   „Meine Leistungen“ **alle eigenen Artikel** mit Datum, Ressort und Kategorie (z. B. „Meinung“).
-   „Übernehmen“ füllt Titel und Veröffentlichungsdatum aus und verknüpft die Leistung mit dem Artikel.
+   **pro Medium** einstellbar). Gespeicherte Leistungen kann man bearbeiten oder löschen.
+   **Artikel übernehmen:** Unter „Meine Leistungen“ stehen **alle eigenen Artikel** von
+   campus-a-college.at und campus-a.at (je nach hinterlegten Profil-Links) mit Medium, Datum, Ressort
+   und Kategorie (z. B. „Meinung“). „Übernehmen“ füllt Medium, Titel und Veröffentlichungsdatum aus
+   und verknüpft die Leistung mit dem Artikel.
    Jeder Artikel lässt sich nur einmal abrechnen, schon erfasste sind markiert. Die Redaktion sieht in
    der Honorarnote bei jeder Leistung den Link zum Artikel.
 3. **Monatsabrechnung:** Einmal im Monat die gesammelten Leistungen auswählen und als
-   Honorarnote abschicken. Die Nummer folgt der Vorlage: `NACHNAME-VO-JAHR-NN`
+   Honorarnote abschicken – **getrennt pro Medium**: Es gibt eine Karte für campus a college und eine
+   für campus a, jede mit eigenem Knopf. Die Honorarnote heißt dann „Honorarnote campus a college“
+   bzw. „Honorarnote campus a“ (Word und PDF). Die Nummer folgt der Vorlage: `NACHNAME-VO-JAHR-NN`
    (z. B. `MUSTERFRAU-MA-2026-01`). Wurde im Monat schon eine abgeschickt, kommt ein Hinweis.
-4. **Redaktion:** Filter nach Status, Suche nach Name oder Nummer, Sortierung nach Datum und
+4. **Redaktion:** Filter nach Status und Medium, Suche nach Name oder Nummer, Sortierung nach Datum und
    Betrag. Annehmen, Ablehnen (Begründung Pflicht), Betrag pro Leistung korrigieren (Vermerk
    Pflicht), interne Kommentare, Verlauf. **IBAN und Adresse sind ausgeblendet.**
 5. **Abgelehnt?** Die Autor:in holt die Leistungen mit einem Klick zurück, korrigiert sie und
@@ -110,13 +121,17 @@ baut dieselben Inhalte mit [pdf-lib](https://pdf-lib.js.org) direkt im Browser a
 (Word-Dateien lassen sich im Browser nicht in PDF umwandeln). Ändert sich die Vorlage, muss das
 PDF-Layout dort mit angepasst werden.
 
-## Artikel von campus-a-college.at
+## Artikel von campus-a-college.at und campus-a.at
 
-campus-a-college.at läuft mit TYPO3 und hat keine Schnittstelle für Artikeldaten. Der Server liest deshalb
+Beide Seiten laufen mit TYPO3 (gleiches System, aber **eigene Profile**: dieselbe Person hat auf jeder
+Seite eine andere Profil-ID) und haben keine Schnittstelle für Artikeldaten. Der Server liest deshalb
 die normalen Seiten aus ([`server/campus-artikel.js`](server/campus-artikel.js)):
 
 - `/profil/<ID>?fetchNews=1` – Artikelliste der Profilseite (12 pro Seite, der Server blättert alle Seiten durch)
-- `/news/detail/<name>` – Artikelseite mit Datum, Ressort, Region und Kategorie
+- `/news/detail/<name>` (campus-a-college.at) bzw. `/news/news-detail/<name>` (campus-a.at) –
+  Artikelseite mit Datum, Ressort, Region und Kategorie
+
+Die Adressen beider Seiten stehen in [`public/js/lib/campus.js`](public/js/lib/campus.js).
 
 Beim ersten Aufruf pro Person werden alle Artikelseiten gelesen (bei 150 Artikeln ca. 20 Sekunden).
 Die Artikeldaten landen in der Datenbank, danach wird nur noch die Liste auf neue Artikel geprüft

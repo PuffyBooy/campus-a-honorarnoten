@@ -3,6 +3,7 @@ import {
   ROLLEN_LABEL, STATUS_LABEL, esc, formatBetragPlain, formatEuro, formatMonat, formatZeitpunkt, parseBetrag, vollerName,
 } from '../lib/format.js';
 import { downloadText } from '../lib/csv.js';
+import { MEDIEN, MEDIUM_KEYS } from '../lib/campus.js';
 import { fehlerText, kopierenMitFeedback, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 
 const REITER = {
@@ -251,15 +252,20 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <label for="e-plz">PLZ und Ort</label><input id="e-plz" name="plz_ort" value="${esc(e.empfaenger.plz_ort)}">
       <label for="e-uid">UID-Nummer</label><input id="e-uid" name="uid" value="${esc(e.empfaenger.uid)}">
       <h2 class="abstand-oben">Honorarsätze</h2>
-      <p class="tipp">Wird als Betrag vorausgefüllt. Leer = kein Standardsatz.</p>
+      <p class="tipp">Wird als Betrag vorausgefüllt, getrennt für campus a college und campus a. Leer = kein Standardsatz.</p>
+      ${MEDIUM_KEYS.map((m) => {
+        const s = e.honorarsaetze?.[m] ?? {};
+        const wert = (k) => (s[k] != null ? esc(formatBetragPlain(s[k])) : '');
+        return `
+      <h3>${esc(MEDIEN[m].name)}</h3>
       <div class="zeile">
-        <div class="feld"><label for="e-satz-kolumne">Kolumne (EUR)</label>
-          <input id="e-satz-kolumne" name="satz_kolumne" inputmode="decimal" autocomplete="off"
-                 value="${e.honorarsaetze?.kolumne != null ? esc(formatBetragPlain(e.honorarsaetze.kolumne)) : ''}"></div>
-        <div class="feld"><label for="e-satz-ausser">Außerordentliches Honorar (EUR)</label>
-          <input id="e-satz-ausser" name="satz_ausserordentlich" inputmode="decimal" autocomplete="off" placeholder="individuell"
-                 value="${e.honorarsaetze?.ausserordentlich != null ? esc(formatBetragPlain(e.honorarsaetze.ausserordentlich)) : ''}"></div>
-      </div>
+        <div class="feld"><label for="e-satz-${m}-kolumne">Kolumne (EUR)</label>
+          <input id="e-satz-${m}-kolumne" name="satz_${m}_kolumne" inputmode="decimal" autocomplete="off" value="${wert('kolumne')}"></div>
+        <div class="feld"><label for="e-satz-${m}-ausser">Außerordentliches Honorar (EUR)</label>
+          <input id="e-satz-${m}-ausser" name="satz_${m}_ausserordentlich" inputmode="decimal" autocomplete="off" placeholder="individuell"
+                 value="${wert('ausserordentlich')}"></div>
+      </div>`;
+      }).join('')}
       <h2 class="abstand-oben">Datenschutz</h2>
       <label for="e-kontakt">Kontakt für Datenschutzanfragen (E-Mail)</label>
       <input id="e-kontakt" name="kontakt" type="email" value="${esc(e.datenschutzKontakt)}">
@@ -280,7 +286,10 @@ async function einstellungen(inhalt, { store, neuLaden }) {
     };
     let honorarsaetze;
     try {
-      honorarsaetze = { kolumne: satz(form.satz_kolumne), ausserordentlich: satz(form.satz_ausserordentlich) };
+      honorarsaetze = Object.fromEntries(MEDIUM_KEYS.map((m) => [m, {
+        kolumne: satz(form.elements[`satz_${m}_kolumne`]),
+        ausserordentlich: satz(form.elements[`satz_${m}_ausserordentlich`]),
+      }]));
       fehler.textContent = '';
     } catch (e) {
       fehler.textContent = e.message;

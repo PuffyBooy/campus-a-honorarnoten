@@ -4,6 +4,7 @@
 import { formatBetragDokument, formatDatum, summe } from './format.js';
 import { formatIban } from './iban.js';
 import { ortAusPlzOrt } from './honorarnote-docx.js';
+import { mediumName } from './campus.js';
 
 const A4 = [595.28, 841.89];
 const RAND = 56.7; // 2 cm
@@ -171,7 +172,7 @@ function noteSchreiben(d, note) {
   const name = `${a.vorname} ${a.nachname}`.trim();
   d.seitenDerNote = [];
   d.neueSeite();
-  d.absatz('Honorarnote campus a college', { fett: true, groesse: 18, nach: 10 });
+  d.absatz(`Honorarnote ${mediumName(note.medium)}`, { fett: true, groesse: 18, nach: 10 });
   d.angaben(
     [['Vor- und Nachname', name], ['Straße und Hausnummer', a.strasse], ['PLZ und Ort', a.plz_ort], ['IBAN', formatIban(note.zahlung?.iban)]],
     [e.name, e.strasse, e.plz_ort, e.uid].filter(Boolean),
@@ -215,7 +216,7 @@ function noteSchreiben(d, note) {
  */
 export async function honorarnotenPdf(noten, PDFLib) {
   const pdf = await PDFLib.PDFDocument.create();
-  pdf.setTitle(noten.length === 1 ? `Honorarnote ${noten[0].nummer}` : `Honorarnoten (${noten.length})`);
+  pdf.setTitle(noten.length === 1 ? `Honorarnote ${mediumName(noten[0].medium)} ${noten[0].nummer}` : `Honorarnoten (${noten.length})`);
   pdf.setCreator('campus a college – Honorarnoten');
   pdf.setProducer('campus a college – Honorarnoten');
   const d = new Dokument(

@@ -157,6 +157,14 @@ const MIGRATIONEN = [
     geholt_am text not null
   );
   `,
+  // Version 4: zwei Medien – campus a college und campus a – mit getrennten Honorarnoten
+  `
+  alter table nutzer add column campus_a_profil text not null default '';   -- Profil-ID auf campus-a.at
+  alter table positionen add column medium text not null default 'college';
+  alter table note_positionen add column medium text not null default 'college';
+  alter table noten add column medium text not null default 'college';
+  create index noten_medium on noten(medium);
+  `,
 ];
 
 export function oeffneDatenbank(pfad) {

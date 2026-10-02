@@ -1,7 +1,7 @@
 // Bearbeiter-Terminal – alle Honorarnoten mit Filter, Suche und Sortierung
 import { STATUS_LABEL, esc, formatDatum, formatEuro, formatMonat, vollerName } from '../lib/format.js';
 import { statusBadge } from '../lib/ui.js';
-import { hatArtikel } from '../lib/campus.js';
+import { MEDIEN, hatArtikel, mediumBadge, mediumOder } from '../lib/campus.js';
 
 /** „· 2 mit Artikel-Link“ – zeigt, wie viele Leistungen sich direkt anschauen lassen */
 function linkText(n) {
@@ -10,7 +10,7 @@ function linkText(n) {
 }
 
 // Filter bleiben erhalten, wenn man aus der Detailansicht zurückkommt
-const filter = { status: 'eingereicht', suche: '', sortierung: 'eingereicht_desc' };
+const filter = { status: 'eingereicht', medium: '', suche: '', sortierung: 'eingereicht_desc' };
 
 const SORTIERUNGEN = {
   eingereicht_desc: ['Datum: neueste zuerst', (a, b) => b.eingereicht_am.localeCompare(a.eingereicht_am)],
@@ -36,6 +36,13 @@ export async function render(el, { store, istAktuell }) {
         </select>
       </div>
       <div class="feld">
+        <label for="r-medium">Medium</label>
+        <select id="r-medium">
+          <option value="">Beide</option>
+          ${Object.entries(MEDIEN).map(([m, x]) => `<option value="${m}">${esc(x.name)} (${daten.filter((n) => mediumOder(n.medium) === m).length})</option>`).join('')}
+        </select>
+      </div>
+      <div class="feld">
         <label for="r-suche">Suche (Name oder Nummer)</label>
         <input id="r-suche" type="search" placeholder="z. B. Musterfrau oder MUSTERFRAU-MA-2026-01" autocomplete="off">
       </div>
@@ -50,6 +57,8 @@ export async function render(el, { store, istAktuell }) {
     <div id="r-tabelle"></div>`;
 
   const statusSel = el.querySelector('#r-status');
+  const mediumSel = el.querySelector('#r-medium');
+  mediumSel.value = filter.medium;
   const suche = el.querySelector('#r-suche');
   const sort = el.querySelector('#r-sort');
   statusSel.value = filter.status;
@@ -60,6 +69,7 @@ export async function render(el, { store, istAktuell }) {
     const q = filter.suche.trim().toLowerCase();
     const liste = daten
       .filter((n) => !filter.status || n.status === filter.status)
+      .filter((n) => !filter.medium || mediumOder(n.medium) === filter.medium)
       .filter((n) => !q || n.nummer.toLowerCase().includes(q) || vollerName(n.autor).toLowerCase().includes(q)
         || `${n.autor.nachname} ${n.autor.vorname}`.toLowerCase().includes(q))
       .sort(SORTIERUNGEN[filter.sortierung][1]);
@@ -75,7 +85,7 @@ export async function render(el, { store, istAktuell }) {
           <tbody>${liste.map((n) => `
             <tr data-id="${esc(n.id)}">
               <td data-label="Nummer"><a href="#/redaktion/${esc(n.id)}" class="nummer">${esc(n.nummer)}</a></td>
-              <td data-label="Name">${esc(vollerName(n.autor))}</td>
+              <td data-label="Name"><span>${esc(vollerName(n.autor))}<br>${mediumBadge(n.medium)}</span></td>
               <td data-label="Abrechnung"><span>${esc(formatMonat(n.monat))}<br><span class="klein">${n.positionen.length}
                 ${n.positionen.length === 1 ? 'Leistung' : 'Leistungen'}${linkText(n)}</span></span></td>
               <td data-label="Abgeschickt">${esc(formatDatum(n.eingereicht_am.slice(0, 10)))}</td>
@@ -87,6 +97,7 @@ export async function render(el, { store, istAktuell }) {
   }
 
   statusSel.addEventListener('change', () => { filter.status = statusSel.value; zeichnen(); });
+  mediumSel.addEventListener('change', () => { filter.medium = mediumSel.value; zeichnen(); });
   suche.addEventListener('input', () => { filter.suche = suche.value; zeichnen(); });
   sort.addEventListener('change', () => { filter.sortierung = sort.value; zeichnen(); });
   el.querySelector('#r-tabelle').addEventListener('click', (ev) => {

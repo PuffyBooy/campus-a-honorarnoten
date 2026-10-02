@@ -3,6 +3,7 @@ import { MODUS } from './modus.js';
 import { esc } from './lib/format.js';
 import { fehlerText, ladeAnzeige } from './lib/ui.js';
 import * as login from './views/login.js';
+import * as einrichtung from './views/einrichtung.js';
 import * as profil from './views/profil.js';
 import * as leistungen from './views/leistungen.js';
 import * as noten from './views/noten.js';
@@ -35,6 +36,7 @@ const ROUTEN = [
 ];
 
 const darf = (nutzer, route) => route.rolle.some((r) => nutzer.rollen.includes(r));
+const kontoEinrichten = (nutzer) => nutzer.muss_passwort_aendern || !store.profilVollstaendig(nutzer);
 
 function aktuellerPfad() {
   const h = location.hash;
@@ -89,7 +91,7 @@ document.addEventListener('click', (e) => {
 
 async function renderNav(nutzer, pfad) {
   menueSchliessen();
-  const mitMenue = Boolean(nutzer && !nutzer.muss_passwort_aendern);
+  const mitMenue = Boolean(nutzer && !kontoEinrichten(nutzer));
   document.body.classList.toggle('mit-menue', mitMenue);
   if (!mitMenue) {
     nav.innerHTML = '';
@@ -140,14 +142,14 @@ async function render() {
     } });
     return;
   }
-  // Erstes Login mit Startpasswort: zuerst eigenes Passwort festlegen
-  if (nutzer.muss_passwort_aendern) {
-    login.renderPasswortFestlegen(main, {
+  // Erstes Login mit Startpasswort bzw. Konto noch nicht fertig: zuerst Konto einrichten
+  // (eigenes Passwort; Autor:innen zusätzlich Adresse, Bankverbindung und Profil-Link)
+  if (kontoEinrichten(nutzer)) {
+    einrichtung.render(main, {
       store,
       nutzer,
       weiter: () => {
-        // Autor:innen tragen danach gleich Adresse und Bankverbindung ein
-        const ziel = nutzer.rollen.includes('autor') && !store.profilVollstaendig(nutzer) ? 'profil' : startseite(nutzer);
+        const ziel = startseite(nutzer);
         if (aktuellerPfad() === ziel) render();
         else location.hash = '#/' + ziel;
       },

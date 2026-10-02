@@ -1,12 +1,13 @@
-// Artikel einer Autor:in von campus-a-college.at holen.
+// Artikel einer Autor:in von campus-a-college.at bzw. campus-a.at holen.
 //
 // Die Seite läuft mit TYPO3 und hat keine Schnittstelle für Artikeldaten. Deshalb werden die
 // normalen Seiten ausgelesen:
 //   /profil/<ID>?fetchNews=1   Liste der veröffentlichten Artikel (12 pro Seite, mit Seiten-Links)
-//   /news/detail/<name>        Artikelseite mit Datum, Ressort und Kategorie (z. B. „Meinung“)
+//   /news/detail/<name>        Artikelseite mit Datum, Ressort und Kategorie (z. B. „Meinung“);
+//                              auf campus-a.at heißt der Pfad /news/news-detail/<name>
 // Artikeldaten ändern sich kaum und werden deshalb in der Datenbank zwischengespeichert,
 // die Liste pro Profil für einige Minuten im Speicher.
-import { CAMPUS_BASIS, artikelUrlGueltig } from '../public/js/lib/campus.js';
+import { MEDIEN, STANDARD_MEDIUM, mediumVonArtikel } from '../public/js/lib/campus.js';
 
 const MAX_SEITEN = 50;
 const MAX_ARTIKEL = 600;
@@ -34,24 +35,25 @@ function text(html) {
     .trim();
 }
 
-const absolut = (pfad) => `${CAMPUS_BASIS}${pfad.replaceAll('&amp;', '&')}`;
+const absolut = (basis, pfad) => `${basis}${pfad.replaceAll('&amp;', '&')}`;
 
 /** Artikelliste einer Profilseite: Artikel (Adresse, Titel, Ressort) und Links zu weiteren Seiten */
-export function listeParsen(html) {
+export function listeParsen(html, medium = STANDARD_MEDIUM) {
+  const { basis } = MEDIEN[medium];
   const start = html.indexOf('id="newsSection"');
   const bereich = start >= 0 ? html.slice(start) : html;
   const artikel = [];
   const gesehen = new Set();
   // eine Karte: <span class="news-card-kicker"><span>Ressort</span></span> <a class="news-card-title-link" href="/news/detail/…">Titel</a>
-  const karte = /news-card-kicker">([\s\S]*?)<\/span>\s*<\/span>[\s\S]*?<a class="news-card-title-link"[^>]*href="(\/news\/detail\/[^"?#]+)"[^>]*>([\s\S]*?)<\/a>/g;
+  const karte = /news-card-kicker">([\s\S]*?)<\/span>\s*<\/span>[\s\S]*?<a class="news-card-title-link"[^>]*href="(\/news\/(?:news-)?detail\/[^"?#]+)"[^>]*>([\s\S]*?)<\/a>/g;
   for (const m of bereich.matchAll(karte)) {
-    const url = absolut(m[2]);
-    if (!artikelUrlGueltig(url) || gesehen.has(url)) continue;
+    const url = absolut(basis, m[2]);
+    if (mediumVonArtikel(url) !== medium || gesehen.has(url)) continue;
     gesehen.add(url);
     artikel.push({ url, titel: text(m[3]).slice(0, 200), ressort: text(m[1]).slice(0, 100) });
   }
   const seiten = [...new Set(Array.from(
-    bereich.matchAll(/href="(\/profil\/[0-9a-f]+\?fetchNews=1&amp;[^"]*currentPage[^"]*)"/g), (m) => absolut(m[1]),
+    bereich.matchAll(/href="(\/profil\/[0-9a-f]+\?fetchNews=1&amp;[^"]*currentPage[^"]*)"/g), (m) => absolut(basis, m[1]),
   ))];
   return { artikel, seiten };
 }
@@ -95,15 +97,15 @@ async function nacheinander(liste, anzahl, fn) {
   await Promise.all(arbeiter);
 }
 
-const listenCache = new Map(); // profilId -> { zeit, artikel } (Reihenfolge wie auf der Seite: neueste zuerst)
-const laufend = new Map();     // profilId -> Promise (gleichzeitige Abrufe teilen sich die Arbeit)
+const listenCache = new Map(); // "medium:profilId" -> { zeit, artikel } (Reihenfolge wie auf der Seite: neueste zuerst)
+const laufend = new Map();     // "medium:profilId" -> Promise (gleichzeitige Abrufe teilen sich die Arbeit)
 
 /**
  * Artikelliste eines Profils über alle Seiten. Ist die Liste schon bekannt, wird nur so weit geblättert,
  * bis eine Seite nur noch bekannte Artikel enthält – neue Artikel stehen auf der Seite ganz vorne.
  */
-async function listeHolen(profilId, holen, bisherige) {
-  const erste = `${CAMPUS_BASIS}/profil/${profilId}?fetchNews=1`;
+async function listeHolen(medium, profilId, holen, bisherige) {
+  const erste = `${MEDIEN[medium].basis}/profil/${profilId}?fetchNews=1`;
   // Seiten nach Seitennummer merken: dieselbe Seite kann unter verschiedenen Links auftauchen
   const seitenNr = (url) => new URL(url).searchParams.get('tx_news_pi1[currentPage]') ?? '1';
   const bekannt = new Set(bisherige?.map((a) => a.url));
@@ -114,7 +116,7 @@ async function listeHolen(profilId, holen, bisherige) {
     const url = offen.shift();
     if (besucht.has(seitenNr(url))) continue;
     besucht.add(seitenNr(url));
-    const { artikel: a, seiten } = listeParsen(await holen(url));
+    const { artikel: a, seiten } = listeParsen(await holen(url), medium);
     for (const x of a) if (!artikel.has(x.url)) artikel.set(x.url, x);
     if (bisherige && a.length && a.every((x) => bekannt.has(x.url))) {
       for (const x of bisherige) if (!artikel.has(x.url)) artikel.set(x.url, x);
@@ -125,12 +127,13 @@ async function listeHolen(profilId, holen, bisherige) {
   return [...artikel.values()];
 }
 
-async function abrufen(db, profilId, holen, neu) {
-  const cache = listenCache.get(profilId);
+async function abrufen(db, medium, profilId, holen, neu) {
+  const schluessel = `${medium}:${profilId}`;
+  const cache = listenCache.get(schluessel);
   let liste = cache?.artikel;
   if (!cache || neu || Date.now() - cache.zeit >= LISTE_GUELTIG_MS) {
-    liste = await listeHolen(profilId, holen, cache?.artikel);
-    listenCache.set(profilId, { zeit: Date.now(), artikel: liste });
+    liste = await listeHolen(medium, profilId, holen, cache?.artikel);
+    listenCache.set(schluessel, { zeit: Date.now(), artikel: liste });
     if (listenCache.size > 500) listenCache.delete(listenCache.keys().next().value);
   }
 
@@ -160,6 +163,7 @@ async function abrufen(db, profilId, holen, neu) {
     const d = details.get(a.url) ?? {};
     return {
       url: a.url,
+      medium,
       titel: d.titel || a.titel,
       datum: d.datum ?? '',
       ressort: d.ressort || a.ressort,
@@ -170,14 +174,16 @@ async function abrufen(db, profilId, holen, neu) {
 }
 
 /**
- * Alle Artikel eines Profils, neueste zuerst: { url, titel, datum, ressort, region, kategorie }.
+ * Alle Artikel eines Profils auf der Seite des Mediums, neueste zuerst:
+ * { url, medium, titel, datum, ressort, region, kategorie }.
  * Beim ersten Mal werden alle Artikelseiten gelesen (dauert je nach Anzahl etwas), danach kommen
  * Datum und Kategorie aus der Datenbank. neu = true: Liste sofort auf neue Artikel prüfen.
  * Wirft, wenn campus-a-college.at nicht erreichbar ist.
  */
-export function artikelVonProfil(db, profilId, { holen = standardHolen, neu = false } = {}) {
-  if (!laufend.has(profilId)) {
-    laufend.set(profilId, abrufen(db, profilId, holen, neu).finally(() => laufend.delete(profilId)));
+export function artikelVonProfil(db, profilId, { medium = STANDARD_MEDIUM, holen = standardHolen, neu = false } = {}) {
+  const schluessel = `${medium}:${profilId}`;
+  if (!laufend.has(schluessel)) {
+    laufend.set(schluessel, abrufen(db, medium, profilId, holen, neu).finally(() => laufend.delete(schluessel)));
   }
-  return laufend.get(profilId);
+  return laufend.get(schluessel);
 }

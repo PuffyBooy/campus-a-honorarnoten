@@ -3,6 +3,7 @@
 // nur ihre Beispielwerte werden ersetzt und die Tabellenzeilen befüllt.
 import { formatBetragDokument, formatDatum, summe } from './format.js';
 import { formatIban } from './iban.js';
+import { mediumName } from './campus.js';
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const W14 = 'http://schemas.microsoft.com/office/word/2010/wordml';
@@ -114,6 +115,11 @@ function dokumentBefuellen(xml, note, dom = globalThis) {
     if (HINWEISE.some((h) => t.startsWith(h))) {
       Array.from(p.childNodes).forEach((n) => { if (!(n.namespaceURI === W && n.localName === 'pPr')) n.remove(); });
     }
+  }
+
+  // Titel der Vorlage („Honorarnote campus a college“) an das Medium der Note anpassen
+  for (const t of alle(doc, 't')) {
+    if (t.textContent.trim() === 'Honorarnote campus a college') t.textContent = `Honorarnote ${mediumName(note.medium)}`;
   }
 
   const a = note.autor;

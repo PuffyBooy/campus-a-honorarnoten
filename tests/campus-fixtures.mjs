@@ -2,14 +2,14 @@
 const BASIS = 'https://www.campus-a-college.at';
 const PROFIL = 'ae1054937a1ae033e117';
 
-const karte = (slug, titel, ressort) => `
+const karte = (slug, titel, ressort, pfad = 'detail') => `
   <div class="swiper-slide news-card group">
     <div class="news-card-media relative">
-      <a class="group" title="${titel}" href="/news/detail/${slug}"><img class="news-card-image" src="/x.jpg" alt="" /></a>
+      <a class="group" title="${titel}" href="/news/${pfad}/${slug}"><img class="news-card-image" src="/x.jpg" alt="" /></a>
     </div>
     <div class="news-card-body">
       <span class="news-card-kicker"> <span>${ressort}</span> </span>
-      <a class="news-card-title-link" title="${titel}" href="/news/detail/${slug}"> ${titel} </a>
+      <a class="news-card-title-link" title="${titel}" href="/news/${pfad}/${slug}"> ${titel} </a>
       <div class="news-card-meta"><span class="text-xs">Anna Müller</span><span class="text-xs"> 4 Min. </span></div>
     </div>
   </div>`;
@@ -47,7 +47,18 @@ export const artikelSeite = ({ titel, ressort, region, kategorie, datum }) => `<
     </div>
   </article></div></div></body></html>`;
 
+// campus-a.at: eigenes Profil, Artikel unter /news/news-detail/
+const CAMPUS_A = 'https://campus-a.at';
+export const CAMPUS_A_PROFIL = '0eb9253511e3f774dab6';
+export const campusAListe = `<!DOCTYPE html><html><body><div id="newsSection">
+  ${karte('das-geschaeft-mit-universitaets-rankings', 'Das Geschäft mit Universitäts-Rankings', 'Wissenschaft', 'news-detail')}
+  </div></body></html>`;
+
 const seiten = {
+  [`${CAMPUS_A}/profil/${CAMPUS_A_PROFIL}?fetchNews=1`]: campusAListe,
+  [`${CAMPUS_A}/news/news-detail/das-geschaeft-mit-universitaets-rankings`]: artikelSeite({
+    titel: 'Das Geschäft mit Universitäts-Rankings', ressort: 'Wissenschaft', region: 'International', kategorie: 'Fakten', datum: '11.09.2026',
+  }),
   [`${BASIS}/profil/${PROFIL}?fetchNews=1`]: listeSeite1,
   [`${BASIS}/profil/${PROFIL}?fetchNews=1&tx_news_pi1%5Bcontroller%5D=News&tx_news_pi1%5BcurrentPage%5D=1&cHash=abc1`]: listeSeite1,
   [`${BASIS}/profil/${PROFIL}?fetchNews=1&tx_news_pi1%5Bcontroller%5D=News&tx_news_pi1%5BcurrentPage%5D=2&cHash=abc2`]: listeSeite2,
