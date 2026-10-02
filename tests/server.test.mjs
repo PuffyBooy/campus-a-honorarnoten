@@ -400,7 +400,9 @@ test('Buchhaltung: ganze Woche als bezahlt markieren (alle oder keine)', async (
 });
 
 test('Redigieren (campus a college): Kategorie wie Kolumne, Anzahl Texte × Satz', async () => {
-  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Ida', nachname: 'Lektor', email: 'ida@example.org', rollen: ['autor'] });
+  // Redigieren nur mit Rolle vom Admin (bringt die Rolle Autor:in automatisch mit)
+  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Ida', nachname: 'Lektor', email: 'ida@example.org', rollen: ['redigieren'] });
+  assert.deepEqual(z.nutzer?.rollen ?? (await k.admin.ok('nutzerListe')).find((n) => n.email === 'ida@example.org').rollen, ['autor', 'redigieren']);
   const ida = client();
   await anmeldenMitNeuemPasswort(ida, 'ida@example.org', z.passwort);
   const profil = {
@@ -411,18 +413,14 @@ test('Redigieren (campus a college): Kategorie wie Kolumne, Anzahl Texte × Satz
   const red = { kategorie: 'redigieren', veroeffentlichung: '2026-09-30' };
   assert.match((await ida.aufruf('leistungSpeichern', { ...red, anzahl: 0 })).fehler, /Anzahl/);
   assert.match((await ida.aufruf('leistungSpeichern', { ...red, anzahl: 2.5 })).fehler, /Anzahl/);
-  // Redigieren gibt es nur bei campus a college – ohne Profil-Link dort nicht
-  assert.match((await ida.aufruf('leistungSpeichern', { ...red, anzahl: 5 })).fehler, /kein Profil-Link/);
-  await ida.ok('profilSpeichern', { ...profil, campus_profil: 'https://www.campus-a-college.at/profil/abcdef123456' });
-  // Betrag rechnet der Server (5 × 2 €), immer campus a college
+  // Betrag rechnet der Server (5 × 2 €), immer campus a college – auch ohne Profil-Link dort
   await ida.ok('leistungSpeichern', { ...red, anzahl: 5, betrag: 999, medium: 'campus-a' });
   const [p] = await ida.ok('meineLeistungen');
   assert.deepEqual([p.kategorie, p.medium, p.anzahl, p.betrag, p.titel], ['redigieren', 'college', 5, 10, 'Redigieren (5 Texte)']);
-  // keine eigene Freischaltung nötig: jede Autor:in mit Profil-Link zu campus-a-college.at
-  await k.anna.ok('leistungSpeichern', { ...red, anzahl: 3 });
-  const annas = (await k.anna.ok('meineLeistungen')).find((x) => x.kategorie === 'redigieren');
-  assert.equal(annas.betrag, 6);
-  await k.anna.ok('leistungLoeschen', annas.id);
+  // ohne Rolle „Redigieren“ geht es nicht
+  const ohne = await k.anna.aufruf('leistungSpeichern', { ...red, anzahl: 3 });
+  assert.equal(ohne.status, 403);
+  assert.match(ohne.fehler, /nicht freigeschaltet/);
 
   // Satz einstellbar; bearbeiten rechnet neu
   await k.admin.ok('einstellungenSpeichern', {

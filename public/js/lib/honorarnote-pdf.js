@@ -1,7 +1,7 @@
 // Honorarnoten als PDF – gleicher Inhalt und Aufbau wie die offizielle Word-Vorlage
 // (public/vorlage/honorarnote-vorlage.docx). Mehrere Noten landen in einer Datei,
 // jede Note beginnt auf einer neuen Seite.
-import { formatBetragDokument, formatDatum, redigierBeschreibung, summe } from './format.js';
+import { ausserordentlichePositionen, formatBetragDokument, formatDatum, summe } from './format.js';
 import { formatIban } from './iban.js';
 import { ortAusPlzOrt } from './honorarnote-docx.js';
 import { mediumName } from './campus.js';
@@ -185,7 +185,7 @@ function noteSchreiben(d, note) {
   d.absatz('Sehr geehrte Damen und Herren, für folgende Leistungen berechne ich wie vereinbart:', { vor: 14, nach: 8 });
 
   const kolumnen = note.positionen.filter((p) => p.kategorie === 'kolumne');
-  const ausserord = note.positionen.filter((p) => p.kategorie === 'ausserordentlich');
+  const ausserord = ausserordentlichePositionen(note.positionen);
   d.absatz('1. Kolumnen', { fett: true, groesse: 11, vor: 4, nach: 4 });
   d.tabelle(
     [{ titel: 'Titel des Beitrags', anteil: 0.6 }, { titel: 'Veröffentlichung', anteil: 0.2 }, { titel: 'Betrag in Euro', anteil: 0.2, rechts: true }],
@@ -199,16 +199,6 @@ function noteSchreiben(d, note) {
     ausserord.map((p) => [p.titel, formatDatum(p.veroeffentlichung), p.vereinbart_mit ?? '', formatBetragDokument(p.betrag)]),
     ['Zwischensumme außerordentliche Honorare', '', '', formatBetragDokument(summe(ausserord))],
   );
-  const redigiert = note.positionen.filter((p) => p.kategorie === 'redigieren');
-  if (redigiert.length) {
-    d.absatz('3. Redigieren', { fett: true, groesse: 11, vor: 12, nach: 4 });
-    d.tabelle(
-      [{ titel: 'Beschreibung', anteil: 0.44 }, { titel: 'Datum', anteil: 0.18 },
-        { titel: 'Anzahl Texte', anteil: 0.18, rechts: true }, { titel: 'Betrag in Euro', anteil: 0.2, rechts: true }],
-      redigiert.map((p) => [redigierBeschreibung(p), formatDatum(p.veroeffentlichung), String(p.anzahl ?? ''), formatBetragDokument(p.betrag)]),
-      ['Zwischensumme Redigieren', '', '', formatBetragDokument(summe(redigiert))],
-    );
-  }
   d.y -= 12;
   d.tabelle(
     [{ titel: 'Gesamtbetrag in Euro', anteil: 0.8 }, { titel: formatBetragDokument(summe(note.positionen)), anteil: 0.2, rechts: true }],

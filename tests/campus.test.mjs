@@ -158,10 +158,18 @@ test('Honorarsätze pro Medium', async () => {
 
 test('Redigieren: Bezeichnung auf der Honorarnote', async () => {
   const { rollenNormalisieren } = await import('../public/js/lib/konto.js');
-  const { redigierBeschreibung, artText } = await import('../public/js/lib/format.js');
-  assert.deepEqual(rollenNormalisieren(['redigieren', 'autor']), ['autor'], 'keine eigene Rolle fürs Redigieren');
+  const { redigierText, ausserordentlichePositionen, artText } = await import('../public/js/lib/format.js');
+  assert.deepEqual(rollenNormalisieren(['redigieren']), ['autor', 'redigieren'], 'Redigieren bringt Autor:in mit');
   assert.deepEqual(rollenNormalisieren(['admin', 'quatsch']), ['admin']);
-  assert.equal(redigierBeschreibung({ titel: 'Redigieren (1 Text)', anzahl: 1 }), 'Redigieren', 'ohne eigene Beschreibung');
-  assert.equal(redigierBeschreibung({ titel: 'September-Ausgabe', anzahl: 7 }), 'September-Ausgabe');
+  assert.equal(redigierText({ titel: 'Redigieren (1 Text)', anzahl: 1 }), 'Redigieren (1 Text)');
+  assert.equal(redigierText({ titel: 'September', anzahl: 7 }), 'Redigieren (7 Texte): September');
+  assert.equal(redigierText({ titel: 'Redigieren September', anzahl: 7 }), 'Redigieren September (7 Texte)');
+  const liste = ausserordentlichePositionen([
+    { kategorie: 'kolumne', titel: 'K' },
+    { kategorie: 'ausserordentlich', titel: 'Interview', vereinbart_mit: 'Rita' },
+    { kategorie: 'redigieren', titel: '', anzahl: 3 },
+  ]);
+  assert.deepEqual(liste.map((p) => [p.titel, p.vereinbart_mit]), [['Interview', 'Rita'], ['Redigieren (3 Texte)', '–']],
+    'Redigieren steht bei den außerordentlichen Honoraren');
   assert.equal(artText({ kategorie: 'redigieren', anzahl: 7 }), '7 Texte');
 });
