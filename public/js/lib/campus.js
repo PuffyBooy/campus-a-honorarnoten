@@ -30,6 +30,12 @@ export const mediumName = (m) => MEDIEN[mediumOder(m)].name;
 // Feld im Profil, in dem die Profil-ID der jeweiligen Seite steht
 export const PROFIL_FELD = { college: 'campus_profil', 'campus-a': 'campus_a_profil' };
 
+/** Medien, für die im Profil ein Link hinterlegt ist – nur für diese kann man Leistungen erfassen */
+export const verbundeneMedien = (profil) => MEDIUM_KEYS.filter((m) => String(profil?.[PROFIL_FELD[m]] ?? '').trim());
+
+/** Fehlermeldung, wenn für ein Medium kein Profil-Link hinterlegt ist */
+export const nichtVerbunden = (m) => `Für ${MEDIEN[mediumOder(m)].name} ist kein Profil-Link hinterlegt. Bitte zuerst im Profil den Link zu ${MEDIEN[mediumOder(m)].seite} eintragen.`;
+
 const PROFIL_ID = /^[0-9a-f]{12,40}$/;
 
 /**

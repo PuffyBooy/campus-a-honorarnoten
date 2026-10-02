@@ -2,6 +2,8 @@
 export const DEMO_PASSWORT = 'demo1234';
 
 export const DEMO_KONTEN = [
+  // startet bei jedem Klick frisch: zeigt „Konto einrichten“ wie beim ersten Anmelden mit Startpasswort
+  { email: 'neu@demo.at', rolle: 'Erstes Anmelden', text: 'Neue Autor:in – Konto einrichten', frisch: true },
   { email: 'maria@demo.at', rolle: 'Autor:in', text: 'Maria Musterfrau' },
   { email: 'redaktion@demo.at', rolle: 'Redaktion', text: 'Rita Redaktion' },
   { email: 'buchhaltung@demo.at', rolle: 'Buchhaltung', text: 'Bernd Buchhaltung' },

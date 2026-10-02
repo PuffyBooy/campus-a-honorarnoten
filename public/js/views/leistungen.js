@@ -4,7 +4,7 @@ import {
 } from '../lib/format.js';
 import { formatIban } from '../lib/iban.js';
 import {
-  MEDIEN, MEDIUM_KEYS, PROFIL_FELD, STANDARD_MEDIUM, artikelLink, hatArtikel, mediumBadge, mediumName, mediumOder,
+  MEDIEN, MEDIUM_KEYS, STANDARD_MEDIUM, artikelLink, verbundeneMedien, hatArtikel, mediumBadge, mediumName, mediumOder,
 } from '../lib/campus.js';
 import { satzFuer } from '../lib/honorarsaetze.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
@@ -22,9 +22,14 @@ function satzHinweis(medium, kategorie, saetze) {
 const artikelVermerk = (url, medium) => `Verknüpft mit ${artikelLink(url, 'dem Artikel', '', medium)} ·
   <button type="button" class="link-knopf" id="l-artikel-loesen">Verknüpfung lösen</button>`;
 
-/** Vorauswahl des Mediums: das, für das ein Profil-Link hinterlegt ist (bei beiden: campus a college) */
-function standardMedium(nutzer) {
-  return MEDIUM_KEYS.find((m) => nutzer.profil?.[PROFIL_FELD[m]]) ?? STANDARD_MEDIUM;
+/**
+ * Medien, die man im Formular wählen kann: nur die mit Profil-Link. Eine ältere Leistung behält beim
+ * Bearbeiten ihr Medium, auch wenn dafür (nicht mehr) ein Link hinterlegt ist.
+ */
+function waehlbareMedien(nutzer, p) {
+  const m = verbundeneMedien(nutzer.profil);
+  if (p && !m.includes(mediumOder(p.medium))) m.push(mediumOder(p.medium));
+  return m.length ? m : [STANDARD_MEDIUM];
 }
 
 function artikelKarteHtml(daten) {
@@ -56,16 +61,22 @@ function artikelKarteHtml(daten) {
 function formularHtml(p, einstellungen, nutzer) {
   const saetze = einstellungen.honorarsaetze;
   const kat = p?.kategorie ?? 'kolumne';
-  const medium = p ? mediumOder(p.medium) : standardMedium(nutzer);
+  const medien = waehlbareMedien(nutzer, p);
+  const medium = p ? mediumOder(p.medium) : medien[0];
   return `
     <form class="karte" id="l-form" novalidate>
       <h2>${p ? 'Leistung bearbeiten' : 'Neue Leistung speichern'}</h2>
+      ${medien.length > 1 ? `
       <fieldset class="kategorie medium-wahl">
         <legend>Für</legend>
-        ${MEDIUM_KEYS.map((m) => `
+        ${medien.map((m) => `
         <label class="radio"><input type="radio" name="medium" value="${m}" ${m === medium ? 'checked' : ''}>
           <span><strong>${esc(MEDIEN[m].name)}</strong></span></label>`).join('')}
-      </fieldset>
+      </fieldset>` : `
+      <input type="hidden" name="medium" value="${esc(medium)}">
+      <p class="medium-fest">Für ${mediumBadge(medium)}</p>
+      <p class="klein medium-fest-hinweis">Schreibst du auch für ${esc(mediumName(MEDIUM_KEYS.find((m) => m !== medium)))}?
+        Dann im <a href="#/profil">Profil</a> den zweiten Profil-Link eintragen.</p>`}
       <fieldset class="kategorie">
         <legend class="sr-only">Kategorie</legend>
         <label class="radio"><input type="radio" name="kategorie" value="kolumne" ${kat === 'kolumne' ? 'checked' : ''}>

@@ -25,6 +25,7 @@ Auf der Startseite gibt es **Demo-Zugänge** für jede Rolle (Passwort jeweils `
 
 | Rolle | Konto | Was man sieht |
 |---|---|---|
+| Erstes Anmelden | `neu@demo.at` | „Konto einrichten“ wie mit einem Startpasswort – startet bei jedem Klick frisch |
 | Autor:in | `maria@demo.at` | Meine Leistungen, Meine Honorarnoten, Profil |
 | Redaktion | `redaktion@demo.at` | Bearbeiter-Terminal |
 | Buchhaltung | `buchhaltung@demo.at` | Bezahl-Terminal |
@@ -55,7 +56,8 @@ Lokal starten: `npm run dev` → http://localhost:5173
    dem Update der Profil-Link), erscheint die Seite beim nächsten Anmelden ebenfalls, mit den
    vorhandenen Daten vorausgefüllt. Die Daten werden für jede Honorarnote automatisch übernommen.
 2. **Meine Leistungen:** Jeden Beitrag speichern, sobald er erschienen ist – **für campus a college
-   oder campus a** (vorausgewählt ist das Medium mit hinterlegtem Profil-Link), als *Kolumne* oder
+   oder campus a**. Wählen kann man nur, wenn beide Profil-Links hinterlegt sind; sonst gilt immer das
+   verbundene Medium (das prüft auch der Server). Als *Kolumne* oder
    *außerordentliches Honorar* (mit „Vereinbart mit“), jeweils mit Titel, Veröffentlichungsdatum
    und Betrag. Bei Kolumnen kann man die **Art der Kolumne** als freien Text dazuschreiben (optional),
    bei außerordentlichen Honoraren die **Art des Honorars** (freier Text, Pflicht). Der Betrag ist mit dem **Honorarsatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin

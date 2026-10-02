@@ -464,3 +464,6 @@ body.modus-demo .fuss { display: block; }
 
 /* ---------- Honorarsätze ---------- */
 .abweichung { display: inline-block; margin-top: .15rem; font-size: .8rem; font-weight: 600; color: var(--warnung); }
+.medium-fest-hinweis { margin: -.25rem 0 1rem; }
+.medium-fest { margin: 0 0 .5rem; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
+.demo-frisch { border-color: var(--marke); border-style: dashed; }

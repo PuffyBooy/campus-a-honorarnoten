@@ -46,7 +46,8 @@ export function render(el, { store, istDemo, nachAnmeldung }) {
         <p class="tipp">Passwort: <code>${esc(DEMO_PASSWORT)}</code> · Tipp: In zwei Tabs lassen sich zwei Rollen gleichzeitig testen.</p>
         <ul class="demo-liste">
           ${DEMO_KONTEN.map((k) => `
-            <li><button type="button" class="btn btn-breit demo-knopf" data-email="${esc(k.email)}">
+            <li><button type="button" class="btn btn-breit demo-knopf${k.frisch ? ' demo-frisch' : ''}" data-email="${esc(k.email)}"
+                        ${k.frisch ? 'data-frisch' : ''}>
               <span><strong>${esc(k.rolle)}</strong><br><span class="klein">${esc(k.text)} · ${esc(k.email)}</span></span>
               <span aria-hidden="true">→</span></button></li>`).join('')}
         </ul>
@@ -105,6 +106,8 @@ export function render(el, { store, istDemo, nachAnmeldung }) {
   el.querySelectorAll('.demo-knopf').forEach((knopf) => knopf.addEventListener('click', () =>
     mitSperre(knopf, async () => {
       try {
+        // „Erstes Anmelden“: Konto jedes Mal neu anlegen, damit die Einrichtung immer zu sehen ist
+        if ('frisch' in knopf.dataset) await store.demoKontoFrisch(knopf.dataset.email);
         await store.anmelden(knopf.dataset.email, DEMO_PASSWORT);
         nachAnmeldung();
       } catch (e) {
