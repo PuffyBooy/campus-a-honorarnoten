@@ -100,3 +100,53 @@ test('Artikel eines Profils: beim Aktualisieren nur neue Artikel nachladen', asy
   assert.deepEqual(danach.map((a) => a.titel), ['D', 'C', 'B', 'A']);
   assert.deepEqual(abrufe.map((u) => new URL(u).pathname), ['/profil/0123456789abcdef', '/profil/0123456789abcdef', '/news/detail/d']);
 });
+
+test('Zwei Medien: Profil-Links und Artikel-Adressen von campus-a.at', async () => {
+  const { mediumVonArtikel, mediumName, mediumOder } = await import('../public/js/lib/campus.js');
+  const id = '0eb9253511e3f774dab6';
+  assert.equal(profilIdAusLink(`https://campus-a.at/profil/${id}`, 'campus-a'), id);
+  assert.equal(profilIdAusLink(`www.campus-a.at/profil/${id}`, 'campus-a'), id);
+  assert.equal(profilIdAusLink(`https://campus-a.at/profil/${id}`, 'college'), null, 'Link der anderen Seite');
+  assert.equal(profilIdAusLink(`https://www.campus-a-college.at/profil/${id}`, 'campus-a'), null);
+  assert.equal(profilLink(id, 'campus-a'), `https://campus-a.at/profil/${id}`);
+  assert.equal(mediumVonArtikel('https://campus-a.at/news/news-detail/x-y'), 'campus-a');
+  assert.equal(mediumVonArtikel('https://www.campus-a-college.at/news/detail/x-y'), 'college');
+  assert.equal(mediumVonArtikel('https://campus-a.at/news/detail/x-y'), null);
+  assert.equal(artikelSuche('A B', 'campus-a'), 'https://campus-a.at/suchergebnisse?tx_solr%5Bq%5D=A%20B');
+  assert.match(titelLink('', 'X', 'artikel-titel', 'campus-a'), /href="https:\/\/campus-a\.at\/suchergebnisse/);
+  assert.match(artikelLink('demo:campus-a-artikel-1', 'X', '', 'campus-a'), /href="https:\/\/campus-a\.at\/"/);
+  assert.equal(mediumName('campus-a'), 'campus a');
+  assert.equal(mediumName(undefined), 'campus a college', 'ältere Einträge ohne Medium');
+  assert.equal(mediumOder('quatsch'), 'college');
+});
+
+test('Artikelliste von campus-a.at auslesen (/news/news-detail/)', async () => {
+  const { campusAListe } = await import('./campus-fixtures.mjs');
+  assert.deepEqual(listeParsen(campusAListe, 'campus-a').artikel, [{
+    url: 'https://campus-a.at/news/news-detail/das-geschaeft-mit-universitaets-rankings',
+    titel: 'Das Geschäft mit Universitäts-Rankings', ressort: 'Wissenschaft',
+  }]);
+  assert.deepEqual(listeParsen(campusAListe, 'college').artikel, [], 'Adressen der anderen Seite zählen nicht');
+});
+
+test('Konto einrichten: was Autor:innen noch fehlt', async () => {
+  const { kontoFehlt, kontoFertig } = await import('../public/js/lib/konto.js');
+  const fertig = { rollen: ['autor'], profil: { strasse: 'Weg 1', plz_ort: '1010 Wien', kontoinhaber: 'A B', iban: 'AT611904300234573201', campus_a_profil: 'abcdef123456' } };
+  assert.ok(kontoFertig(fertig));
+  assert.deepEqual(kontoFehlt({ ...fertig, profil: { ...fertig.profil, campus_a_profil: '' } }), ['Profil-Link']);
+  assert.deepEqual(kontoFehlt({ rollen: ['autor'], profil: {} }), ['Adresse', 'Bankverbindung', 'Profil-Link']);
+  assert.ok(kontoFertig({ rollen: ['redaktion'], profil: {} }), 'nur Autor:innen brauchen Adresse, IBAN und Link');
+});
+
+test('Honorarsätze pro Medium', async () => {
+  const { saetzeNormalisieren, satzFuer, weichtAb } = await import('../public/js/lib/honorarsaetze.js');
+  assert.deepEqual(saetzeNormalisieren({ kolumne: '16', ausserordentlich: '' }),
+    { college: { kolumne: 16, ausserordentlich: null }, 'campus-a': { kolumne: 16, ausserordentlich: null } }, 'alte Sätze gelten für beide');
+  const s = saetzeNormalisieren({ college: { kolumne: 15 }, 'campus-a': { kolumne: 25, ausserordentlich: 80 } });
+  assert.equal(satzFuer(s, 'campus-a', 'kolumne'), 25);
+  assert.equal(satzFuer(s, undefined, 'kolumne'), 15);
+  assert.equal(satzFuer(s, 'college', 'ausserordentlich'), null);
+  assert.ok(weichtAb({ medium: 'campus-a', kategorie: 'kolumne', betrag: 15 }, s));
+  assert.ok(!weichtAb({ medium: 'college', kategorie: 'kolumne', betrag: 15 }, s));
+  assert.throws(() => saetzeNormalisieren({ college: { kolumne: -1 } }), /Honorarsätze/);
+});

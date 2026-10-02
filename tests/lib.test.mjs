@@ -108,4 +108,9 @@ test('Honorarnoten als PDF: eine Datei, jede Note ab neuer Seite', async () => {
   const pdf = await PDFLib.PDFDocument.load(bytes);
   assert.ok(pdf.getPageCount() >= 3, 'zweite Note mit 60 Kolumnen braucht mehr als eine Seite');
   assert.equal(pdf.getTitle(), 'Honorarnoten (2)');
+  // Titel je Medium
+  const nurCampusA = await PDFLib.PDFDocument.load(await honorarnotenPdf([{ ...note('C-3', 1), medium: 'campus-a' }], PDFLib));
+  assert.equal(nurCampusA.getTitle(), 'Honorarnote campus a C-3');
+  const ohneMedium = await PDFLib.PDFDocument.load(await honorarnotenPdf([note('D-4', 1)], PDFLib));
+  assert.equal(ohneMedium.getTitle(), 'Honorarnote campus a college D-4', 'ältere Noten: campus a college');
 });

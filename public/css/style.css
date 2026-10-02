@@ -247,7 +247,7 @@ section.fehlerbox { border: 0; }
 
 /* ---------- Filter ---------- */
 .filterleiste { display: grid; gap: 0 1rem; padding-bottom: .15rem; }
-@media (min-width: 700px) { .filterleiste { grid-template-columns: 1fr 1.4fr 1fr; } }
+@media (min-width: 700px) { .filterleiste { grid-template-columns: 1fr 1fr 1.4fr 1fr; } }
 .treffer { margin: .25rem 0 .6rem; }
 
 /* ---------- Detailansicht ---------- */
@@ -383,6 +383,12 @@ section.fehlerbox { border: 0; }
 .check { display: inline-flex; gap: .3rem; align-items: center; font-weight: 400; font-size: .9rem; margin: 0; white-space: nowrap; }
 .aktionen.eng { margin: 0; gap: .3rem; }
 tr.inaktiv { opacity: .6; }
+.badge-medium { font-weight: 600; text-transform: none; letter-spacing: 0; }
+.badge-college { background: var(--marke-hell); color: var(--marke-dunkel); border: 1px solid var(--marke); }
+.badge-campus-a { background: #1f2d3d; color: #fff; }
+.medium-wahl legend { font-weight: 600; margin-bottom: .25rem; }
+.einrichtung { max-width: 46rem; margin: 0 auto; }
+.einrichtung fieldset { margin-bottom: .5rem; }
 .badge-rolle { background: var(--marke-hell); color: var(--text); border: 1px solid var(--rand); }
 label.btn { margin: 0; font-weight: 600; }
 

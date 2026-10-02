@@ -4,6 +4,7 @@ import { esc, formatDatum, formatEuro, heuteIso, vollerName } from '../lib/forma
 import { kalenderwoche, nachWoche, wocheText } from '../lib/woche.js';
 import { honorarnotenPdfHerunterladen } from '../lib/beleg.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
+import { mediumBadge } from '../lib/campus.js';
 
 const WOCHEN_ZURUECK = 12; // so viele Wochen zeigt der Reiter „Bezahlt“
 
@@ -25,7 +26,7 @@ function wochenKarte({ woche, noten }, bezahlt) {
         <tbody>${noten.map((n) => `
           <tr>
             <td data-label="Nummer" class="nummer">${esc(n.nummer)}</td>
-            <td data-label="Name">${esc(vollerName(n.autor))}</td>
+            <td data-label="Name"><span>${esc(vollerName(n.autor))}<br>${mediumBadge(n.medium)}</span></td>
             ${bezahlt ? `<td data-label="Bezahlt am">${esc(formatDatum(n.bezahlt_am))}</td>` : ''}
             <td data-label="Betrag" class="rechts">${esc(formatEuro(n.betrag))}</td>
           </tr>`).join('')}</tbody>

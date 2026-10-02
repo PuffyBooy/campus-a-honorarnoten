@@ -2,6 +2,7 @@
 import { AKTION_LABEL, esc, formatDatum, formatEuro, formatMonat, formatZeitpunkt, parseBetrag, vollerName } from '../lib/format.js';
 import { fehlerText, meldung, statusBadge } from '../lib/ui.js';
 import { positionenTabelle } from './noten.js';
+import { mediumBadge } from '../lib/campus.js';
 
 function verlaufDetails(e) {
   const d = e.details ?? {};
@@ -37,6 +38,7 @@ export async function render(el, { store, nutzer, params, neuLaden, istAktuell }
 
     <section class="karte">
       <dl class="angaben">
+        <dt>Medium</dt><dd>${mediumBadge(n.medium)}</dd>
         <dt>Name</dt><dd>${esc(vollerName(n.autor))}</dd>
         <dt>E-Mail</dt><dd><a href="mailto:${esc(n.autor.email)}">${esc(n.autor.email)}</a></dd>
         <dt>Abrechnung</dt><dd>${esc(formatMonat(n.monat))}</dd>

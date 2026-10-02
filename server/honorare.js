@@ -9,7 +9,10 @@ import { artNormalisieren, heuteIso } from '../public/js/lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from '../public/js/lib/iban.js';
 import { honorarnoteNummer } from '../public/js/lib/nummer.js';
 import { STANDARD_SAETZE, saetzeNormalisieren } from '../public/js/lib/honorarsaetze.js';
-import { artikelUrlGueltig, profilIdAusLink } from '../public/js/lib/campus.js';
+import {
+  MEDIEN, MEDIUM_KEYS, PROFIL_FELD, istMedium, mediumName, mediumOder, mediumVonArtikel, profilIdAusLink,
+} from '../public/js/lib/campus.js';
+import { KONTO_FEHLT, kontoFertig } from '../public/js/lib/konto.js';
 import { artikelVonProfil } from './campus-artikel.js';
 
 export const STANDARD_EMPFAENGER = {
@@ -34,7 +37,7 @@ const leer = (s) => !trim(s);
 const EMAIL = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
 const ROLLEN = ['autor', 'redaktion', 'buchhaltung', 'admin'];
 const erlaubteRollen = (r) => ROLLEN.filter((x) => Array.isArray(r) && r.includes(x));
-const PROFIL_LINK_FEHLER = 'Bitte den Link zu deinem Profil auf campus-a-college.at einfügen, z. B. https://www.campus-a-college.at/profil/…';
+const profilLinkFehler = (m) => `Bitte den Link zu deinem Profil auf ${MEDIEN[m].seite} einfügen, z. B. ${MEDIEN[m].basis}/profil/…`;
 const anzeigename = (n) => `${n.vorname} ${n.nachname}`.trim() || n.email;
 
 /** Betrag in Euro (Zahl) -> Cent; wirft bei ungültigem Wert */
@@ -60,7 +63,7 @@ function nutzerAusZeile(z) {
     muss_passwort_aendern: Boolean(z.muss_passwort_aendern),
     profil: {
       strasse: z.strasse, plz_ort: z.plz_ort, kontoinhaber: z.kontoinhaber, iban: z.iban, bic: z.bic,
-      campus_profil: z.campus_profil ?? '',
+      campus_profil: z.campus_profil ?? '', campus_a_profil: z.campus_a_profil ?? '',
     },
     erstellt_am: z.erstellt_am,
     letzter_login: z.letzter_login,
@@ -83,23 +86,21 @@ function ich(ctx) {
 function brauche(ctx, rolle) {
   const n = ich(ctx);
   pruefe(hat(n, rolle), 'Dafür fehlt dir die Berechtigung.', 403);
+  // Autor:innen müssen zuerst ihr Konto einrichten (Adresse, Bankverbindung, Profil-Link)
+  if (rolle === 'autor') pruefe(kontoFertig(n), KONTO_FEHLT, 403);
   return n;
-}
-
-export function profilVollstaendig(n) {
-  const p = n?.profil ?? {};
-  return !leer(p.strasse) && !leer(p.plz_ort) && !leer(p.kontoinhaber) && !ibanFehler(p.iban);
 }
 
 function einstellungenLaden(db) {
   const e = {
     empfaenger: { ...STANDARD_EMPFAENGER },
     datenschutzKontakt: '',
-    honorarsaetze: { ...STANDARD_SAETZE },
+    honorarsaetze: saetzeNormalisieren(STANDARD_SAETZE),
   };
   for (const { schluessel, wert } of db.prepare('select * from einstellungen').all()) {
     if (schluessel !== 'auftraggeber') e[schluessel] = JSON.parse(wert); // früheres SEPA-Konto, nicht mehr verwendet
   }
+  e.honorarsaetze = saetzeNormalisieren(e.honorarsaetze); // ältere Sätze ohne Medium gelten für beide
   return e;
 }
 
@@ -108,7 +109,7 @@ function einstellungenLaden(db) {
 function positionAusZeile(p) {
   return {
     id: p.id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel, veroeffentlichung: p.veroeffentlichung,
-    artikel_url: p.artikel_url ?? '', ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
+    artikel_url: p.artikel_url ?? '', medium: mediumOder(p.medium), ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
     betrag: euro(p.betrag_cent), betrag_eingereicht: euro(p.betrag_eingereicht_cent), betrag_vermerk: p.betrag_vermerk,
   };
 }
@@ -116,7 +117,7 @@ function positionAusZeile(p) {
 function noteAusZeile(db, z) {
   const positionen = db.prepare('select * from note_positionen where note_id = ? order by reihenfolge').all(z.id).map(positionAusZeile);
   return {
-    id: z.id, nummer: z.nummer, jahr: z.jahr, laufende_nummer: z.laufende_nummer, monat: z.monat,
+    id: z.id, nummer: z.nummer, jahr: z.jahr, laufende_nummer: z.laufende_nummer, monat: z.monat, medium: mediumOder(z.medium),
     autor_id: z.autor_id, status: z.status, eingereicht_am: z.eingereicht_am, entschieden_am: z.entschieden_am,
     bezahlt_am: z.bezahlt_am, ablehnungsgrund: z.ablehnungsgrund, zurueckgeholt_am: z.zurueckgeholt_am,
     autor: JSON.parse(z.autor_json), zahlung: JSON.parse(z.zahlung_json), empfaenger: JSON.parse(z.empfaenger_json),
@@ -239,13 +240,18 @@ export const funktionen = {
     pruefe(!ctx.db.prepare('select 1 from nutzer where email = ? and id <> ?').get(email, n.id), 'Diese E-Mail-Adresse wird schon verwendet.');
     if (!leer(d.iban)) pruefe(!ibanFehler(d.iban), ibanFehler(d.iban));
     pruefe(bicIstGueltig(d.bic), 'Der BIC ist ungültig.');
-    // ohne Angabe bleibt eine bestehende Verknüpfung erhalten
-    const campusProfil = d.campus_profil === undefined ? n.profil.campus_profil : profilIdAusLink(d.campus_profil);
-    pruefe(campusProfil !== null, PROFIL_LINK_FEHLER);
+    // Profil-Links auf campus-a-college.at und campus-a.at; ohne Angabe bleibt eine bestehende Verknüpfung erhalten
+    const links = {};
+    for (const m of MEDIUM_KEYS) {
+      const feld = PROFIL_FELD[m];
+      links[feld] = d[feld] === undefined ? n.profil[feld] : profilIdAusLink(d[feld], m);
+      pruefe(links[feld] !== null, profilLinkFehler(m));
+    }
     ctx.db.prepare(`update nutzer set vorname = ?, nachname = ?, email = ?, strasse = ?, plz_ort = ?,
-        kontoinhaber = ?, iban = ?, bic = ?, campus_profil = ? where id = ?`)
+        kontoinhaber = ?, iban = ?, bic = ?, campus_profil = ?, campus_a_profil = ? where id = ?`)
       .run(trim(d.vorname).slice(0, 100), trim(d.nachname).slice(0, 100), email, trim(d.strasse).slice(0, 150),
-        trim(d.plz_ort).slice(0, 100), trim(d.kontoinhaber).slice(0, 70), normalizeIban(d.iban), normalizeBic(d.bic), campusProfil, n.id);
+        trim(d.plz_ort).slice(0, 100), trim(d.kontoinhaber).slice(0, 70), normalizeIban(d.iban), normalizeBic(d.bic),
+        links.campus_profil, links.campus_a_profil, n.id);
     return nutzerLaden(ctx.db, n.id);
   },
 
@@ -271,6 +277,7 @@ export const funktionen = {
       kolumnenart: istKolumne ? artNormalisieren(d.kolumnenart) : '',
       titel: trim(d.titel).slice(0, 200),
       artikel_url: trim(d.artikel_url),
+      medium: d.medium ?? 'college',
       veroeffentlichung: String(d.veroeffentlichung ?? ''),
       ausgabe: trim(d.ausgabe).slice(0, 100),
       vereinbart_mit: d.kategorie === 'ausserordentlich' ? trim(d.vereinbart_mit).slice(0, 100) : '',
@@ -279,8 +286,9 @@ export const funktionen = {
     pruefe(['kolumne', 'ausserordentlich'].includes(p.kategorie), 'Bitte wählen, ob Kolumne oder außerordentliches Honorar.');
     pruefe(!leer(p.titel), 'Bitte den Titel des Beitrags angeben.');
     if (!istKolumne) pruefe(!leer(p.art), 'Bitte die Art des Honorars angeben.');
+    pruefe(istMedium(p.medium), 'Bitte wählen, ob für campus a college oder campus a.');
     if (p.artikel_url) {
-      pruefe(artikelUrlGueltig(p.artikel_url), 'Der Link zum Artikel ist ungültig.');
+      pruefe(mediumVonArtikel(p.artikel_url) === p.medium, `Der Link zum Artikel ist ungültig (erwartet: ein Artikel auf ${MEDIEN[p.medium].seite}).`);
       pruefe(!artikelSchonVerwendet(ctx.db, n.id, p.artikel_url, d.id ? String(d.id) : null), ARTIKEL_DOPPELT);
     }
     pruefe(/^\d{4}-\d{2}-\d{2}$/.test(p.veroeffentlichung) && !Number.isNaN(Date.parse(p.veroeffentlichung)), 'Bitte das Datum der Veröffentlichung angeben.');
@@ -288,16 +296,16 @@ export const funktionen = {
     const betragCent = cent(d.betrag);
     if (d.id) {
       const r = ctx.db.prepare(`update positionen set kategorie = ?, art = ?, kolumnenart = ?, titel = ?, veroeffentlichung = ?, ausgabe = ?,
-          vereinbart_mit = ?, notiz = ?, betrag_cent = ?, artikel_url = ?, geaendert_am = ? where id = ? and autor_id = ?`)
+          vereinbart_mit = ?, notiz = ?, betrag_cent = ?, artikel_url = ?, medium = ?, geaendert_am = ? where id = ? and autor_id = ?`)
         .run(p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz, betragCent,
-          p.artikel_url, jetzt(), String(d.id), n.id);
+          p.artikel_url, p.medium, jetzt(), String(d.id), n.id);
       pruefe(r.changes === 1, 'Diese Leistung gibt es nicht (mehr).', 404);
     } else {
       pruefe(ctx.db.prepare('select count(*) c from positionen where autor_id = ?').get(n.id).c < 500, 'Zu viele gespeicherte Leistungen.');
       ctx.db.prepare(`insert into positionen (id, autor_id, kategorie, art, kolumnenart, titel, veroeffentlichung, ausgabe, vereinbart_mit,
-          notiz, betrag_cent, artikel_url, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          notiz, betrag_cent, artikel_url, medium, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
         .run(id(), n.id, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz, betragCent,
-          p.artikel_url, jetzt());
+          p.artikel_url, p.medium, jetzt());
     }
     return true;
   },
@@ -309,22 +317,28 @@ export const funktionen = {
     return true;
   },
 
-  /** Alle Artikel der Autor:in auf campus-a-college.at, mit Vermerk, ob schon als Leistung erfasst */
+  /**
+   * Alle Artikel der Autor:in auf campus-a-college.at und campus-a.at (je nach hinterlegten Profilen),
+   * neueste zuerst, mit Vermerk, ob schon als Leistung erfasst
+   */
   async meineArtikel(ctx, { neu = false } = {}) {
     const n = brauche(ctx, 'autor');
-    const profilId = n.profil.campus_profil;
-    if (!profilId) return { verknuepft: false, artikel: [] };
-    let artikel;
-    try {
-      artikel = await artikelVonProfil(ctx.db, profilId, { holen: ctx.campusHolen, neu: Boolean(neu) });
-    } catch {
-      throw new Fehler('campus-a-college.at ist gerade nicht erreichbar. Bitte später erneut versuchen.', 502);
-    }
+    const medien = MEDIUM_KEYS.filter((m) => n.profil[PROFIL_FELD[m]]);
+    if (!medien.length) return { verknuepft: false, artikel: [] };
+    const ergebnisse = await Promise.allSettled(medien.map((m) =>
+      artikelVonProfil(ctx.db, n.profil[PROFIL_FELD[m]], { medium: m, holen: ctx.campusHolen, neu: Boolean(neu) })));
+    const nichtErreichbar = medien.filter((m, i) => ergebnisse[i].status === 'rejected').map((m) => MEDIEN[m].seite);
+    pruefe(nichtErreichbar.length < medien.length,
+      `${nichtErreichbar.join(' und ')} ${nichtErreichbar.length > 1 ? 'sind' : 'ist'} gerade nicht erreichbar. Bitte später erneut versuchen.`, 502);
     const verwendet = verwendeteArtikel(ctx.db, n.id);
+    const artikel = ergebnisse.flatMap((e) => (e.status === 'fulfilled' ? e.value : []))
+      .sort((x, y) => (y.datum || '').localeCompare(x.datum || ''))
+      .map((a) => ({ ...a, erfasst: verwendet.has(a.url) }));
     return {
       verknuepft: true,
-      profil: profilId,
-      artikel: artikel.map((a) => ({ ...a, erfasst: verwendet.has(a.url) })),
+      medien,
+      warnung: nichtErreichbar.length ? `${nichtErreichbar.join(' und ')} ist gerade nicht erreichbar, diese Artikel fehlen.` : '',
+      artikel,
     };
   },
 
@@ -340,29 +354,31 @@ export const funktionen = {
 
   abrechnungAbschicken(ctx, positionIds) {
     const n = brauche(ctx, 'autor');
-    pruefe(profilVollstaendig(n), 'Bitte zuerst Adresse und Bankverbindung im Profil ergänzen.');
     pruefe(Array.isArray(positionIds) && positionIds.length && positionIds.length <= 200, 'Bitte mindestens eine Leistung auswählen.');
     const ids = positionIds.map(String);
     return transaktion(ctx.db, () => {
       const positionen = ctx.db.prepare(`select * from positionen where autor_id = ? and id in (${ids.map(() => '?').join(',')})
         order by veroeffentlichung, erstellt_am`).all(n.id, ...ids);
       pruefe(positionen.length === ids.length, 'Einige Leistungen gibt es nicht mehr. Bitte Seite neu laden.');
+      // campus a und campus a college bekommen getrennte Honorarnoten
+      const medium = mediumOder(positionen[0].medium);
+      pruefe(positionen.every((p) => mediumOder(p.medium) === medium), 'Leistungen für campus a und campus a college bitte getrennt abschicken.');
       const { jahr, laufendeNummer, nummer } = naechsteNummer(ctx.db, n);
       const e = einstellungenLaden(ctx.db);
       const noteId = id();
-      ctx.db.prepare(`insert into noten (id, nummer, jahr, laufende_nummer, monat, autor_id, status, eingereicht_am,
-          autor_json, zahlung_json, empfaenger_json) values (?, ?, ?, ?, ?, ?, 'eingereicht', ?, ?, ?, ?)`)
-        .run(noteId, nummer, jahr, laufendeNummer, heuteIso().slice(0, 7), n.id, jetzt(),
+      ctx.db.prepare(`insert into noten (id, nummer, jahr, laufende_nummer, monat, medium, autor_id, status, eingereicht_am,
+          autor_json, zahlung_json, empfaenger_json) values (?, ?, ?, ?, ?, ?, ?, 'eingereicht', ?, ?, ?, ?)`)
+        .run(noteId, nummer, jahr, laufendeNummer, heuteIso().slice(0, 7), medium, n.id, jetzt(),
           JSON.stringify({ vorname: n.vorname, nachname: n.nachname, email: n.email, strasse: n.profil.strasse, plz_ort: n.profil.plz_ort }),
           JSON.stringify({ kontoinhaber: n.profil.kontoinhaber, iban: n.profil.iban, bic: n.profil.bic }),
           JSON.stringify(e.empfaenger));
       const einf = ctx.db.prepare(`insert into note_positionen (id, note_id, reihenfolge, kategorie, art, kolumnenart, titel, veroeffentlichung,
-          ausgabe, vereinbart_mit, notiz, betrag_cent, betrag_eingereicht_cent, artikel_url) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          ausgabe, vereinbart_mit, notiz, betrag_cent, betrag_eingereicht_cent, artikel_url, medium) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       positionen.forEach((p, i) => einf.run(p.id, noteId, i, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe,
-        p.vereinbart_mit, p.notiz, p.betrag_cent, p.betrag_cent, p.artikel_url));
+        p.vereinbart_mit, p.notiz, p.betrag_cent, p.betrag_cent, p.artikel_url, medium));
       ctx.db.prepare(`delete from positionen where autor_id = ? and id in (${ids.map(() => '?').join(',')})`).run(n.id, ...ids);
       const summe = positionen.reduce((s, p) => s + p.betrag_cent, 0);
-      verlaufEintragen(ctx.db, noteId, n, 'eingereicht', { betrag: euro(summe), positionen: positionen.length });
+      verlaufEintragen(ctx.db, noteId, n, 'eingereicht', { betrag: euro(summe), positionen: positionen.length, medium: mediumName(medium) });
       return sicht(n, noteHolen(ctx.db, noteId));
     });
   },
@@ -380,10 +396,10 @@ export const funktionen = {
       pruefe(note.status === 'abgelehnt', 'Nur abgelehnte Honorarnoten können überarbeitet werden.');
       pruefe(!note.zurueckgeholt_am, 'Die Leistungen wurden bereits zurückgeholt.');
       const einf = ctx.db.prepare(`insert into positionen (id, autor_id, kategorie, art, kolumnenart, titel, veroeffentlichung, ausgabe,
-          vereinbart_mit, notiz, betrag_cent, artikel_url, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+          vereinbart_mit, notiz, betrag_cent, artikel_url, medium, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
       for (const p of note.positionen) {
         einf.run(id(), n.id, p.kategorie, p.art, p.kolumnenart, p.titel, p.veroeffentlichung, p.ausgabe, p.vereinbart_mit, p.notiz,
-          cent(p.betrag_eingereicht), p.artikel_url, jetzt());
+          cent(p.betrag_eingereicht), p.artikel_url, note.medium, jetzt());
       }
       ctx.db.prepare('update noten set zurueckgeholt_am = ? where id = ?').run(jetzt(), note.id);
       verlaufEintragen(ctx.db, note.id, n, 'zurueckgeholt');

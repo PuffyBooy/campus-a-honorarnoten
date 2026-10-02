@@ -27,8 +27,11 @@ export async function demoDaten(db, { passwortHash }) {
     { strasse: 'Musterstraße 1/2', plz_ort: '1010 Wien', iban: 'AT611904300234573201', bic: 'BKAUATWW',
       campus_profil: 'de00000000000000a001' }); // Beispiel-Verknüpfung mit campus-a-college.at
   const jonas = nutzer('demo-jonas', 'jonas@demo.at', 'Jonas', 'Weiß', ['autor'],
-    { strasse: 'Lindengasse 12', plz_ort: '8010 Graz', iban: 'DE89370400440532013000', bic: '' });
-  const rita = nutzer('demo-rita', 'redaktion@demo.at', 'Rita', 'Redaktion', ['redaktion', 'autor']);
+    { strasse: 'Lindengasse 12', plz_ort: '8010 Graz', iban: 'DE89370400440532013000', bic: '',
+      campus_profil: 'de00000000000000a002', campus_a_profil: 'de00000000000000b002' }); // schreibt für beide Medien
+  const rita = nutzer('demo-rita', 'redaktion@demo.at', 'Rita', 'Redaktion', ['redaktion', 'autor'],
+    { strasse: 'Stiftgasse 6/1/2', plz_ort: '1070 Wien', iban: 'AT483200000012345864', bic: '',
+      campus_a_profil: 'de00000000000000b003' });
   const bernd = nutzer('demo-bernd', 'buchhaltung@demo.at', 'Bernd', 'Buchhaltung', ['buchhaltung']);
   const alex = nutzer('demo-alex', 'admin@demo.at', 'Alex', 'Admin', ['admin']);
   db.nutzer.push(maria, jonas, rita, bernd, alex);
@@ -40,7 +43,8 @@ export async function demoDaten(db, { passwortHash }) {
     id: `demo-pos-${++nr}`, kategorie, art: kategorie === 'kolumne' ? '' : 'artikel',
     kolumnenart: kategorie === 'kolumne' ? KOLUMNEN[nr % KOLUMNEN.length] : '', titel,
     veroeffentlichung: datum(tageZurueck(tage)), ausgabe: '', vereinbart_mit: '', notiz: '',
-    artikel_url: `demo:beitrag-${nr}`, // Beispiel-Verknüpfung mit einem Artikel auf campus-a-college.at
+    medium: 'college',
+    artikel_url: `demo:${extra.medium ?? 'college'}-beitrag-${nr}`, // Beispiel-Verknüpfung mit einem Artikel auf campus-a-college.at
     betrag, betrag_eingereicht: betrag, betrag_vermerk: '', ...extra,
   });
 
@@ -53,7 +57,7 @@ export async function demoDaten(db, { passwortHash }) {
     const n = {
       id: `demo-note-${key}-${zaehler[key]}`,
       nummer: honorarnoteNummer({ vorname: autor.vorname, nachname: autor.nachname, jahr, laufendeNummer: zaehler[key] }),
-      jahr, laufende_nummer: zaehler[key], monat: datum(eingereicht).slice(0, 7),
+      jahr, laufende_nummer: zaehler[key], monat: datum(eingereicht).slice(0, 7), medium: positionen[0].medium,
       autor_id: autor.id, status, eingereicht_am: iso(eingereicht),
       autor: { vorname: autor.vorname, nachname: autor.nachname, email: autor.email, strasse: autor.profil.strasse, plz_ort: autor.profil.plz_ort },
       zahlung: { kontoinhaber: autor.profil.kontoinhaber, iban: autor.profil.iban, bic: autor.profil.bic },
@@ -104,8 +108,9 @@ export async function demoDaten(db, { passwortHash }) {
   }
   {
     const { n } = note(jonas, 2, [
-      pos('kolumne', 'Graz von unten', 9, 15),
-      pos('ausserordentlich', 'Porträt: Die jüngste Bürgermeisterin', 6, 50, { vereinbart_mit: 'Rita Redaktion', notiz: 'Inkl. 3 eigene Fotos.' }),
+      pos('kolumne', 'Graz von unten', 9, 15, { medium: 'campus-a' }),
+      pos('ausserordentlich', 'Porträt: Die jüngste Bürgermeisterin', 6, 50,
+        { medium: 'campus-a', vereinbart_mit: 'Rita Redaktion', notiz: 'Inkl. 3 eigene Fotos.' }),
     ], 'eingereicht');
     db.kommentare.push({ id: 'demo-k-1', note_id: n.id, verfasser_id: rita.id, verfasser_name: 'Rita Redaktion',
       text: 'Porträt ist online, Fotos passen. Kann angenommen werden.', am: iso(tageZurueck(1)) });

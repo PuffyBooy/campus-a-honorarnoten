@@ -1,6 +1,6 @@
 // Datenhaltung im Server-Modus: dieselben Funktionen wie store.js (Demo),
 // aber jede Anfrage geht an den eigenen Server. Rechte prüft der Server.
-import { ibanFehler } from './lib/iban.js';
+import { kontoFertig } from './lib/konto.js';
 
 class Fehler extends Error {}
 
@@ -41,10 +41,8 @@ export const passwortAendern = f('passwortAendern');
 // Profil
 export const profilSpeichern = f('profilSpeichern');
 export const einstellungen = f('einstellungen');
-export function profilVollstaendig(n) {
-  const p = n?.profil ?? {};
-  return Boolean(p.strasse?.trim() && p.plz_ort?.trim() && p.kontoinhaber?.trim()) && !ibanFehler(p.iban);
-}
+/** Konto fertig eingerichtet? (Autor:innen: Adresse, Bankverbindung, mindestens ein Profil-Link) */
+export const profilVollstaendig = kontoFertig;
 
 // Autor:in
 export const meineLeistungen = f('meineLeistungen');

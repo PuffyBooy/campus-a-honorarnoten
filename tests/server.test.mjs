@@ -3,7 +3,7 @@ import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { serverErstellen } from '../server/server.js';
 import { adminAnlegen } from '../server/honorare.js';
-import { campusSeiten, campusHolen } from './campus-fixtures.mjs';
+import { CAMPUS_A_PROFIL, campusSeiten, campusHolen } from './campus-fixtures.mjs';
 
 let server;
 let db;
@@ -90,6 +90,10 @@ test('Zugang anfragen und freischalten', async () => {
   await anmeldenMitNeuemPasswort(k.anna, 'anna@example.org', zugang['anna@example.org'].passwort);
   k.bert = client();
   await anmeldenMitNeuemPasswort(k.bert, 'bert@example.org', zugang['bert@example.org'].passwort);
+  await k.bert.ok('profilSpeichern', {
+    vorname: 'Bert', nachname: 'Beispiel', email: 'bert@example.org', strasse: 'Weg 2', plz_ort: '8010 Graz',
+    kontoinhaber: 'Bert Beispiel', iban: 'DE89370400440532013000', campus_a_profil: `https://campus-a.at/profil/${CAMPUS_A_PROFIL}`,
+  });
 
   // Redaktion und Buchhaltung direkt anlegen
   const r = await k.admin.ok('nutzerAnlegen', { vorname: 'Rita', nachname: 'Redaktion', email: 'rita@example.org', rollen: ['redaktion'] });
@@ -103,11 +107,22 @@ test('Zugang anfragen und freischalten', async () => {
 test('Autor:in: Profil, Leistungen, Monatsabrechnung', async () => {
   const a = k.anna;
   assert.match((await a.aufruf('profilSpeichern', { vorname: 'Anna', nachname: 'Autorin', email: 'anna@example.org', iban: 'AT00 0000 0000 0000 0000' })).fehler, /IBAN|Prüfziffer/);
-  await a.ok('profilSpeichern', {
+  // Konto einrichten ist Pflicht: ohne Adresse, Bankverbindung und Profil-Link geht nichts
+  const leistung = { kategorie: 'kolumne', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 15 };
+  const gesperrt = await a.aufruf('leistungSpeichern', leistung);
+  assert.equal(gesperrt.status, 403);
+  assert.match(gesperrt.fehler, /Konto einrichten/);
+  const profil = {
     vorname: 'Anna', nachname: 'Müller', email: 'anna@example.org', strasse: 'Hauptstraße 1', plz_ort: '1010 Wien',
     kontoinhaber: 'Anna Müller', iban: 'at61 1904 3002 3457 3201', bic: 'bkauatww',
-  });
+  };
+  await a.ok('profilSpeichern', profil);
+  assert.match((await a.aufruf('meineLeistungen')).fehler, /Profil-Link/, 'ohne Profil-Link noch gesperrt');
+  assert.match((await a.aufruf('profilSpeichern', { ...profil, campus_profil: 'https://campus-a.at/profil/ae1054937a1ae033e117' })).fehler,
+    /Profil auf campus-a-college\.at/, 'Link der falschen Seite');
+  await a.ok('profilSpeichern', { ...profil, campus_profil: 'https://www.campus-a-college.at/profil/ae1054937a1ae033e117' });
   assert.equal((await a.ok('aktuellerNutzer')).profil.iban, AT_IBAN);
+  assert.deepEqual(await a.ok('meineLeistungen'), []);
 
   assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'ausserordentlich', art: 'Interview', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10 })).fehler, /vereinbart/);
   assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'ausserordentlich', art: ' ', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10, vereinbart_mit: 'Rita' })).fehler, /Art des Honorars/);
@@ -185,7 +200,7 @@ test('Buchhaltung: bezahlen', async () => {
 test('Abgelehnte Note überarbeiten', async () => {
   await k.bert.ok('profilSpeichern', {
     vorname: 'Bert', nachname: 'Beispiel', email: 'bert@example.org', strasse: 'Weg 2', plz_ort: '8010 Graz',
-    kontoinhaber: 'Bert Beispiel', iban: 'DE89370400440532013000',
+    kontoinhaber: 'Bert Beispiel', iban: 'DE89370400440532013000', campus_a_profil: `https://campus-a.at/profil/${CAMPUS_A_PROFIL}`,
   });
   await k.bert.ok('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: 'Stadt', titel: 'Graz', veroeffentlichung: '2026-09-02', betrag: 15 });
   const note = await k.bert.ok('abrechnungAbschicken', (await k.bert.ok('meineLeistungen')).map((p) => p.id));
@@ -211,11 +226,20 @@ test('Admin: Rollen, letzter Admin, Deaktivieren beendet Sitzungen', async () =>
 
 test('Honorarsätze: Admin legt fest, alle sehen sie, ungültige Werte abgelehnt', async () => {
   const basisDaten = { empfaenger: { name: 'campus a Medien GmbH' }, datenschutzKontakt: '' };
-  assert.equal((await k.anna.ok('einstellungen')).honorarsaetze.kolumne, 15, 'Standardsatz ab Werk');
-  assert.equal((await k.rita.aufruf('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { kolumne: 20 } })).status, 403);
-  assert.match((await k.admin.aufruf('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { kolumne: -5 } })).fehler, /Honorarsätze/);
-  await k.admin.ok('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { kolumne: 17.5, ausserordentlich: '' } });
-  assert.deepEqual((await k.anna.ok('einstellungen')).honorarsaetze, { kolumne: 17.5, ausserordentlich: null });
+  assert.deepEqual((await k.anna.ok('einstellungen')).honorarsaetze, {
+    college: { kolumne: 15, ausserordentlich: null }, 'campus-a': { kolumne: 15, ausserordentlich: null },
+  }, 'Standardsätze ab Werk, für beide Medien');
+  assert.equal((await k.rita.aufruf('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { college: { kolumne: 20 } } })).status, 403);
+  assert.match((await k.admin.aufruf('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { 'campus-a': { kolumne: -5 } } })).fehler, /Honorarsätze/);
+  await k.admin.ok('einstellungenSpeichern', {
+    ...basisDaten, honorarsaetze: { college: { kolumne: 17.5, ausserordentlich: '' }, 'campus-a': { kolumne: 25, ausserordentlich: 80 } },
+  });
+  assert.deepEqual((await k.anna.ok('einstellungen')).honorarsaetze, {
+    college: { kolumne: 17.5, ausserordentlich: null }, 'campus-a': { kolumne: 25, ausserordentlich: 80 },
+  });
+  // ältere Einstellungen ohne Medium gelten für beide
+  db.prepare("update einstellungen set wert = ? where schluessel = 'honorarsaetze'").run(JSON.stringify({ kolumne: 16, ausserordentlich: null }));
+  assert.equal((await k.anna.ok('einstellungen')).honorarsaetze['campus-a'].kolumne, 16);
 });
 
 test('Art der Kolumne (freier Text): Speichern, bleibt beim Abschicken erhalten', async () => {
@@ -242,7 +266,6 @@ test('Artikel von campus-a-college.at: Profil verknüpfen, alle Artikel sehen, �
   const a = k.anna;
   const profil = { vorname: 'Anna', nachname: 'Müller', email: 'anna@example.org', strasse: 'Hauptstraße 1', plz_ort: '1010 Wien',
     kontoinhaber: 'Anna Müller', iban: AT_IBAN, bic: '' };
-  assert.deepEqual(await a.ok('meineArtikel'), { verknuepft: false, artikel: [] });
   assert.match((await a.aufruf('profilSpeichern', { ...profil, campus_profil: 'https://example.org/profil/abc' })).fehler, /Profil auf campus-a-college/);
   await a.ok('profilSpeichern', { ...profil, campus_profil: 'https://www.campus-a-college.at/profil/ae1054937a1ae033e117' });
   assert.equal((await a.ok('aktuellerNutzer')).profil.campus_profil, 'ae1054937a1ae033e117');
@@ -254,7 +277,7 @@ test('Artikel von campus-a-college.at: Profil verknüpfen, alle Artikel sehen, �
   assert.ok(verknuepft);
   assert.deepEqual(artikel.map((x) => x.titel), ['Das Packerl wird teurer', 'Alter bestätigen, bitte', 'Der freie Platz']);
   assert.deepEqual(artikel[0], {
-    url: 'https://www.campus-a-college.at/news/detail/das-packerl-wird-teurer', titel: 'Das Packerl wird teurer',
+    url: 'https://www.campus-a-college.at/news/detail/das-packerl-wird-teurer', medium: 'college', titel: 'Das Packerl wird teurer',
     datum: '2026-09-28', ressort: 'Wirtschaft', region: 'International', kategorie: 'Meinung', erfasst: false,
   });
 
@@ -284,6 +307,42 @@ test('Artikel von campus-a-college.at: Profil verknüpfen, alle Artikel sehen, �
   const vorher = campusSeiten.abrufe;
   await a.ok('meineArtikel', { neu: true });
   assert.equal(campusSeiten.abrufe - vorher, 1, 'nur die erste Listenseite (keine neuen Artikel)');
+});
+
+test('campus a und campus a college: Artikel beider Seiten, getrennte Honorarnoten', async () => {
+  const b = k.bert;
+  await b.ok('anmelden', 'bert@example.org', 'geheim12345'); // Sitzung wurde beim Deaktivieren beendet
+  // Bert hat nur ein Profil auf campus-a.at
+  const { medien, artikel } = await b.ok('meineArtikel');
+  assert.deepEqual(medien, ['campus-a']);
+  assert.deepEqual(artikel.map((a) => [a.medium, a.titel, a.datum]), [['campus-a', 'Das Geschäft mit Universitäts-Rankings', '2026-09-11']]);
+  const url = artikel[0].url;
+  assert.equal(url, 'https://campus-a.at/news/news-detail/das-geschaeft-mit-universitaets-rankings');
+
+  const basis = { kategorie: 'kolumne', titel: 'Rankings', veroeffentlichung: '2026-09-11', betrag: 15 };
+  assert.match((await b.aufruf('leistungSpeichern', { ...basis, medium: 'college', artikel_url: url })).fehler, /campus-a-college\.at/, 'Artikel passt nicht zum Medium');
+  assert.match((await b.aufruf('leistungSpeichern', { ...basis, medium: 'zeitung' })).fehler, /campus a college oder campus a/);
+  await b.ok('leistungSpeichern', { ...basis, medium: 'campus-a', artikel_url: url });
+  await b.ok('leistungSpeichern', { ...basis, titel: 'Schulbeitrag' }); // ohne Angabe: campus a college
+  const liste = (await b.ok('meineLeistungen')).filter((p) => ['Rankings', 'Schulbeitrag'].includes(p.titel));
+  assert.deepEqual(liste.map((p) => p.medium).sort(), ['campus-a', 'college']);
+  assert.equal((await b.ok('meineArtikel')).artikel[0].erfasst, true);
+
+  // gemischt abschicken geht nicht, getrennt schon – jede Note hat ihr Medium
+  assert.match((await b.aufruf('abrechnungAbschicken', liste.map((p) => p.id))).fehler, /getrennt/);
+  const noteA = await b.ok('abrechnungAbschicken', [liste.find((p) => p.medium === 'campus-a').id]);
+  const noteC = await b.ok('abrechnungAbschicken', [liste.find((p) => p.medium === 'college').id]);
+  assert.deepEqual([noteA.medium, noteC.medium], ['campus-a', 'college']);
+  assert.equal(noteA.positionen[0].medium, 'campus-a');
+  assert.notEqual(noteA.nummer, noteC.nummer);
+  const redaktion = await k.rita.ok('alleNoten');
+  assert.equal(redaktion.find((n) => n.id === noteA.id).medium, 'campus-a', 'Redaktion sieht das Medium');
+
+  // abgelehnt und zurückgeholt: Medium bleibt erhalten
+  await k.rita.ok('ablehnen', noteA.id, 'Test');
+  await b.ok('leistungenZurueckholen', noteA.id);
+  assert.equal((await b.ok('meineLeistungen')).find((p) => p.titel === 'Rankings').medium, 'campus-a');
+  await k.rita.ok('ablehnen', noteC.id, 'Test');
 });
 
 test('Artikel: campus-a-college.at nicht erreichbar', async () => {

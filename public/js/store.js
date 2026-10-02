@@ -9,7 +9,10 @@ import { artNormalisieren, heuteIso, summe } from './lib/format.js';
 import { ibanFehler, normalizeIban, normalizeBic, bicIstGueltig } from './lib/iban.js';
 import { honorarnoteNummer } from './lib/nummer.js';
 import { STANDARD_SAETZE, saetzeNormalisieren } from './lib/honorarsaetze.js';
-import { artikelUrlGueltig, profilIdAusLink } from './lib/campus.js';
+import {
+  MEDIEN, MEDIUM_KEYS, PROFIL_FELD, istMedium, mediumName, mediumOder, mediumVonArtikel, profilIdAusLink,
+} from './lib/campus.js';
+import { KONTO_FEHLT, kontoFertig } from './lib/konto.js';
 
 const SPEICHER_KEY = 'campus-a-honorare:v1';
 const SITZUNG_KEY = 'campus-a-honorare:sitzung';
@@ -47,7 +50,7 @@ function leereDb() {
     einstellungen: {
       empfaenger: { ...STANDARD_EMPFAENGER },
       datenschutzKontakt: '',
-      honorarsaetze: { ...STANDARD_SAETZE },
+      honorarsaetze: saetzeNormalisieren(STANDARD_SAETZE),
     },
   };
 }
@@ -132,6 +135,8 @@ const hat = (n, rolle) => n.rollen.includes(rolle) || (rolle !== 'autor' && n.ro
 function brauche(rolle) {
   const n = ich();
   pruefe(hat(n, rolle), 'Dafür fehlt dir die Berechtigung.');
+  // Autor:innen müssen zuerst ihr Konto einrichten (Adresse, Bankverbindung, Profil-Link)
+  if (rolle === 'autor') pruefe(kontoFertig(n), KONTO_FEHLT);
   return n;
 }
 const anzeigename = (n) => `${n.vorname} ${n.nachname}`.trim() || n.email;
@@ -282,12 +287,12 @@ export async function erstesPasswortSetzen(neu) {
 
 // ------------------------------------------------------------------ Profil
 
+/** Konto fertig eingerichtet? (Autor:innen: Adresse, Bankverbindung, mindestens ein Profil-Link) */
 export function profilVollstaendig(n = aktuellerNutzer()) {
-  const p = n?.profil ?? {};
-  return !leer(p.strasse) && !leer(p.plz_ort) && !leer(p.kontoinhaber) && !ibanFehler(p.iban);
+  return kontoFertig(n);
 }
 
-export function profilSpeichern({ vorname, nachname, email, strasse, plz_ort, kontoinhaber, iban, bic, campus_profil }) {
+export function profilSpeichern({ vorname, nachname, email, strasse, plz_ort, kontoinhaber, iban, bic, ...daten }) {
   const n = ich();
   email = trim(email).toLowerCase();
   pruefe(!leer(vorname) && !leer(nachname), 'Bitte Vor- und Nachnamen angeben.');
@@ -295,9 +300,13 @@ export function profilSpeichern({ vorname, nachname, email, strasse, plz_ort, ko
   pruefe(!db.nutzer.some((x) => x.email === email && x.id !== n.id), 'Diese E-Mail-Adresse wird schon verwendet.');
   if (!leer(iban)) pruefe(!ibanFehler(iban), ibanFehler(iban));
   pruefe(bicIstGueltig(bic), 'Der BIC ist ungültig.');
-  // ohne Angabe bleibt eine bestehende Verknüpfung erhalten
-  const campusProfil = campus_profil === undefined ? (n.profil?.campus_profil ?? '') : profilIdAusLink(campus_profil);
-  pruefe(campusProfil !== null, 'Bitte den Link zu deinem Profil auf campus-a-college.at einfügen, z. B. https://www.campus-a-college.at/profil/…');
+  // Profil-Links auf campus-a-college.at und campus-a.at; ohne Angabe bleibt eine bestehende Verknüpfung erhalten
+  const links = {};
+  for (const m of MEDIUM_KEYS) {
+    const feld = PROFIL_FELD[m];
+    links[feld] = daten[feld] === undefined ? (n.profil?.[feld] ?? '') : profilIdAusLink(daten[feld], m);
+    pruefe(links[feld] !== null, `Bitte den Link zu deinem Profil auf ${MEDIEN[m].seite} einfügen, z. B. ${MEDIEN[m].basis}/profil/…`);
+  }
   Object.assign(n, { vorname: trim(vorname), nachname: trim(nachname), email });
   n.profil = {
     strasse: trim(strasse),
@@ -305,7 +314,7 @@ export function profilSpeichern({ vorname, nachname, email, strasse, plz_ort, ko
     kontoinhaber: trim(kontoinhaber),
     iban: normalizeIban(iban),
     bic: normalizeBic(bic),
-    campus_profil: campusProfil,
+    ...links,
   };
   speichern();
   return nutzerSicht(n);
@@ -349,6 +358,7 @@ export function leistungSpeichern(daten) {
     kolumnenart: istKolumne ? artNormalisieren(daten.kolumnenart) : '',
     titel: trim(daten.titel),
     artikel_url: trim(daten.artikel_url),
+    medium: daten.medium ?? 'college',
     veroeffentlichung: daten.veroeffentlichung,
     ausgabe: trim(daten.ausgabe),
     vereinbart_mit: daten.kategorie === 'ausserordentlich' ? trim(daten.vereinbart_mit) : '',
@@ -357,8 +367,10 @@ export function leistungSpeichern(daten) {
   };
   positionPruefen(p);
   if (!istKolumne) pruefe(p.art, 'Bitte die Art des Honorars angeben.');
+  pruefe(istMedium(p.medium), 'Bitte wählen, ob für campus a college oder campus a.');
   if (p.artikel_url) {
-    pruefe(artikelUrlGueltig(p.artikel_url) || p.artikel_url.startsWith(DEMO_ARTIKEL), 'Der Link zum Artikel ist ungültig.');
+    pruefe(mediumVonArtikel(p.artikel_url) === p.medium || p.artikel_url.startsWith(`${DEMO_ARTIKEL}${p.medium}-`),
+      `Der Link zum Artikel ist ungültig (erwartet: ein Artikel auf ${MEDIEN[p.medium].seite}).`);
     pruefe(!verwendeteArtikel(n.id, daten.id).has(p.artikel_url), 'Dieser Artikel ist schon als Leistung gespeichert oder abgerechnet.');
   }
   if (daten.id) {
@@ -421,21 +433,30 @@ function verlauf(noteId, n, aktion, details = {}) {
 // Sie zeigt deshalb Beispielartikel; im Server-Betrieb kommen hier die echten Artikel.
 const DEMO_ARTIKEL = 'demo:'; // gleiche Kennung wie in lib/campus.js
 
-function demoArtikel() {
-  const tag = (vor) => {
-    const d = new Date();
-    d.setDate(d.getDate() - vor);
-    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
-  };
-  return [
+const DEMO_BEISPIELE = {
+  college: [
     ['Warum die Mensa-Preise schon wieder steigen', 2, 'Wirtschaft', 'Wien', 'Meinung'],
     ['Mein erster Tag als Schulsprecherin', 6, 'Panorama', 'Wien', 'Meinung'],
     ['Wie viel Handy ist zu viel?', 11, 'Wissenschaft', 'Österreich', 'Fakten'],
     ['Maturaball ohne Schulden: So geht’s', 17, 'Wirtschaft', 'Österreich', 'Fakten'],
     ['Interview: Was eine Klimaforscherin Jugendlichen rät', 24, 'Wissenschaft', 'International', 'Interview'],
     ['Warum ich Lesen wieder lieben gelernt habe', 33, 'Kultur', 'Österreich', 'Meinung'],
-  ].map(([titel, vor, ressort, region, kategorie], i) => ({
-    url: `${DEMO_ARTIKEL}artikel-${i + 1}`, titel, datum: tag(vor), ressort, region, kategorie,
+  ],
+  'campus-a': [
+    ['Wohnungssuche im ersten Semester: Ein Erfahrungsbericht', 3, 'Panorama', 'Wien', 'Meinung'],
+    ['Was Studiengebühren wirklich kosten würden', 9, 'Politik', 'Österreich', 'Fakten'],
+    ['Interview: Wie eine Mensa nachhaltiger wird', 20, 'Wissenschaft', 'Graz', 'Interview'],
+  ],
+};
+
+function demoArtikel(medium) {
+  const tag = (vor) => {
+    const d = new Date();
+    d.setDate(d.getDate() - vor);
+    return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  };
+  return DEMO_BEISPIELE[medium].map(([titel, vor, ressort, region, kategorie], i) => ({
+    url: `${DEMO_ARTIKEL}${medium}-artikel-${i + 1}`, medium, titel, datum: tag(vor), ressort, region, kategorie,
   }));
 }
 
@@ -452,10 +473,12 @@ function verwendeteArtikel(autorId, ohnePosition = null) {
 
 export async function meineArtikel() {
   const n = brauche('autor');
-  const profil = n.profil?.campus_profil;
-  if (!profil) return { verknuepft: false, artikel: [] };
+  const medien = MEDIUM_KEYS.filter((m) => n.profil?.[PROFIL_FELD[m]]);
+  if (!medien.length) return { verknuepft: false, artikel: [] };
   const verwendet = verwendeteArtikel(n.id);
-  return { verknuepft: true, profil, demo: true, artikel: demoArtikel().map((a) => ({ ...a, erfasst: verwendet.has(a.url) })) };
+  const artikel = medien.flatMap(demoArtikel).sort((x, y) => y.datum.localeCompare(x.datum))
+    .map((a) => ({ ...a, erfasst: verwendet.has(a.url) }));
+  return { verknuepft: true, medien, demo: true, warnung: '', artikel };
 }
 
 export function naechsteNummer(n = ich(), jahr = Number(heuteIso().slice(0, 4))) {
@@ -474,10 +497,12 @@ export function notenDiesenMonat() {
 /** Monatsabrechnung abschicken: gewählte gespeicherte Leistungen -> eine Honorarnote */
 export function abrechnungAbschicken(positionIds) {
   const n = brauche('autor');
-  pruefe(profilVollstaendig(n), 'Bitte zuerst Adresse und Bankverbindung im Profil ergänzen.');
   const positionen = db.positionen.filter((p) => p.autor_id === n.id && positionIds.includes(p.id));
   pruefe(positionen.length, 'Bitte mindestens eine Leistung auswählen.');
   positionen.forEach(positionPruefen);
+  // campus a und campus a college bekommen getrennte Honorarnoten
+  const medium = mediumOder(positionen[0].medium);
+  pruefe(positionen.every((p) => mediumOder(p.medium) === medium), 'Leistungen für campus a und campus a college bitte getrennt abschicken.');
 
   const { jahr, laufendeNummer, nummer } = naechsteNummer(n);
   const note = {
@@ -486,6 +511,7 @@ export function abrechnungAbschicken(positionIds) {
     jahr,
     laufende_nummer: laufendeNummer,
     monat: heuteIso().slice(0, 7),
+    medium,
     autor_id: n.id,
     status: 'eingereicht',
     eingereicht_am: jetzt(),
@@ -495,14 +521,14 @@ export function abrechnungAbschicken(positionIds) {
     empfaenger: { ...db.einstellungen.empfaenger },
     positionen: positionen.map((p) => ({
       id: p.id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel, veroeffentlichung: p.veroeffentlichung,
-      artikel_url: p.artikel_url ?? '', ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
+      artikel_url: p.artikel_url ?? '', medium, ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, notiz: p.notiz,
       betrag: p.betrag, betrag_eingereicht: p.betrag, betrag_vermerk: '',
     })),
     ablehnungsgrund: '',
   };
   db.noten.push(note);
   db.positionen = db.positionen.filter((p) => !positionIds.includes(p.id) || p.autor_id !== n.id);
-  verlauf(note.id, n, 'eingereicht', { betrag: summe(note.positionen), positionen: note.positionen.length });
+  verlauf(note.id, n, 'eingereicht', { betrag: summe(note.positionen), positionen: note.positionen.length, medium: mediumName(medium) });
   speichern();
   return sicht(n, note);
 }
@@ -523,8 +549,8 @@ export function leistungenZurueckholen(noteId) {
   for (const p of note.positionen) {
     db.positionen.push({
       id: id(), autor_id: n.id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel,
-      veroeffentlichung: p.veroeffentlichung, artikel_url: p.artikel_url ?? '', ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit,
-      betrag: p.betrag_eingereicht, notiz: p.notiz, erstellt_am: jetzt(),
+      veroeffentlichung: p.veroeffentlichung, artikel_url: p.artikel_url ?? '', medium: mediumOder(note.medium),
+      ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, betrag: p.betrag_eingereicht, notiz: p.notiz, erstellt_am: jetzt(),
     });
   }
   note.zurueckgeholt_am = jetzt();
@@ -722,6 +748,7 @@ export function loeschprotokoll() {
 export function einstellungen() {
   const e = { ...leereDb().einstellungen, ...kopie(db.einstellungen) };
   delete e.auftraggeber; // früheres SEPA-Konto, nicht mehr verwendet
+  e.honorarsaetze = saetzeNormalisieren(e.honorarsaetze); // ältere Sätze ohne Medium gelten für beide
   return e;
 }
 
