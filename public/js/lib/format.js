@@ -26,6 +26,7 @@ export const ROLLEN_LABEL = {
   redaktion: 'Redaktion',
   buchhaltung: 'Buchhaltung',
   admin: 'Admin',
+  redigieren: 'Redigieren (campus a college)',
 };
 
 export const AKTION_LABEL = {
@@ -131,11 +132,13 @@ export function artText(p) {
 export const textAnzahl = (n) => `${Number(n) || 0} ${Number(n) === 1 ? 'Text' : 'Texte'}`;
 
 /**
- * Beschreibung einer Redigier-Leistung auf der Honorarnote (Word und PDF; die Anzahl steht dort in
- * einer eigenen Spalte): die eigene Beschreibung oder einfach „Redigieren“
+ * Bezeichnung einer Redigier-Leistung auf der Honorarnote (Word und PDF, bei den außerordentlichen
+ * Honoraren): immer mit Anzahl der Texte, z. B. „Redigieren (7 Texte)“ oder „Redigieren September (7 Texte)“
  */
-export function redigierBeschreibung(p) {
-  return p.titel && !/^Redigieren \(\d+ Texte?\)$/.test(p.titel) ? p.titel : 'Redigieren';
+export function redigierText(p) {
+  const anzahl = `Redigieren (${textAnzahl(p.anzahl)})`;
+  if (!p.titel || /^Redigieren \(\d+ Texte?\)$/.test(p.titel)) return anzahl;
+  return /^redigier/i.test(p.titel) ? `${p.titel} (${textAnzahl(p.anzahl)})` : `${anzahl}: ${p.titel}`;
 }
 
 /** Freitext für Art der Kolumne / Art des Honorars: Leerraum zusammenfassen, max. 100 Zeichen */
@@ -145,4 +148,11 @@ export function artNormalisieren(text) {
 
 export function vollerName(note) {
   return `${note.vorname ?? ''} ${note.nachname ?? ''}`.trim();
+}
+
+/** Positionen für „2. Außerordentliche Honorare“ – Redigieren steht dort mit der Anzahl der Texte. */
+export function ausserordentlichePositionen(positionen) {
+  return positionen
+    .filter((p) => p.kategorie === 'ausserordentlich' || p.kategorie === 'redigieren')
+    .map((p) => (p.kategorie === 'redigieren' ? { ...p, titel: redigierText(p), vereinbart_mit: p.vereinbart_mit || '–' } : p));
 }

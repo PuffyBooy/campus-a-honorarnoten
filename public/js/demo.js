@@ -43,6 +43,13 @@ export function demoKontenAktualisieren(db) {
     }
     if (!n.profil.kontoinhaber) n.profil.kontoinhaber = `${n.vorname} ${n.nachname}`.trim();
   }
+  // ältere Demo-Daten: Maria bekommt einmalig die Rolle „Redigieren“ (danach entscheidet der Admin)
+  if (!db.demoRedigierenRolle) {
+    const maria = (db.nutzer ?? []).find((n) => n.email === 'maria@demo.at');
+    if (maria && !maria.rollen.includes('redigieren')) maria.rollen = [...maria.rollen, 'redigieren'];
+    db.demoRedigierenRolle = true;
+    geaendert = true;
+  }
   return geaendert;
 }
 
@@ -53,7 +60,8 @@ export async function demoDaten(db, { passwortHash }) {
     profil: { strasse: '', plz_ort: '', kontoinhaber: `${vorname} ${nachname}`, iban: '', bic: '', ...profil },
   });
 
-  const maria = nutzer('demo-maria', 'maria@demo.at', 'Maria', 'Musterfrau', ['autor'], DEMO_PROFILE['maria@demo.at']);
+  // Maria hat vom Admin auch die Rolle „Redigieren“
+  const maria = nutzer('demo-maria', 'maria@demo.at', 'Maria', 'Musterfrau', ['autor', 'redigieren'], DEMO_PROFILE['maria@demo.at']);
   const jonas = nutzer('demo-jonas', 'jonas@demo.at', 'Jonas', 'Weiß', ['autor'], DEMO_PROFILE['jonas@demo.at']);
   const rita = nutzer('demo-rita', 'redaktion@demo.at', 'Rita', 'Redaktion', ['redaktion', 'autor'], DEMO_PROFILE['redaktion@demo.at']);
   const bernd = nutzer('demo-bernd', 'buchhaltung@demo.at', 'Bernd', 'Buchhaltung', ['buchhaltung']);
