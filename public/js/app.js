@@ -151,8 +151,10 @@ async function render() {
   try {
     nutzer = await store.aktuellerNutzer();
   } catch (e) {
-    main.innerHTML = `<section class="karte fehlerbox" role="alert"><h1>Keine Verbindung</h1>
-      <p>${esc(fehlerText(e))}</p><p><button type="button" class="btn" id="nochmal">Erneut versuchen</button></p></section>`;
+    // Hinweis auf die Einrichtung als Link (z. B. „Bitte zuerst …/einrichten.php öffnen“)
+    const text = esc(fehlerText(e)).replace(/(https?:\/\/[^\s<]+einrichten\.php)/, '<a href="$1">$1</a>');
+    main.innerHTML = `<section class="karte fehlerbox" role="alert"><h1>Die App ist gerade nicht erreichbar</h1>
+      <p>${text}</p><p><button type="button" class="btn" id="nochmal">Erneut versuchen</button></p></section>`;
     main.querySelector('#nochmal').addEventListener('click', render);
     return;
   }
