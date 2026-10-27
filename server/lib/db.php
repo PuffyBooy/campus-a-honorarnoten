@@ -242,6 +242,19 @@ const MIGRATIONEN = [
       widerrufen_am  text
     );
     SQL,
+    // Version 12: Protokoll für den Admin (Info, Warnung, Fehler)
+    <<<'SQL'
+    create table protokoll (
+      id       integer primary key autoincrement,
+      zeit     text not null,
+      stufe    text not null check (stufe in ('info', 'warnung', 'fehler')),
+      bereich  text not null,
+      text     text not null,
+      wer      text not null default '',
+      ip       text not null default ''
+    );
+    create index protokoll_zeit on protokoll(zeit);
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -452,11 +465,25 @@ const MYSQL_MIGRATIONEN = [
       check (art in ('anmelden', 'registrieren'))
     ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
     SQL,
+    // Version 5 = SQLite-Version 12
+    <<<'SQL'
+    create table if not exists protokoll (
+      id       bigint not null auto_increment primary key,
+      zeit     varchar(30) not null,
+      stufe    varchar(10) not null,
+      bereich  varchar(30) not null,
+      text     varchar(1000) not null,
+      wer      varchar(250) not null default '',
+      ip       varchar(50) not null default '',
+      index protokoll_zeit (zeit),
+      check (stufe in ('info', 'warnung', 'fehler'))
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    SQL,
 ];
 
 /** Tabellen in der Reihenfolge, in der sie eingespielt werden können (für die Sicherung) */
 const TABELLEN = ['nutzer', 'sitzungen', 'anfragen', 'positionen', 'noten', 'note_positionen', 'kommentare', 'verlauf',
-    'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails', 'links'];
+    'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails', 'links', 'protokoll'];
 
 /**
  * Datenbank öffnen und auf den neuesten Stand bringen.

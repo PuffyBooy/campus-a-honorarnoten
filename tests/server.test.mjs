@@ -378,6 +378,41 @@ test('Registrierungslink: Konto selbst anlegen, begrenzt in Zeit und Anzahl', as
   await k.admin.ok('nutzerLoeschen', nina.id);
 });
 
+test('Admin: Protokoll schreibt im Hintergrund mit (Info, Warnung, Fehler), mit Filtern', async () => {
+  await client().aufruf('anmelden', 'anna@example.org', 'falsches-passwort');
+  assert.equal((await k.rita.aufruf('protokoll')).status, 403);
+  const alle = await k.admin.ok('protokoll');
+  assert.ok(alle.eintraege.length > 5);
+  assert.ok(alle.zaehler.alle >= alle.zaehler.info + alle.zaehler.warnung);
+  const fehl = await k.admin.ok('protokoll', { stufe: 'warnung', suche: 'anna@example' });
+  assert.match(fehl.eintraege[0].text, /Anmeldung fehlgeschlagen für anna@example\.org/);
+  assert.equal(fehl.eintraege[0].wer, 'Anna Müller');
+  assert.match(fehl.eintraege[0].ip, /^(127\.0\.0\.0|::1?|.*::)$|^$/, 'IP nur gekürzt');
+  const konten = await k.admin.ok('protokoll', { bereich: 'konten' });
+  assert.ok(konten.eintraege.every((e) => e.bereich === 'konten'));
+  assert.ok(konten.eintraege.some((e) => /Konto angelegt: Lina Link/.test(e.text)));
+  assert.ok((await k.admin.ok('protokoll', { bereich: 'abrechnungen' })).eintraege.some((e) => /^Angenommen: /.test(e.text)));
+  // weiterblättern
+  const seite2 = await k.admin.ok('protokoll', { vor: alle.eintraege.at(-1).zeit });
+  assert.ok(seite2.eintraege.every((e) => e.zeit < alle.eintraege.at(-1).zeit));
+});
+
+test('Admin: Übersicht und Sicherungen (jetzt sichern, herunterladen)', async () => {
+  const d = await k.admin.ok('dashboard');
+  assert.equal(typeof d.zahlen.zu_pruefen, 'number');
+  assert.match(d.system.php, /^8\./);
+  assert.ok(d.aktivitaet.length > 0);
+  assert.equal((await k.kasse.aufruf('dashboard')).status, 403);
+  const b = await k.admin.ok('jetztSichern');
+  assert.match(b.name, /^honorarnoten-\d{4}-\d{2}-\d{2}-\d{6}\.(sqlite|sql)$/);
+  assert.ok((await k.admin.ok('sicherungen')).liste.some((x) => x.name === b.name));
+  const r = await k.admin.ok('sicherungHerunterladen', b.name);
+  const inhalt = Buffer.from(r.inhalt, 'base64');
+  assert.ok(inhalt.length === b.groesse && inhalt.length > 1000);
+  assert.equal((await k.admin.aufruf('sicherungHerunterladen', '../konfig.php')).status, 404);
+  assert.ok((await k.admin.ok('protokoll', { bereich: 'sicherung' })).eintraege.some((e) => e.stufe === 'warnung' && /heruntergeladen/.test(e.text)));
+});
+
 test('Admin: E-Mail-Adresse ändern, alte und neue Adresse bekommen eine Info', async () => {
   const bert = (await k.admin.ok('nutzerListe')).find((n) => n.email === 'bert@example.org');
   assert.equal((await k.rita.aufruf('emailAendern', bert.id, 'b@example.org')).status, 403);

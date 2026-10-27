@@ -185,8 +185,10 @@ export async function demoKontoFrisch(email) {
 export async function anmelden(email, passwort) {
   const n = db.nutzer.find((x) => x.email === trim(email).toLowerCase());
   const ok = n && (await passwortPasst(n, passwort));
+  if (!ok) { protokoll('warnung', 'anmeldung', `Anmeldung fehlgeschlagen für ${trim(email).toLowerCase()}`, n); speichern(); }
   pruefe(ok, 'E-Mail oder Passwort ist falsch.');
   pruefe(n.aktiv, 'Dieses Konto ist deaktiviert. Bitte wende dich an die Redaktion.');
+  protokoll('info', 'anmeldung', 'Angemeldet', n);
   sessionStorage.setItem(SITZUNG_KEY, n.id);
   n.letzter_login = jetzt();
   speichern();
@@ -301,6 +303,7 @@ export async function nutzerAnlegen({ vorname, nachname, email, rollen }) {
   // eine evtl. offene Anfrage derselben Person ist damit erledigt
   db.anfragen.filter((a) => a.email === email && a.status === 'offen')
     .forEach((a) => Object.assign(a, { status: 'freigeschaltet', bearbeitet_am: jetzt() }));
+  protokoll('info', 'konten', `Konto angelegt: ${anzeigename(n)} (${email}), Rollen: ${rollen.join(', ')}`);
   speichern();
   return zugang(n, passwort);
 }
@@ -370,6 +373,7 @@ export function linkAnmelden(token) {
   l.nutzungen++;
   sessionStorage.setItem(SITZUNG_KEY, n.id);
   n.letzter_login = jetzt();
+  protokoll('info', 'anmeldung', 'Mit Anmeldelink aus der Zugangs-Mail angemeldet', n);
   speichern();
   return nutzerSicht(n);
 }
@@ -388,6 +392,7 @@ export async function mitLinkRegistrieren(token, { vorname, nachname, email, pas
   const n = kontoErstellen({ vorname, nachname, email, rollen: erlaubteRollen(l.rollen) }, await passwortHash(passwort));
   Object.assign(n, { muss_passwort_aendern: false, hinweis_bestaetigt_am: jetzt() });
   l.nutzungen++;
+  protokoll('info', 'konten', `Über Registrierungslink registriert: ${anzeigename(n)} (${email})`, n);
   db.anfragen.filter((a) => a.email === email && a.status === 'offen')
     .forEach((a) => Object.assign(a, { status: 'freigeschaltet', bearbeitet_am: jetzt(), bearbeitet_von: 'Registrierungslink' }));
   sessionStorage.setItem(SITZUNG_KEY, n.id);
@@ -406,6 +411,7 @@ export function registrierungslinkErstellen({ tage = 7, max = null, rollen = ['a
   const an = trim(email).toLowerCase();
   pruefe(!an || EMAIL_MUSTER.test(an), 'Bitte eine gültige E-Mail-Adresse angeben oder das Feld leer lassen.');
   const link = appLink(`registrieren/${linkErstellen('registrieren', { rollen, max, tage, notiz: trim(notiz).slice(0, 200) || an, von: anzeigename(admin) })}`);
+  protokoll('info', 'konten', `Registrierungslink erstellt: ${tage} Tage, ${max == null ? 'beliebig oft' : `${max}×`}`);
   speichern();
   return { link, mail: false, tage, max };
 }
@@ -686,6 +692,7 @@ export function abrechnungAbschicken(positionIds) {
   db.noten.push(note);
   db.positionen = db.positionen.filter((p) => !positionIds.includes(p.id) || p.autor_id !== n.id);
   verlauf(note.id, n, 'eingereicht', { betrag: summe(note.positionen), positionen: note.positionen.length, medium: mediumName(medium) });
+  protokoll('info', 'abrechnungen', `Eingereicht: ${note.nummer}`);
   speichern();
   return sicht(n, note);
 }
@@ -738,6 +745,7 @@ export function abrechnungZurueckziehen(noteId) {
   db.kommentare = db.kommentare.filter((k) => k.note_id !== noteId);
   db.verlauf = db.verlauf.filter((v) => v.note_id !== noteId);
   db.loeschprotokoll.push({ id: id(), nummer: note.nummer, geloescht_von: `${anzeigename(n)} (zurückgezogen)`, am: jetzt() });
+  protokoll('info', 'abrechnungen', `Zurückgezogen: ${note.nummer}`);
   speichern();
 }
 
@@ -763,6 +771,7 @@ export function annehmen(noteId) {
   const vorher = x.status;
   Object.assign(x, { status: 'angenommen', ablehnungsgrund: '', entschieden_am: jetzt() });
   verlauf(x.id, n, 'angenommen', { vorher });
+  protokoll('info', 'abrechnungen', `Angenommen: ${x.nummer}`);
   speichern();
 }
 
@@ -774,6 +783,7 @@ export function ablehnen(noteId, grund) {
   const vorher = x.status;
   Object.assign(x, { status: 'abgelehnt', ablehnungsgrund: trim(grund), entschieden_am: jetzt() });
   verlauf(x.id, n, 'abgelehnt', { vorher, grund: trim(grund) });
+  protokoll('info', 'abrechnungen', `Zurückgegeben: ${x.nummer} (${trim(grund)})`);
   // die Leistungen gehen sofort zurück an die Autor:in zum Überarbeiten
   zurueckAnAutor(x, n);
   speichern();
@@ -855,6 +865,7 @@ export function alleAlsBezahltMarkieren(noteIds, datum) {
   for (const x of noten) {
     Object.assign(x, { status: 'bezahlt', bezahlt_am: datum });
     verlauf(x.id, n, 'bezahlt', { datum });
+    protokoll('info', 'zahlung', `Als bezahlt markiert: ${x.nummer} (${datum})`);
   }
   speichern();
   return noten.map((x) => sicht(n, x));
@@ -889,6 +900,7 @@ export function rollenSetzen(uid, rollen) {
   rollen = erlaubteRollen(rollen);
   if (!rollen.includes('admin')) pruefe(nochEinAdmin(uid), 'Es muss mindestens ein aktives Admin-Konto geben.');
   n.rollen = rollen;
+  protokoll('info', 'konten', `Rollen von ${anzeigename(n)}: ${rollen.join(', ') || 'keine'}`);
   speichern();
   return admin.id === uid;
 }
@@ -898,6 +910,7 @@ export function nutzerAktivSetzen(uid, aktiv) {
   pruefe(aktiv || uid !== admin.id, 'Du kannst dein eigenes Konto nicht deaktivieren.');
   if (!aktiv && n.rollen.includes('admin')) pruefe(nochEinAdmin(uid), 'Es muss mindestens ein aktives Admin-Konto geben.');
   n.aktiv = Boolean(aktiv);
+  protokoll('info', 'konten', `${aktiv ? 'Konto aktiviert' : 'Konto deaktiviert'}: ${anzeigename(n)}`);
   speichern();
 }
 
@@ -907,6 +920,7 @@ export async function passwortZuruecksetzen(uid) {
   const passwort = startpasswort();
   n.passwort = await passwortHash(passwort);
   n.muss_passwort_aendern = true;
+  protokoll('info', 'konten', `Passwort zurückgesetzt: ${anzeigename(n)}`);
   speichern();
   return zugang(n, passwort);
 }
@@ -918,6 +932,7 @@ export function emailAendern(uid, email) {
   pruefe(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(neu) && neu.length <= 200, 'Bitte eine gültige E-Mail-Adresse angeben.');
   pruefe(neu !== n.email, 'Das ist schon die E-Mail-Adresse dieses Kontos.');
   pruefe(!db.nutzer.some((x) => x.email === neu && x.id !== uid), 'Diese E-Mail-Adresse wird schon verwendet.');
+  protokoll('info', 'konten', `E-Mail von ${anzeigename(n)} geändert: ${n.email} → ${neu}`);
   n.email = neu;
   speichern();
   return { email: neu, mail: false };
@@ -930,6 +945,7 @@ export function nutzerLoeschen(uid) {
   if (n.rollen.includes('admin')) pruefe(nochEinAdmin(uid), 'Es muss mindestens ein aktives Admin-Konto geben.');
   db.nutzer = db.nutzer.filter((x) => x.id !== uid);
   db.positionen = db.positionen.filter((p) => p.autor_id !== uid);
+  protokoll('warnung', 'konten', `Konto gelöscht: ${anzeigename(n)} (${n.email})`);
   speichern();
 }
 
@@ -945,6 +961,7 @@ export function noteLoeschen(noteId) {
   db.kommentare = db.kommentare.filter((k) => k.note_id !== noteId);
   db.verlauf = db.verlauf.filter((v) => v.note_id !== noteId);
   db.loeschprotokoll.push({ id: id(), nummer: x.nummer, geloescht_von: anzeigename(admin), am: jetzt() });
+  protokoll('warnung', 'abrechnungen', `Prämienabrechnung gelöscht: ${x.nummer}`);
   speichern();
 }
 
@@ -1006,6 +1023,61 @@ export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorar
   speichern();
 }
 
+// ------------------------------------------------------------------ Protokoll, Übersicht, Sicherungen
+
+const PROTOKOLL_STUFEN = ['info', 'warnung', 'fehler'];
+const PROTOKOLL_BEREICHE = {
+  anmeldung: 'Anmeldung', konten: 'Konten', abrechnungen: 'Abrechnungen', zahlung: 'Zahlung',
+  einstellungen: 'Einstellungen', mail: 'E-Mail', sicherung: 'Sicherung', system: 'System',
+};
+
+/** Eintrag ins Protokoll (wie auf dem Server); wer = Konto, sonst die angemeldete Person */
+function protokoll(stufe, bereich, text, wer = sitzungsNutzer()) {
+  db.protokoll ??= [];
+  db.protokoll.push({ id: (db.protokoll.at(-1)?.id ?? 0) + 1, zeit: jetzt(), stufe, bereich, text, wer: wer ? anzeigename(wer) : '', ip: '' });
+  if (db.protokoll.length > 2000) db.protokoll.splice(0, db.protokoll.length - 2000);
+}
+
+export function protokollLesen({ stufe = '', bereich = '', suche = '', vor = '' } = {}) {
+  brauche('admin');
+  const q = trim(suche).toLowerCase();
+  const passt = (e) => (!bereich || e.bereich === bereich) && (!q || e.text.toLowerCase().includes(q) || e.wer.toLowerCase().includes(q));
+  const alle = (db.protokoll ?? []).filter(passt).sort((a, b) => b.zeit.localeCompare(a.zeit) || b.id - a.id);
+  const zaehler = { alle: alle.length, ...Object.fromEntries(PROTOKOLL_STUFEN.map((s) => [s, alle.filter((e) => e.stufe === s).length])) };
+  const liste = alle.filter((e) => (!stufe || e.stufe === stufe) && (!vor || e.zeit < vor));
+  return { eintraege: kopie(liste.slice(0, 100)), mehr: liste.length > 100, zaehler, bereiche: PROTOKOLL_BEREICHE };
+}
+
+export function dashboard() {
+  brauche('admin');
+  const zaehle = (s) => db.noten.filter((x) => x.status === s).length;
+  const euro = (noten) => noten.reduce((s, x) => s + Math.round(summe(x.positionen) * 100), 0) / 100;
+  const seit = new Date(Date.now() - 7 * 86400000).toISOString();
+  const stufe = (s) => (db.protokoll ?? []).filter((e) => e.stufe === s && e.zeit >= seit).length;
+  return {
+    zahlen: {
+      zu_pruefen: zaehle('eingereicht'), zur_zahlung: zaehle('angenommen'), zur_zahlung_summe: euro(db.noten.filter((x) => x.status === 'angenommen')),
+      bezahlt_jahr: euro(db.noten.filter((x) => x.status === 'bezahlt' && x.bezahlt_am >= `${heuteIso().slice(0, 4)}-01-01`)),
+      anfragen: db.anfragen.filter((a) => a.status === 'offen').length, konten: db.nutzer.filter((x) => x.aktiv).length,
+      entwuerfe: db.positionen.length, warnungen: stufe('warnung'), fehler: stufe('fehler'),
+    },
+    system: { datenbank: 'Demo (Speicher dieses Browsers)', php: '–', version: 'Demo', mail: { aktiv: false, offen: 0, fehlgeschlagen: 0 }, sicherungen: 0, letzte_sicherung: null },
+    aktivitaet: kopie([...(db.protokoll ?? [])].sort((a, b) => b.zeit.localeCompare(a.zeit) || b.id - a.id).slice(0, 12)),
+  };
+}
+
+export function sicherungen() {
+  brauche('admin');
+  return { liste: [], tage: 30 };
+}
+
+export function jetztSichern() {
+  brauche('admin');
+  throw new Fehler('In der Demo gibt es keine Sicherungen am Server. Unter „Daten“ kannst du die Demo-Daten als Datei sichern.');
+}
+
+export const sicherungHerunterladen = jetztSichern;
+
 export function statistik() {
   brauche('admin');
   const zaehle = (s) => db.noten.filter((x) => x.status === s).length;
@@ -1055,6 +1127,7 @@ export function zahlungskontoSpeichern({ name, iban, bic } = {}) {
     pruefe(bicIstGueltig(k.bic), 'Der BIC des Zahlungskontos ist ungültig.');
   }
   db.einstellungen.zahlungskonto = k;
+  protokoll('warnung', 'einstellungen', `Zahlungskonto geändert: ${k.iban ? `${k.name}, IBAN …${k.iban.slice(-4)}` : 'entfernt'}`);
   speichern();
   return zahlungskonto();
 }

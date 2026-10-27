@@ -129,6 +129,15 @@ Lokal starten: `npm run dev` → http://localhost:5173
    (mit Löschprotokoll), Rechnungsempfänger, **Prämiensätze** und Datenschutzkontakt einstellen,
    Sicherung herunterladen/einspielen, Demo zurücksetzen. Weicht ein eingereichter Betrag vom
    Standardsatz ab, sieht die Redaktion in der Detailansicht einen Hinweis.
+   **Übersicht:** Die Admin-Startseite zeigt, was zu tun ist (zu prüfen, offen zur Zahlung, Anfragen,
+   Konten, Fehler und Warnungen der letzten 7 Tage, jeweils anklickbar), die letzte Aktivität und den
+   Zustand des Systems (Datenbank, PHP, E-Mail-Versand mit Warteschlange, letzte Sicherung).
+   **Protokoll:** Im Hintergrund wird mitgeschrieben, was passiert: Anmeldungen (auch fehlgeschlagene und
+   Sperren), Konten, Abrechnungen, Zahlungen, Einstellungen, E-Mails (nicht verschickte als Warnung bzw.
+   Fehler), Sicherungen und interne Fehler. Filter nach Info/Warnung/Fehler, Bereich und Suche, ältere
+   Einträge nachladen, CSV-Export. Aufbewahrt 1 Jahr, IP-Adressen nur gekürzt.
+   **Sicherungen:** Unter Admin → Daten stehen alle Sicherungen des Servers (täglich automatisch, 30 Tage
+   aufgehoben) zum Herunterladen, dazu „Jetzt sichern“. Zusätzlich empfiehlt sich das Backup von World4You.
    **Zugangs-Mail mit Anmeldelink:** Neue Konten (und „Passwort zurücksetzen“) bekommen automatisch eine
    E-Mail mit einem Knopf, der **direkt anmeldet** (gilt einmal, 7 Tage); danach legt man das eigene
    Passwort fest. Das Startpasswort steht als Rückfall in der Mail. Ist der E-Mail-Versand eingerichtet,

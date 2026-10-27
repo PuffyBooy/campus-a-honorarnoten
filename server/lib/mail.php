@@ -94,6 +94,9 @@ function mails_verschicken(PDO $db, int $max = 20): int
                 [kuerze($f->getMessage(), 500), time() + $warten, $m['id']]);
             $smtp = null;
             error_log('Prämienabrechnungen: E-Mail an ' . $m['an'] . ' nicht verschickt: ' . $f->getMessage());
+            $letzter = (int) $m['versuche'] + 1 >= 5;
+            protokoll($db, $letzter ? 'fehler' : 'warnung', 'mail', 'E-Mail „' . $m['betreff'] . '“ an ' . $m['an'] . ' nicht verschickt'
+                . ($letzter ? ' (aufgegeben nach 5 Versuchen)' : ' (Versuch ' . ((int) $m['versuche'] + 1) . ' von 5)') . ': ' . $f->getMessage());
         }
     }
     $smtp?->beenden();

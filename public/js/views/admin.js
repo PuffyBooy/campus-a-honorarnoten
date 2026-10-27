@@ -1,16 +1,128 @@
 // Admin-Terminal: Benutzer & Rollen, Prämienabrechnungen löschen, Einstellungen, Datensicherung
 import {
-  ROLLEN_LABEL, STATUS_LABEL, esc, formatBetragPlain, formatEuro, formatMonat, formatZeitpunkt, parseBetrag, vollerName,
+  ROLLEN_LABEL, esc, formatBetragPlain, formatEuro, formatMonat, formatZeitpunkt, parseBetrag, vollerName,
 } from '../lib/format.js';
-import { downloadText } from '../lib/csv.js';
+import { downloadBlob, downloadText } from '../lib/csv.js';
 import { MEDIEN, MEDIUM_KEYS } from '../lib/campus.js';
 import { formatIban } from '../lib/iban.js';
 import { bestaetigen, fehlerText, kopierenMitFeedback, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 import { STANDARD_HOSTER, betreiberOder } from '../lib/rechtliches.js';
 
 const REITER = {
-  anfragen: 'Anfragen', einladen: 'Einladen', benutzer: 'Benutzer', noten: 'Prämienabrechnungen', einstellungen: 'Einstellungen', mail: 'E-Mail', daten: 'Daten',
+  uebersicht: 'Übersicht', anfragen: 'Anfragen', einladen: 'Einladen', benutzer: 'Benutzer', noten: 'Abrechnungen',
+  protokoll: 'Protokoll', einstellungen: 'Einstellungen', mail: 'E-Mail', daten: 'Daten',
 };
+
+const STUFE_LABEL = { info: 'Info', warnung: 'Warnung', fehler: 'Fehler' };
+const stufeBadge = (s) => `<span class="stufe stufe-${esc(s)}">${esc(STUFE_LABEL[s] ?? s)}</span>`;
+const groesse = (b) => (b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1).replace('.', ',')} KB` : `${(b / 1048576).toFixed(1).replace('.', ',')} MB`);
+
+/** Startseite: das Wichtigste auf einen Blick, letzte Aktivität und Zustand des Systems */
+async function uebersicht(inhalt, { store }) {
+  const d = await store.dashboard();
+  const z = d.zahlen;
+  const sys = d.system;
+  const karte = (link, titel, wert, unten, art = '') => `
+    <a class="kennzahl kennzahl-link${art}" href="${link}"><span class="kennzahl-titel">${esc(titel)}</span>
+      <strong>${esc(String(wert))}</strong><span class="klein">${esc(unten)}</span></a>`;
+  inhalt.innerHTML = `
+    <section class="kennzahlen kennzahlen-5" aria-label="Überblick">
+      ${karte('#/redaktion', 'Zu prüfen', z.zu_pruefen, 'Abrechnungen bei der Redaktion', z.zu_pruefen ? ' kennzahl-marke' : '')}
+      ${karte('#/zahlung', 'Offen zur Zahlung', formatEuro(z.zur_zahlung_summe), `${z.zur_zahlung} angenommen`)}
+      ${karte('#/admin/anfragen', 'Zugangsanfragen', z.anfragen, 'offen', z.anfragen ? ' kennzahl-achtung' : '')}
+      ${karte('#/admin/benutzer', 'Konten', z.konten, `aktiv · ${z.entwuerfe} gespeicherte Leistungen`)}
+      ${karte('#/admin/protokoll', 'Letzte 7 Tage', `${z.fehler} / ${z.warnungen}`, 'Fehler / Warnungen',
+        z.fehler ? ' kennzahl-fehler' : z.warnungen ? ' kennzahl-achtung' : '')}
+    </section>
+    <div class="spalten">
+      <section class="karte">
+        <div class="kopfzeile"><h2>Letzte Aktivität</h2><a href="#/admin/protokoll" class="klein">Ganzes Protokoll</a></div>
+        ${d.aktivitaet.length ? `<ul class="aktivitaet">${d.aktivitaet.map((e) => `
+          <li><span class="punkt punkt-${esc(e.stufe)}" title="${esc(STUFE_LABEL[e.stufe])}"></span>
+            <span><span class="aktivitaet-text">${esc(e.text)}</span><br>
+              <span class="klein">${esc(formatZeitpunkt(e.zeit))}${e.wer ? ` · ${esc(e.wer)}` : ''}</span></span></li>`).join('')}</ul>`
+          : '<p class="klein">Noch keine Einträge.</p>'}
+      </section>
+      <section class="karte">
+        <h2>System</h2>
+        <dl class="angaben">
+          <dt>Datenbank</dt><dd>${esc(sys.datenbank)}</dd>
+          <dt>PHP</dt><dd>${esc(sys.php)}</dd>
+          ${sys.version ? `<dt>App-Version</dt><dd class="mono">${esc(sys.version)}</dd>` : ''}
+          <dt>E-Mail-Versand</dt><dd>${sys.mail.aktiv ? '<span class="badge badge-bezahlt">aktiv</span>' : '<span class="badge badge-abgelehnt">aus</span>'}
+            ${sys.mail.offen ? ` · ${sys.mail.offen} in der Warteschlange` : ''}
+            ${sys.mail.fehlgeschlagen ? ` · <a href="#/admin/mail">${sys.mail.fehlgeschlagen} fehlgeschlagen</a>` : ''}</dd>
+          <dt>Sicherungen</dt><dd>${sys.letzte_sicherung
+            ? `letzte ${esc(formatZeitpunkt(sys.letzte_sicherung.zeit))} (${esc(groesse(sys.letzte_sicherung.groesse))}) · ${sys.sicherungen} vorhanden`
+            : 'noch keine'} · <a href="#/admin/daten">ansehen</a></dd>
+        </dl>
+      </section>
+    </div>`;
+}
+
+// Filter des Protokolls (bleiben beim Neuladen erhalten)
+const protokollFilter = { stufe: '', bereich: '', suche: '' };
+
+/** Protokoll: alles, was im Hintergrund passiert, nach Info, Warnung und Fehler */
+async function protokoll(inhalt, { store, neuLaden }) {
+  const daten = await store.protokollLesen(protokollFilter);
+  let eintraege = daten.eintraege;
+  const zeilen = (liste) => liste.map((e) => `
+    <tr class="zeile-${esc(e.stufe)}">
+      <td data-label="Zeit" class="nowrap">${esc(formatZeitpunkt(e.zeit))}</td>
+      <td data-label="Stufe">${stufeBadge(e.stufe)}</td>
+      <td data-label="Bereich">${esc(daten.bereiche[e.bereich] ?? e.bereich)}</td>
+      <td data-label="Ereignis" class="umbruch">${esc(e.text)}</td>
+      <td data-label="Wer">${esc(e.wer || '–')}</td>
+    </tr>`).join('');
+  inhalt.innerHTML = `
+    <div class="protokoll-filter">
+      <div class="chips" role="group" aria-label="Stufe">
+        ${[['', 'Alle', daten.zaehler.alle], ...Object.entries(STUFE_LABEL).map(([k, l]) => [k, l, daten.zaehler[k]])].map(([k, l, n]) => `
+          <button type="button" class="chip${k ? ` chip-${k}` : ''}" data-stufe="${k}" aria-pressed="${protokollFilter.stufe === k}">${esc(l)} <span>${n}</span></button>`).join('')}
+      </div>
+      <select id="p-bereich" aria-label="Bereich"><option value="">Alle Bereiche</option>
+        ${Object.entries(daten.bereiche).map(([k, l]) => `<option value="${k}" ${protokollFilter.bereich === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+      <input id="p-suche" type="search" placeholder="Suchen (Text oder Name)" value="${esc(protokollFilter.suche)}" aria-label="Suchen">
+      <button type="button" class="btn btn-klein" id="p-csv">CSV</button>
+    </div>
+    <p class="tipp">Wird automatisch im Hintergrund geschrieben und 1 Jahr aufgehoben. IP-Adressen nur gekürzt.</p>
+    ${eintraege.length ? `<table class="tabelle protokoll-tabelle">
+      <thead><tr><th>Zeit</th><th>Stufe</th><th>Bereich</th><th>Ereignis</th><th>Wer</th></tr></thead>
+      <tbody>${zeilen(eintraege)}</tbody></table>
+      ${daten.mehr ? '<p><button type="button" class="btn" id="p-mehr">Ältere laden</button></p>' : ''}`
+      : '<section class="karte"><p>Keine Einträge gefunden.</p></section>'}`;
+
+  const setzen = (feld, wert) => { protokollFilter[feld] = wert; neuLaden(); };
+  inhalt.querySelector('.chips').addEventListener('click', (ev) => {
+    const k = ev.target.closest('[data-stufe]');
+    if (k) setzen('stufe', k.dataset.stufe);
+  });
+  inhalt.querySelector('#p-bereich').addEventListener('change', (ev) => setzen('bereich', ev.target.value));
+  let warten;
+  inhalt.querySelector('#p-suche').addEventListener('input', (ev) => {
+    clearTimeout(warten);
+    warten = setTimeout(async () => {
+      protokollFilter.suche = ev.target.value;
+      await neuLaden();
+      const f = document.getElementById('p-suche');
+      f?.focus();
+      f?.setSelectionRange(f.value.length, f.value.length);
+    }, 300);
+  });
+  inhalt.querySelector('#p-mehr')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    const mehr = await store.protokollLesen({ ...protokollFilter, vor: eintraege.at(-1).zeit });
+    eintraege = [...eintraege, ...mehr.eintraege];
+    inhalt.querySelector('.protokoll-tabelle tbody').insertAdjacentHTML('beforeend', zeilen(mehr.eintraege));
+    if (!mehr.mehr) ev.target.remove();
+  }));
+  inhalt.querySelector('#p-csv').addEventListener('click', () => {
+    const csv = [['Zeit', 'Stufe', 'Bereich', 'Ereignis', 'Wer'],
+      ...eintraege.map((e) => [e.zeit, STUFE_LABEL[e.stufe], daten.bereiche[e.bereich] ?? e.bereich, e.text, e.wer])]
+      .map((r) => r.map((x) => `"${String(x ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    downloadText(`protokoll-${new Date().toISOString().slice(0, 10)}.csv`, `\ufeff${csv}`);
+  });
+}
 
 // Zuletzt erzeugte Zugangsdaten – bleiben sichtbar, bis der Admin sie wegklickt
 let zugangsdaten = null;
@@ -556,7 +668,8 @@ async function mail(inhalt, { store, nutzer: ich, neuLaden, istDemo }) {
   }));
 }
 
-function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
+async function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
+  const sich = istDemo ? null : await store.sicherungen();
   inhalt.innerHTML = istDemo ? `
     <div class="spalten">
       <section class="karte">
@@ -575,10 +688,46 @@ function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
       </section>
     </div>` : `
     <section class="karte">
+      <div class="kopfzeile"><h2>Sicherungen</h2><button type="button" class="btn btn-primaer" id="d-sichern">Jetzt sichern</button></div>
+      <p class="tipp">Der Server sichert jeden Tag automatisch die ganze Datenbank und hebt die Sicherungen
+        ${esc(String(sich.tage))} Tage auf. Zusätzlich empfehlen wir das Backup von World4You (Kundenmenü → Backups).
+        Sicherungen enthalten IBANs und Adressen: vertraulich aufbewahren.</p>
+      ${sich.liste.length ? `<table class="tabelle"><thead><tr><th>Datei</th><th>Erstellt</th><th class="rechts">Größe</th><th></th></tr></thead>
+        <tbody>${sich.liste.map((b) => `<tr data-name="${esc(b.name)}">
+          <td data-label="Datei" class="mono umbruch">${esc(b.name)}</td>
+          <td data-label="Erstellt">${esc(formatZeitpunkt(b.zeit))}</td>
+          <td data-label="Größe" class="rechts">${esc(groesse(b.groesse))}</td>
+          <td data-label=""><button type="button" class="btn btn-klein" data-laden>Herunterladen</button></td></tr>`).join('')}</tbody></table>`
+        : '<p class="klein">Noch keine Sicherung vorhanden. Die erste entsteht beim nächsten Aufruf der App oder mit „Jetzt sichern“.</p>'}
+    </section>
+    <section class="karte">
       <h2>Datenexport</h2>
-      <p><strong>Enthält IBANs und Adressen – vertraulich aufbewahren.</strong></p>
-      <button type="button" class="btn btn-primaer" id="d-export">Datenexport herunterladen</button>
+      <p>Alle Daten als JSON-Datei, z. B. zum Auswerten. <strong>Enthält IBANs und Adressen, vertraulich aufbewahren.</strong></p>
+      <button type="button" class="btn" id="d-export">Datenexport herunterladen</button>
     </section>`;
+
+  inhalt.querySelector('#d-sichern')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    try {
+      const b = await store.jetztSichern();
+      meldung(`Sicherung erstellt: ${b.name}`, 'erfolg');
+      neuLaden();
+    } catch (e) {
+      meldung(fehlerText(e), 'fehler');
+    }
+  }));
+  inhalt.querySelector('tbody')?.addEventListener('click', (ev) => {
+    const k = ev.target.closest('[data-laden]');
+    if (!k) return;
+    mitSperre(k, async () => {
+      try {
+        const r = await store.sicherungHerunterladen(k.closest('tr').dataset.name);
+        const bytes = Uint8Array.from(atob(r.inhalt), (c) => c.charCodeAt(0));
+        downloadBlob(r.name, new Blob([bytes], { type: 'application/octet-stream' }));
+      } catch (e) {
+        meldung(fehlerText(e), 'fehler');
+      }
+    });
+  });
 
   inhalt.querySelector('#d-export').addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
     try {
@@ -613,23 +762,16 @@ function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
 export async function render(el, ctx) {
   const s = await ctx.store.statistik();
   if (!ctx.istAktuell()) return;
-  const tab = REITER[ctx.params.tab] ? ctx.params.tab : (s.anfragen ? 'anfragen' : 'benutzer');
+  const tab = REITER[ctx.params.tab] ? ctx.params.tab : 'uebersicht';
   el.innerHTML = `
-    <h1>Admin-Terminal</h1>
-    <section class="kennzahlen" aria-label="Überblick">
-      <div class="kennzahl${s.anfragen ? ' hervorgehoben' : ''}"><span class="zahl">${s.anfragen}</span><span>offene Anfragen</span></div>
-      <div class="kennzahl"><span class="zahl">${s.nutzer}</span><span>Konten</span></div>
-      <div class="kennzahl"><span class="zahl">${s.entwuerfe}</span><span>gespeicherte Leistungen</span></div>
-      ${['eingereicht', 'angenommen', 'bezahlt'].map((st) => `
-        <div class="kennzahl"><span class="zahl">${s[st]}</span><span>${esc(STATUS_LABEL[st])}</span></div>`).join('')}
-    </section>
+    <h1>Admin</h1>
     <nav class="reiter" aria-label="Bereiche">
       ${Object.entries(REITER).map(([k, l]) => `<a href="#/admin/${k}"${k === tab ? ' aria-current="page"' : ''}>${esc(l)}${
-        k === 'anfragen' && s.anfragen ? ` <span class="zaehler">${s.anfragen}</span>` : ''}</a>`).join('')}
+        k === 'anfragen' && s.anfragen ? ` <span class="zaehler zaehler-wichtig">${s.anfragen}</span>` : ''}</a>`).join('')}
     </nav>
     <div id="a-zugang">${zugangsdaten ? zugangsdatenHtml(zugangsdaten) : ''}</div>
     <div id="a-inhalt"></div>`;
   zugangsdatenBinden(el.querySelector('#a-zugang'), ctx.neuLaden);
   const inhalt = el.querySelector('#a-inhalt');
-  await ({ anfragen, einladen, benutzer, noten, einstellungen, mail, daten })[tab](inhalt, ctx);
+  await ({ uebersicht, anfragen, einladen, benutzer, noten, protokoll, einstellungen, mail, daten })[tab](inhalt, ctx);
 }

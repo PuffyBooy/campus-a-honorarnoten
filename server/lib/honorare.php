@@ -215,7 +215,8 @@ final class Honorare
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'alleNotenAdmin', 'noteLoeschen',
         'loeschprotokoll', 'einstellungenSpeichern', 'statistik', 'exportieren',
         'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail', 'linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren',
-        'registrierungslinkErstellen', 'registrierungslinks', 'registrierungslinkWiderrufen', 'rechtliches', 'hinweisBestaetigen', 'benachrichtigungenSpeichern',
+        'registrierungslinkErstellen', 'registrierungslinks', 'registrierungslinkWiderrufen',
+        'dashboard', 'protokoll', 'sicherungen', 'jetztSichern', 'sicherungHerunterladen', 'rechtliches', 'hinweisBestaetigen', 'benachrichtigungenSpeichern',
     ];
 
     /** ohne Anmeldung erlaubt (Impressum und Datenschutz müssen für alle lesbar sein) */
@@ -224,6 +225,12 @@ final class Honorare
 
     public function __construct(private Ctx $ctx)
     {
+    }
+
+    /** Eintrag ins Protokoll, mit der angemeldeten Person */
+    private function log(string $stufe, string $bereich, string $text, ?array $wer = null): void
+    {
+        protokoll($this->db(), $stufe, $bereich, $text, $wer ?? $this->ctx->nutzer);
     }
 
     private function db(): PDO
@@ -243,8 +250,11 @@ final class Honorare
         $z = zeile($db, 'select * from nutzer where email = ?', [strtolower(tr($email))]);
         // auch bei unbekannter E-Mail rechnen, damit man Konten nicht an der Antwortzeit erkennt
         $ok = passwort_passt($z['passwort'] ?? null, s($passwort));
+        if (!$z || !$ok) $this->log('warnung', 'anmeldung', 'Anmeldung fehlgeschlagen für ' . kuerze(strtolower(tr($email)), 200), $z ? nutzer_aus_zeile($z) : null);
         pruefe($z && $ok, 'E-Mail oder Passwort ist falsch.', 401);
+        if (!$z['aktiv']) $this->log('warnung', 'anmeldung', 'Anmeldeversuch mit deaktiviertem Konto', nutzer_aus_zeile($z));
         pruefe($z['aktiv'], 'Dieses Konto ist deaktiviert. Bitte wende dich an die Redaktion.', 403);
+        $this->log('info', 'anmeldung', 'Angemeldet', nutzer_aus_zeile($z));
         if ($this->ctx->token) sitzung_beenden($db, $this->ctx->token);
         $this->ctx->neueSitzung = sitzung_erstellen($db, $z['id']);
         q($db, 'update nutzer set letzter_login = ? where id = ?', [jetzt(), $z['id']]);
@@ -280,6 +290,7 @@ final class Honorare
             q($db, 'insert into anfragen (id, vorname, nachname, email, nachricht, am, zustimmung_am) values (?, ?, ?, ?, ?, ?, ?)',
                 [neue_id(), $a['vorname'], $a['nachname'], $email, $a['nachricht'], jetzt(), jetzt()]);
             benachrichtigen($db, 'anfrage', mail_anfrage_admin($db, $a));
+            $this->log('info', 'konten', "Zugang angefragt: {$a['vorname']} {$a['nachname']} ($email)", ['vorname' => $a['vorname'], 'nachname' => $a['nachname']]);
         }
         return true;
     }
@@ -296,6 +307,7 @@ final class Honorare
         q($db, 'update nutzer set passwort = ?, muss_passwort_aendern = 0 where id = ?', [passwort_hash(s($neu)), $n['id']]);
         alle_sitzungen_beenden($db, $n['id'], $this->ctx->token);
         anmeldelinks_widerrufen($db, $n['id']); // ab jetzt gilt das eigene Passwort
+        $this->log('info', 'konten', 'Eigenes Passwort festgelegt (erstes Anmelden)');
         return true;
     }
 
@@ -307,6 +319,7 @@ final class Honorare
         pruefe(mb_strlen(s($neu)) >= 8, 'Das Passwort muss mindestens 8 Zeichen haben.');
         q($db, 'update nutzer set passwort = ?, muss_passwort_aendern = 0 where id = ?', [passwort_hash(s($neu)), $n['id']]);
         alle_sitzungen_beenden($db, $n['id'], $this->ctx->token);
+        $this->log('info', 'konten', 'Passwort geändert');
         return true;
     }
 
@@ -335,7 +348,13 @@ final class Honorare
             kuerze(tr($d['plz_ort'] ?? ''), 100), kuerze(tr($d['kontoinhaber'] ?? ''), 70), iban_normalisieren($d['iban'] ?? ''),
             bic_normalisieren($d['bic'] ?? ''), $links['campus_profil'], $links['campus_a_profil'], $n['id'],
         ]);
-        if ($email !== $n['email']) email_geaendert_melden($db, $n['vorname'], $n['email'], $email);
+        if ($email !== $n['email']) {
+            email_geaendert_melden($db, $n['vorname'], $n['email'], $email);
+            $this->log('info', 'konten', "Eigene E-Mail-Adresse geändert: {$n['email']} → $email");
+        }
+        if (iban_normalisieren($d['iban'] ?? '') !== ($n['profil']['iban'] ?? '') && ($n['profil']['iban'] ?? '') !== '') {
+            $this->log('info', 'konten', 'Bankverbindung geändert');
+        }
         return nutzer_laden($db, $n['id']);
     }
 
@@ -522,6 +541,7 @@ final class Honorare
             q($db, "delete from positionen where autor_id = ? and id in ($platz)", [$n['id'], ...$ids]);
             $summe = array_sum(array_column($positionen, 'betrag_cent'));
             verlauf_eintragen($db, $noteId, $n, 'eingereicht', ['betrag' => euro((int) $summe), 'positionen' => count($positionen), 'medium' => medium_name($medium)]);
+            $this->log('info', 'abrechnungen', "Eingereicht: {$nr['nummer']} (" . eur(euro((int) $summe)) . ')');
             $note = note_holen($db, $noteId);
             benachrichtigen($db, 'neue_note', mail_eingereicht_redaktion($db, $note), $n['id']);
             autor_benachrichtigen($db, $note, 'eingang', mail_eingereicht_autor($db, $note));
@@ -566,6 +586,7 @@ final class Honorare
             q($db, 'delete from noten where id = ?', [$note['id']]);
             q($db, 'insert into loeschprotokoll (id, nummer, geloescht_von, am) values (?, ?, ?, ?)',
                 [neue_id(), $note['nummer'], anzeigename($n) . ' (zurückgezogen)', jetzt()]);
+            $this->log('info', 'abrechnungen', "Zurückgezogen: {$note['nummer']}");
             return true;
         });
     }
@@ -594,6 +615,7 @@ final class Honorare
             pruefe(!$x['zurueckgeholt_am'], 'Die Autor:in überarbeitet diese Leistungen bereits in einer neuen Prämienabrechnung.');
             q($db, "update noten set status = 'angenommen', ablehnungsgrund = '', entschieden_am = ? where id = ?", [jetzt(), $x['id']]);
             verlauf_eintragen($db, $x['id'], $n, 'angenommen', ['vorher' => $x['status']]);
+            $this->log('info', 'abrechnungen', "Angenommen: {$x['nummer']}");
             $note = note_holen($db, $x['id']);
             autor_benachrichtigen($db, $note, 'angenommen', mail_angenommen_autor($db, $note));
             benachrichtigen($db, 'zur_zahlung', mail_angenommen_buchhaltung($db, $note));
@@ -612,6 +634,7 @@ final class Honorare
             pruefe(in_array($x['status'], ['eingereicht', 'angenommen'], true), 'Diese Prämienabrechnung kann nicht abgelehnt werden.');
             q($db, "update noten set status = 'abgelehnt', ablehnungsgrund = ?, entschieden_am = ? where id = ?", [$g, jetzt(), $x['id']]);
             verlauf_eintragen($db, $x['id'], $n, 'abgelehnt', ['vorher' => $x['status'], 'grund' => $g]);
+            $this->log('info', 'abrechnungen', "Zurückgegeben: {$x['nummer']} ($g)");
             // die Leistungen gehen sofort zurück an die Autor:in zum Überarbeiten
             zurueck_an_autor($db, ['ablehnungsgrund' => $g] + $x, $n);
             autor_benachrichtigen($db, $x, 'abgelehnt', mail_abgelehnt_autor($db, $x, $g));
@@ -635,6 +658,7 @@ final class Honorare
             pruefe(cent($p['betrag']) !== $neuCent, 'Der Betrag ist unverändert.');
             q($db, 'update note_positionen set betrag_cent = ?, betrag_vermerk = ? where note_id = ? and id = ?', [$neuCent, $v, $x['id'], $p['id']]);
             verlauf_eintragen($db, $x['id'], $n, 'betrag_korrigiert', ['position' => $p['titel'], 'alt' => $p['betrag'], 'neu' => euro($neuCent), 'vermerk' => $v]);
+            $this->log('info', 'abrechnungen', "Betrag geändert in {$x['nummer']}: " . eur($p['betrag']) . ' → ' . eur(euro($neuCent)));
             return true;
         });
     }
@@ -719,6 +743,7 @@ final class Honorare
             pruefe($x['status'] === 'angenommen', $x['nummer'] . ': Nur angenommene Prämienabrechnungen können als bezahlt markiert werden.');
             q($db, "update noten set status = 'bezahlt', bezahlt_am = ? where id = ?", [$d, $x['id']]);
             verlauf_eintragen($db, $x['id'], $n, 'bezahlt', ['datum' => $d]);
+            $this->log('info', 'zahlung', "Als bezahlt markiert: {$x['nummer']} ($d)");
             $note = note_holen($db, $x['id']);
             autor_benachrichtigen($db, $note, 'bezahlt', mail_bezahlt_autor($db, $note, $d));
             return sicht($n, $note);
@@ -754,6 +779,7 @@ final class Honorare
             pruefe(!wert($db, 'select 1 from nutzer where email = ?', [$a['email']]), 'Für diese E-Mail-Adresse gibt es schon ein Konto.');
             $id = konto_einfuegen($db, $a['vorname'], $a['nachname'], $a['email'], $r, $hash);
             q($db, "update anfragen set status = 'freigeschaltet', bearbeitet_am = ?, bearbeitet_von = ? where id = ?", [jetzt(), anzeigename($admin), $a['id']]);
+            $this->log('info', 'konten', "Zugangsanfrage freigeschaltet: {$a['vorname']} {$a['nachname']} ({$a['email']})");
             return zugang_melden($db, ['id' => $id, 'email' => $a['email'], 'vorname' => $a['vorname'], 'passwort' => $passwort]);
         });
     }
@@ -764,6 +790,7 @@ final class Honorare
         $r = q($this->db(), "update anfragen set status = 'abgelehnt', bearbeitet_am = ?, bearbeitet_von = ? where id = ? and status = 'offen'",
             [jetzt(), anzeigename($admin), s($anfrageId)]);
         pruefe($r->rowCount() === 1, 'Diese Anfrage wurde bereits bearbeitet.');
+        $this->log('info', 'konten', 'Zugangsanfrage abgelehnt');
         return true;
     }
 
@@ -783,6 +810,7 @@ final class Honorare
             pruefe(!wert($db, 'select 1 from nutzer where email = ?', [$email]), 'Für diese E-Mail-Adresse gibt es schon ein Konto.');
             $id = konto_einfuegen($db, s($d['vorname']), s($d['nachname']), $email, $r, $hash);
             q($db, "update anfragen set status = 'freigeschaltet', bearbeitet_am = ? where email = ? and status = 'offen'", [jetzt(), $email]);
+            $this->log('info', 'konten', 'Konto angelegt: ' . tr($d['vorname']) . ' ' . tr($d['nachname']) . " ($email), Rollen: " . implode(', ', $r));
             return zugang_melden($db, ['id' => $id, 'email' => $email, 'vorname' => tr($d['vorname']), 'passwort' => $passwort]);
         });
     }
@@ -803,6 +831,7 @@ final class Honorare
             pruefe($n, 'Dieses Konto gibt es nicht (mehr).', 404);
             if (!in_array('admin', $r, true)) pruefe(noch_ein_admin($db, $n['id']), 'Es muss mindestens ein aktives Admin-Konto geben.');
             q($db, 'update nutzer set rollen = ? where id = ?', [json_text($r), $n['id']]);
+            $this->log('info', 'konten', 'Rollen von ' . anzeigename($n) . ': ' . (implode(', ', $r) ?: 'keine'));
             return true;
         });
     }
@@ -818,6 +847,7 @@ final class Honorare
             if (!$aktiv && in_array('admin', $n['rollen'], true)) pruefe(noch_ein_admin($db, $n['id']), 'Es muss mindestens ein aktives Admin-Konto geben.');
             q($db, 'update nutzer set aktiv = ? where id = ?', [$aktiv ? 1 : 0, $n['id']]);
             if (!$aktiv) alle_sitzungen_beenden($db, $n['id']);
+            $this->log('info', 'konten', ($aktiv ? 'Konto aktiviert: ' : 'Konto deaktiviert: ') . anzeigename($n));
             return true;
         });
     }
@@ -831,6 +861,7 @@ final class Honorare
         $passwort = startpasswort();
         q($db, 'update nutzer set passwort = ?, muss_passwort_aendern = 1 where id = ?', [passwort_hash($passwort), $n['id']]);
         alle_sitzungen_beenden($db, $n['id'], $n['id'] === $this->ctx->nutzer['id'] ? $this->ctx->token : null);
+        $this->log('info', 'konten', 'Passwort zurückgesetzt: ' . anzeigename($n));
         return zugang_melden($db, ['id' => $n['id'], 'email' => $n['email'], 'vorname' => $n['vorname'], 'passwort' => $passwort], false);
     }
 
@@ -846,6 +877,7 @@ final class Honorare
         pruefe($neu !== $n['email'], 'Das ist schon die E-Mail-Adresse dieses Kontos.');
         pruefe(!wert($db, 'select 1 from nutzer where email = ? and id <> ?', [$neu, $n['id']]), 'Diese E-Mail-Adresse wird schon verwendet.');
         q($db, 'update nutzer set email = ? where id = ?', [$neu, $n['id']]);
+        $this->log('info', 'konten', 'E-Mail von ' . anzeigename($n) . " geändert: {$n['email']} → $neu");
         return ['email' => $neu, 'mail' => email_geaendert_melden($db, $n['vorname'], $n['email'], $neu)];
     }
 
@@ -860,6 +892,7 @@ final class Honorare
             if (in_array('admin', $n['rollen'], true)) pruefe(noch_ein_admin($db, $n['id']), 'Es muss mindestens ein aktives Admin-Konto geben.');
             // abgeschickte Prämienabrechnungen bleiben als Buchhaltungsbelege erhalten (autor_id wird leer)
             q($db, 'delete from nutzer where id = ?', [$n['id']]);
+            $this->log('warnung', 'konten', 'Konto gelöscht: ' . anzeigename($n) . " ({$n['email']})");
             return true;
         });
     }
@@ -878,6 +911,7 @@ final class Honorare
             $x = note_holen($db, $noteId);
             q($db, 'delete from noten where id = ?', [$x['id']]);
             q($db, 'insert into loeschprotokoll (id, nummer, geloescht_von, am) values (?, ?, ?, ?)', [neue_id(), $x['nummer'], anzeigename($admin), jetzt()]);
+            $this->log('warnung', 'abrechnungen', "Prämienabrechnung gelöscht: {$x['nummer']}");
             return true;
         });
     }
@@ -909,6 +943,7 @@ final class Honorare
             $speichere('datenschutzKontakt', $kontakt);
             $speichere('honorarsaetze', $saetze);
         });
+        $this->log('info', 'einstellungen', 'Einstellungen gespeichert');
         return true;
     }
 
@@ -968,10 +1003,118 @@ final class Honorare
     {
         brauche($this->ctx, 'admin');
         mail_einstellungen_speichern($this->db(), is_array($daten) ? $daten : []);
+        $this->log('info', 'einstellungen', 'E-Mail-Einstellungen gespeichert');
         return true;
     }
 
     /** Test-E-Mail sofort an die eigene Adresse (oder die angegebene) – mit verständlicher Fehlermeldung */
+    // ---------------------------------------------------------------- Admin: Übersicht, Protokoll, Sicherungen
+    public function dashboard(): array
+    {
+        $db = $this->db();
+        brauche($this->ctx, 'admin');
+        $zaehle = fn ($s) => (int) wert($db, 'select count(*) from noten where status = ?', [$s]);
+        $summe = fn ($where, $p = []) => euro((int) wert($db, "select coalesce(sum(np.betrag_cent), 0) from note_positionen np join noten n on n.id = np.note_id where $where", $p));
+        $seit = zeit_iso(time() - 7 * 86400);
+        $stufe = fn ($s) => (int) wert($db, 'select count(*) from protokoll where stufe = ? and zeit >= ?', [$s, $seit]);
+        $sicherungen = sicherungen_liste();
+        $mysql = ist_mysql($db);
+        $e = mail_einstellungen($db);
+        $version = @file_get_contents(__DIR__ . '/../version.txt');
+        return [
+            'zahlen' => [
+                'zu_pruefen' => $zaehle('eingereicht'), 'zur_zahlung' => $zaehle('angenommen'), 'zur_zahlung_summe' => $summe("n.status = 'angenommen'"),
+                'bezahlt_jahr' => $summe("n.status = 'bezahlt' and n.bezahlt_am >= ?", [substr(heute_iso(), 0, 4) . '-01-01']),
+                'anfragen' => (int) wert($db, "select count(*) from anfragen where status = 'offen'"),
+                'konten' => (int) wert($db, 'select count(*) from nutzer where aktiv = 1'),
+                'entwuerfe' => (int) wert($db, 'select count(*) from positionen'),
+                'warnungen' => $stufe('warnung'), 'fehler' => $stufe('fehler'),
+            ],
+            'system' => [
+                'datenbank' => ($mysql ? 'MySQL/MariaDB ' : 'SQLite ') . $db->getAttribute(PDO::ATTR_SERVER_VERSION),
+                'php' => PHP_VERSION,
+                'version' => $version !== false ? trim($version) : '',
+                'mail' => [
+                    'aktiv' => $e['aktiv'],
+                    'offen' => (int) wert($db, 'select count(*) from mails where gesendet_am is null and versuche < 5'),
+                    'fehlgeschlagen' => (int) wert($db, 'select count(*) from mails where gesendet_am is null and versuche >= 5'),
+                ],
+                'sicherungen' => count($sicherungen),
+                'letzte_sicherung' => $sicherungen[0] ?? null,
+            ],
+            'aktivitaet' => array_map('protokoll_aus_zeile', zeilen($db, 'select * from protokoll order by zeit desc, id desc limit 12')),
+        ];
+    }
+
+    /** Protokoll mit Filtern; „vor“: Zeitpunkt des letzten geladenen Eintrags (zum Weiterblättern) */
+    public function protokoll(mixed $filter = []): array
+    {
+        $db = $this->db();
+        brauche($this->ctx, 'admin');
+        $f = is_array($filter) ? $filter : [];
+        $wo = [];
+        $p = [];
+        if (in_array($f['stufe'] ?? '', PROTOKOLL_STUFEN, true)) { $wo[] = 'stufe = ?'; $p[] = $f['stufe']; }
+        if (isset(PROTOKOLL_BEREICHE[$f['bereich'] ?? ''])) { $wo[] = 'bereich = ?'; $p[] = $f['bereich']; }
+        $suche = kuerze(tr($f['suche'] ?? ''), 100);
+        if ($suche !== '') {
+            $wo[] = '(lower(text) like ? or lower(wer) like ?)';
+            $like = '%' . mb_strtolower($suche) . '%';
+            array_push($p, $like, $like);
+        }
+        $filterWo = $wo;
+        $filterP = $p;
+        if (is_string($f['vor'] ?? null) && $f['vor'] !== '') { $wo[] = 'zeit < ?'; $p[] = $f['vor']; }
+        $where = $wo ? 'where ' . implode(' and ', $wo) : '';
+        $zeilen = zeilen($db, "select * from protokoll $where order by zeit desc, id desc limit 101", $p);
+        // Anzahl je Stufe (mit Bereich und Suche, ohne Stufe)
+        $ohneStufe = array_values(array_filter($filterWo, fn ($w) => $w !== 'stufe = ?'));
+        $ohneStufeP = in_array('stufe = ?', $filterWo, true) ? array_slice($filterP, 1) : $filterP;
+        $zaehler = ['alle' => 0] + array_fill_keys(PROTOKOLL_STUFEN, 0);
+        foreach (zeilen($db, 'select stufe, count(*) anzahl from protokoll ' . ($ohneStufe ? 'where ' . implode(' and ', $ohneStufe) : '') . ' group by stufe', $ohneStufeP) as $z) {
+            $zaehler[$z['stufe']] = (int) $z['anzahl'];
+            $zaehler['alle'] += (int) $z['anzahl'];
+        }
+        return [
+            'eintraege' => array_map('protokoll_aus_zeile', array_slice($zeilen, 0, 100)),
+            'mehr' => count($zeilen) > 100,
+            'zaehler' => $zaehler,
+            'bereiche' => PROTOKOLL_BEREICHE,
+        ];
+    }
+
+    public function sicherungen(): array
+    {
+        brauche($this->ctx, 'admin');
+        return ['liste' => sicherungen_liste(), 'tage' => (int) konfiguration()['backup_tage']];
+    }
+
+    public function jetztSichern(): array
+    {
+        $db = $this->db();
+        brauche($this->ctx, 'admin');
+        pruefe(konfiguration()['datenbank'] !== ':memory:', 'Sicherungen sind hier nicht möglich.');
+        try {
+            $ziel = sichern($db, daten_ordner() . '/backups/honorarnoten-' . date('Y-m-d-His') . '.sqlite');
+        } catch (Throwable $e) {
+            $this->log('fehler', 'sicherung', 'Sicherung fehlgeschlagen: ' . $e->getMessage());
+            throw new Fehler('Die Sicherung ist fehlgeschlagen: ' . $e->getMessage(), 500);
+        }
+        $this->log('info', 'sicherung', 'Sicherung von Hand erstellt: ' . basename($ziel) . ' (' . groesse_text((int) filesize($ziel)) . ')');
+        return sicherungen_liste()[0];
+    }
+
+    /** Sicherung als base64 (zum Herunterladen im Browser) – enthält alle Daten, auch IBANs */
+    public function sicherungHerunterladen(mixed $name = null): array
+    {
+        brauche($this->ctx, 'admin');
+        $datei = sicherung_pfad(s($name));
+        pruefe($datei, 'Diese Sicherung gibt es nicht (mehr).', 404);
+        pruefe(filesize($datei) <= 30 * 1024 * 1024, 'Die Sicherung ist zu groß zum Herunterladen über die App. Bitte per SSH oder FTP holen (Ordner app/daten/backups).', 413);
+        $this->log('warnung', 'sicherung', 'Sicherung heruntergeladen: ' . basename($datei));
+        return ['name' => basename($datei), 'inhalt' => base64_encode((string) file_get_contents($datei))];
+    }
+
     // ---------------------------------------------------------------- Links (Anmelden, Registrieren)
     /** Link aus der Zugangs-Mail: meldet direkt an (einmal, 7 Tage); danach eigenes Passwort festlegen */
     public function linkAnmelden(mixed $token = null): array
@@ -985,6 +1128,7 @@ final class Honorare
             if ($this->ctx->token) sitzung_beenden($db, $this->ctx->token);
             $this->ctx->neueSitzung = sitzung_erstellen($db, $n['id']);
             q($db, 'update nutzer set letzter_login = ? where id = ?', [jetzt(), $n['id']]);
+            $this->log('info', 'anmeldung', 'Mit Anmeldelink aus der Zugangs-Mail angemeldet', $n);
             return nutzer_laden($db, $n['id']);
         });
     }
@@ -1021,6 +1165,7 @@ final class Honorare
             return nutzer_laden($db, $id);
         });
         benachrichtigen($db, 'anfrage', mail_registriert_admin($db, $n));
+        $this->log('info', 'konten', "Über Registrierungslink registriert: {$n['vorname']} {$n['nachname']} ({$n['email']})", $n);
         return $n;
     }
 
@@ -1042,6 +1187,7 @@ final class Honorare
         ]));
         $mail = $an !== '' && mail_einstellungen($db)['aktiv'];
         if ($mail) mail_einreihen($db, $an, mail_einladung($db, $link, $tage, $admin));
+        $this->log('info', 'konten', "Registrierungslink erstellt: $tage Tage, " . ($max === null ? 'beliebig oft' : "{$max}×") . ($an !== '' ? ", an $an" : ''));
         return ['link' => $link, 'mail' => $mail, 'tage' => $tage, 'max' => $max];
     }
 
@@ -1064,6 +1210,7 @@ final class Honorare
         brauche($this->ctx, 'admin');
         $r = q($db, "update links set widerrufen_am = ? where id = ? and art = 'registrieren' and widerrufen_am is null", [jetzt(), s($id)]);
         pruefe($r->rowCount() === 1, 'Diesen Link gibt es nicht (mehr) oder er ist schon zurückgezogen.', 404);
+        $this->log('info', 'konten', 'Registrierungslink zurückgezogen');
         return true;
     }
 
@@ -1088,6 +1235,7 @@ final class Honorare
             pruefe(bic_gueltig($konto['bic']), 'Der BIC des Zahlungskontos ist ungültig.');
         }
         upsert($db, 'einstellungen', ['schluessel' => 'zahlungskonto', 'wert' => json_text($konto)], ['schluessel']);
+        $this->log('warnung', 'einstellungen', 'Zahlungskonto geändert: ' . ($konto['iban'] !== '' ? $konto['name'] . ', IBAN …' . substr($konto['iban'], -4) : 'entfernt'));
         return zahlungskonto_laden($db);
     }
 
@@ -1106,8 +1254,10 @@ final class Honorare
         try {
             mail_sofort($e, $n['email'], mail_pdf($db, $n['vorname'], kuerze(tr($titel), 200) ?: $name, $name), [[$name, 'application/pdf', $pdf]]);
         } catch (Throwable $f) {
+            $this->log('fehler', 'mail', 'PDF-Mail nicht verschickt: ' . $f->getMessage());
             throw new Fehler('E-Mail konnte nicht verschickt werden: ' . $f->getMessage(), 502);
         }
+        $this->log('info', 'zahlung', "PDF per E-Mail an sich geschickt: $name");
         return ['an' => $n['email']];
     }
 
@@ -1122,6 +1272,7 @@ final class Honorare
         try {
             mail_sofort($e, $ziel, mail_test($db, $ziel));
         } catch (Throwable $f) {
+            $this->log('fehler', 'mail', 'Test-E-Mail nicht verschickt: ' . $f->getMessage());
             throw new Fehler('Test-E-Mail konnte nicht verschickt werden: ' . $f->getMessage(), 502);
         }
         return ['an' => $ziel];
@@ -1160,6 +1311,29 @@ function zahlungskonto_laden(PDO $db): array
     $k = json_decode((string) wert($db, "select wert from einstellungen where schluessel = 'zahlungskonto'"), true);
     $leer = ['name' => '', 'iban' => '', 'bic' => ''];
     return array_merge($leer, is_array($k) ? array_intersect_key($k, $leer) : []);
+}
+
+function protokoll_aus_zeile(array $z): array
+{
+    return ['id' => (int) $z['id'], 'zeit' => $z['zeit'], 'stufe' => $z['stufe'], 'bereich' => $z['bereich'], 'text' => $z['text'], 'wer' => $z['wer'], 'ip' => $z['ip']];
+}
+
+/** Sicherungen im Ordner daten/backups, neueste zuerst */
+function sicherungen_liste(): array
+{
+    $liste = [];
+    foreach (glob(daten_ordner() . '/backups/honorarnoten-*.sql*') ?: [] as $f) {
+        $liste[] = ['name' => basename($f), 'groesse' => (int) filesize($f), 'zeit' => zeit_iso((int) filemtime($f))];
+    }
+    usort($liste, fn ($a, $b) => strcmp($b['zeit'], $a['zeit']) ?: strcmp($b['name'], $a['name']));
+    return $liste;
+}
+
+function sicherung_pfad(string $name): ?string
+{
+    if (!preg_match('/^honorarnoten-[\d-]+\.(sqlite|sql)$/', $name)) return null;
+    $pfad = daten_ordner() . '/backups/' . $name;
+    return is_file($pfad) ? $pfad : null;
 }
 
 const LINK_ANMELDEN_TAGE = 7;
