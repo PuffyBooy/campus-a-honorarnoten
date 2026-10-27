@@ -6,10 +6,13 @@
 #   2. per SSH im Hauptordner der Domain:         bash app/aktualisieren.sh ~/anerkennungspraemien-world4you.zip
 #
 # Beim allerersten Mal (noch kein app/ da):       unzip -o ~/anerkennungspraemien-world4you.zip -d <Hauptordner>
+#
+# Das Paket darf eine .zip- oder .tar.gz-Datei sein (GitHub Actions schickt .tar.gz, siehe
+# scripts/world4you-deploy.sh). Optional als zweites Argument der Hauptordner (Standard: der Ordner über app/).
 set -euo pipefail
 
-zip="${1:?Aufruf: bash app/aktualisieren.sh <Pfad zum ZIP>}"
-ziel="$(cd "$(dirname "$0")/.." && pwd)"
+zip="${1:?Aufruf: bash app/aktualisieren.sh <Pfad zum Paket> [Hauptordner]}"
+ziel="$(cd "${2:-$(dirname "$0")/..}" && pwd)"
 [ -f "$zip" ] || { echo "Datei nicht gefunden: $zip" >&2; exit 1; }
 
 # PHP 8.1 oder neuer suchen (auf World4You ist „php“ auf der Kommandozeile oft eine alte Version)
@@ -28,7 +31,10 @@ fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
-unzip -q "$zip" -d "$tmp"
+case "$zip" in
+  *.tar.gz|*.tgz) tar -xzf "$zip" -C "$tmp" ;;
+  *) unzip -q "$zip" -d "$tmp" ;;
+esac
 [ -f "$tmp/app/api.php" ] && [ -f "$tmp/index.html" ] || { echo "Das ist kein Paket der Anerkennungsprämien-App." >&2; exit 1; }
 # nur Programm und App kopieren – Datenbank und Sicherungen im Ziel bleiben, wie sie sind
 find "$tmp/app/daten" -type f ! -name '.htaccess' -delete 2>/dev/null || true

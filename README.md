@@ -251,6 +251,44 @@ Die Mails gehen über das World4You-Postfach (SMTP) hinaus, nachdem die App dem 
 geantwortet hat – niemand wartet darauf. Klappt der Versand nicht (Passwort falsch, Server kurz
 weg), wird es bis zu 5-mal erneut versucht; den letzten Fehler zeigt **Admin → E-Mail**.
 
+### Automatisch veröffentlichen (empfohlen)
+
+Einmal eingerichtet, kommt **jede Änderung von selbst auf den Webspace**: Sobald etwas auf `main`
+landet (z. B. ein gemergter Pull Request), testet GitHub die App und spielt sie per SSH auf
+World4You ein ([`scripts/world4you-deploy.sh`](scripts/world4you-deploy.sh)). Vorher wird die
+Datenbank gesichert, `app/daten` bleibt unangetastet. Nichts mehr von Hand hochladen.
+
+**Einmalig einrichten:**
+
+1. **Schlüssel erzeugen** – am eigenen Rechner im Terminal (Windows: PowerShell), zweimal Enter
+   drücken (ohne Passphrase):
+   ```bash
+   ssh-keygen -t ed25519 -C github-world4you -f world4you-github
+   ```
+   Das ergibt zwei Dateien: `world4you-github` (privat, geheim) und `world4you-github.pub` (öffentlich).
+2. **Öffentlichen Schlüssel bei World4You hinterlegen:** Kundenbereich → *Dein Paket → Webspace → SSH*
+   → *Public-Key hinzufügen* → den Inhalt von `world4you-github.pub` hineinkopieren. Dort stehen auch
+   **SSH-Server** und **Benutzername**.
+3. **Hauptordner herausfinden:** per SSH anmelden, in den Ordner der Domain wechseln und `pwd`
+   eingeben – das ist der Pfad (z. B. `/home/…/html`).
+4. **In GitHub eintragen:** Repository → *Settings → Secrets and variables → Actions →
+   New repository secret*:
+
+   | Name | Inhalt |
+   |---|---|
+   | `W4Y_HOST` | SSH-Server aus dem Kundenbereich |
+   | `W4Y_BENUTZER` | SSH-Benutzername |
+   | `W4Y_SSH_KEY` | kompletter Inhalt der Datei `world4you-github` (privater Schlüssel) |
+   | `W4Y_ZIEL` | Pfad des Hauptordners aus Schritt 3 |
+   | `W4Y_ADRESSE` | optional: `https://deine-domain.at` – danach wird geprüft, ob die Seite antwortet |
+
+5. Fertig. Ab jetzt: **Änderung mergen → nach 2–3 Minuten ist sie online.** Den Stand sieht man unter
+   *Actions → „Tests, Demo und Paket“* (Schritt „Auf World4You veröffentlichen“). Von Hand neu
+   veröffentlichen: dort *Run workflow*. Schlagen die Tests fehl, wird **nichts** veröffentlicht.
+
+Die private Schlüsseldatei danach sicher aufbewahren oder löschen – GitHub speichert sie verschlüsselt.
+Wird der Schlüssel nicht mehr gebraucht, im World4You-Kundenbereich wieder entfernen.
+
 ### Hochladen und Updates per SSH (statt FTP)
 
 SSH gibt es bei World4You in allen Webhosting-Paketen (im Kundenbereich aktivieren; Server, Benutzer
