@@ -844,6 +844,7 @@ export function loeschprotokoll() {
 export function einstellungen() {
   const e = { ...leereDb().einstellungen, ...kopie(db.einstellungen) };
   delete e.auftraggeber; // früheres SEPA-Konto, nicht mehr verwendet
+  delete e.zahlungskonto; // nur über zahlungskonto() für Buchhaltung und Admin
   e.honorarsaetze = saetzeNormalisieren(e.honorarsaetze); // ältere Sätze ohne Medium gelten für beide
   e.betreiber = betreiberOder(e.betreiber);
   return e;
@@ -925,6 +926,30 @@ export function mailEinstellungenSpeichern(d = {}) {
   db.mail = { ...MAIL_DEMO, ...alt, ...Object.fromEntries(Object.keys(MAIL_DEMO).filter((k) => k in d).map((k) => [k, d[k]])) };
   if (d.passwort) db.mail.passwort = String(d.passwort);
   speichern();
+}
+
+/** Konto, von dem die Sammelüberweisung (SEPA) abgeht – nur Buchhaltung und Admin */
+export function zahlungskonto() {
+  brauche('buchhaltung');
+  return { name: '', iban: '', bic: '', ...kopie(db.einstellungen.zahlungskonto ?? {}) };
+}
+
+export function zahlungskontoSpeichern({ name, iban, bic } = {}) {
+  brauche('admin');
+  const k = { name: trim(name).slice(0, 70), iban: normalizeIban(iban ?? ''), bic: normalizeBic(bic ?? '') };
+  if (k.name || k.iban || k.bic) {
+    pruefe(k.name, 'Bitte den Namen des Kontoinhabers angeben.');
+    pruefe(!ibanFehler(k.iban), `IBAN des Zahlungskontos: ${ibanFehler(k.iban)}`);
+    pruefe(bicIstGueltig(k.bic), 'Der BIC des Zahlungskontos ist ungültig.');
+  }
+  db.einstellungen.zahlungskonto = k;
+  speichern();
+  return zahlungskonto();
+}
+
+export function pdfMailen() {
+  brauche('buchhaltung');
+  throw new Fehler('In der Demo werden keine E-Mails verschickt – das geht nur auf dem eigenen Server.');
 }
 
 export function testMail() {

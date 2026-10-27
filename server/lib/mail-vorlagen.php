@@ -303,6 +303,18 @@ function mail_email_geaendert(PDO $db, string $vorname, string $alt, string $neu
     ]);
 }
 
+function mail_pdf(PDO $db, string $vorname, string $titel, string $dateiname): array
+{
+    return mail_bauen([
+        'betreff' => $titel,
+        'vorschau' => 'Im Anhang: ' . $dateiname,
+        'titel' => $titel,
+        'absaetze' => ["Hallo $vorname,", 'wie gewünscht kommen die Prämienabrechnungen als PDF im Anhang.'],
+        'tabelle' => [['Datei', $dateiname]],
+        'knopf' => ['Zur Buchhaltung', app_link($db, 'zahlung')],
+    ]);
+}
+
 function mail_test(PDO $db, string $an): array
 {
     return mail_bauen([

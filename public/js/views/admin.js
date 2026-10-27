@@ -4,6 +4,7 @@ import {
 } from '../lib/format.js';
 import { downloadText } from '../lib/csv.js';
 import { MEDIEN, MEDIUM_KEYS } from '../lib/campus.js';
+import { formatIban } from '../lib/iban.js';
 import { bestaetigen, fehlerText, kopierenMitFeedback, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 import { STANDARD_HOSTER, betreiberOder } from '../lib/rechtliches.js';
 
@@ -268,9 +269,24 @@ async function noten(inhalt, { store, neuLaden }) {
 }
 
 async function einstellungen(inhalt, { store, neuLaden }) {
-  const e = await store.einstellungen();
+  const [e, konto] = await Promise.all([store.einstellungen(), store.zahlungskonto()]);
   const b = betreiberOder(e.betreiber);
   inhalt.innerHTML = `
+    <form class="karte" id="k-form" novalidate>
+      <h2>Zahlungskonto für die Sammelüberweisung</h2>
+      <p class="tipp">Von diesem Konto gehen die Auszahlungen ab. Die Buchhaltung erstellt damit pro Woche eine
+        SEPA-Datei (pain.001) zum Hochladen ins Online-Banking. Sehen können es nur Buchhaltung und Admin.</p>
+      <label for="k-name">Kontoinhaber:in</label>
+      <input id="k-name" name="name" maxlength="70" value="${esc(konto.name)}" placeholder="${esc(e.empfaenger.name)}">
+      <div class="zeile">
+        <div class="feld"><label for="k-iban">IBAN</label>
+          <input id="k-iban" name="iban" autocomplete="off" spellcheck="false" value="${esc(formatIban(konto.iban))}" placeholder="AT.. .... .... .... ...."></div>
+        <div class="feld"><label for="k-bic">BIC <span class="optional">(optional)</span></label>
+          <input id="k-bic" name="bic" autocomplete="off" spellcheck="false" value="${esc(konto.bic)}"></div>
+      </div>
+      <p class="feldfehler" role="alert"></p>
+      <button type="submit" class="btn btn-primaer">Zahlungskonto speichern</button>
+    </form>
     <form class="karte" id="e-form" novalidate>
       <h2>Rechnungsempfänger</h2>
       <label for="e-name">Name</label><input id="e-name" name="name" value="${esc(e.empfaenger.name)}" required>
@@ -325,6 +341,22 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <p class="feldfehler" role="alert"></p>
       <button type="submit" class="btn btn-primaer">Speichern</button>
     </form>`;
+  const kForm = inhalt.querySelector('#k-form');
+  kForm.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const fehler = kForm.querySelector('.feldfehler');
+    fehler.textContent = '';
+    await mitSperre(kForm.querySelector('[type=submit]'), async () => {
+      try {
+        await store.zahlungskontoSpeichern({ name: kForm.name.value, iban: kForm.iban.value, bic: kForm.bic.value });
+        meldung('Zahlungskonto gespeichert.', 'erfolg');
+        neuLaden();
+      } catch (err) {
+        fehler.textContent = fehlerText(err);
+      }
+    });
+  });
+
   const form = inhalt.querySelector('#e-form');
   form.addEventListener('submit', (ev) => {
     ev.preventDefault();

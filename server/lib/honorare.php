@@ -15,6 +15,7 @@ const BETREIBER_STANDARD = [
     'name' => '', 'anschrift' => '', 'email' => '', 'telefon' => '', 'extern' => true, 'hoster' => STANDARD_HOSTER,
     'zusatz_impressum' => '', 'zusatz_datenschutz' => '', 'stand' => '',
 ];
+const PDF_MAX = 6 * 1024 * 1024; // größere PDFs bitte herunterladen statt mailen
 const ARTIKEL_DOPPELT = 'Dieser Artikel ist schon als Leistung gespeichert oder abgerechnet.';
 const ZUSTIMMUNG_FEHLT = 'Bitte bestätige, dass du die Datenschutzerklärung und den Hinweis zum Betreiber gelesen hast.';
 
@@ -97,8 +98,9 @@ function einstellungen_laden(PDO $db): array
 {
     $e = ['empfaenger' => STANDARD_EMPFAENGER, 'datenschutzKontakt' => '', 'honorarsaetze' => standard_saetze(), 'betreiber' => BETREIBER_STANDARD];
     foreach (zeilen($db, 'select * from einstellungen') as $z) {
-        // „auftraggeber“: früheres SEPA-Konto, „mail“: eigene Einstellungen (mit Passwort, nie an den Browser)
-        if (in_array($z['schluessel'], ['auftraggeber', 'mail'], true)) continue;
+        // „auftraggeber“: früheres SEPA-Konto, „mail“: eigene Einstellungen (mit Passwort, nie an den Browser),
+        // „zahlungskonto“: nur für Buchhaltung und Admin (eigene Funktion)
+        if (in_array($z['schluessel'], ['auftraggeber', 'mail', 'zahlungskonto'], true)) continue;
         $e[$z['schluessel']] = json_decode($z['wert'], true);
     }
     $e['honorarsaetze'] = saetze_normalisieren($e['honorarsaetze']); // ältere Sätze ohne Medium gelten für beide
@@ -208,7 +210,7 @@ final class Honorare
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'meineArtikel',
         'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
-        'offeneZahlungen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
+        'offeneZahlungen', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'alleNotenAdmin', 'noteLoeschen',
         'loeschprotokoll', 'einstellungenSpeichern', 'statistik', 'exportieren',
@@ -967,6 +969,50 @@ final class Honorare
     }
 
     /** Test-E-Mail sofort an die eigene Adresse (oder die angegebene) – mit verständlicher Fehlermeldung */
+    /** Konto, von dem die Sammelüberweisung (SEPA) abgeht – nur Buchhaltung und Admin */
+    public function zahlungskonto(): array
+    {
+        $db = $this->db();
+        brauche($this->ctx, 'buchhaltung');
+        return zahlungskonto_laden($db);
+    }
+
+    public function zahlungskontoSpeichern(mixed $daten = []): array
+    {
+        $db = $this->db();
+        brauche($this->ctx, 'admin');
+        $d = is_array($daten) ? $daten : [];
+        $konto = ['name' => kuerze(tr($d['name'] ?? ''), 70), 'iban' => iban_normalisieren($d['iban'] ?? ''), 'bic' => bic_normalisieren($d['bic'] ?? '')];
+        // ganz leer = Konto entfernen
+        if ($konto['iban'] !== '' || $konto['name'] !== '' || $konto['bic'] !== '') {
+            pruefe($konto['name'] !== '', 'Bitte den Namen des Kontoinhabers angeben.');
+            pruefe(iban_fehler($konto['iban']) === null, 'IBAN des Zahlungskontos: ' . iban_fehler($konto['iban']));
+            pruefe(bic_gueltig($konto['bic']), 'Der BIC des Zahlungskontos ist ungültig.');
+        }
+        upsert($db, 'einstellungen', ['schluessel' => 'zahlungskonto', 'wert' => json_text($konto)], ['schluessel']);
+        return zahlungskonto_laden($db);
+    }
+
+    /** PDF (im Browser erstellt) als Anhang an die eigene E-Mail-Adresse schicken */
+    public function pdfMailen(mixed $dateiname = null, mixed $inhalt = null, mixed $titel = null): array
+    {
+        $db = $this->db();
+        $n = brauche($this->ctx, 'buchhaltung');
+        $e = mail_einstellungen($db);
+        pruefe($e['aktiv'], 'Der E-Mail-Versand ist nicht eingerichtet (Admin → E-Mail).');
+        $name = s($dateiname);
+        pruefe(preg_match('/^[\w.-]{1,100}\.pdf$/', $name) === 1, 'Ungültiger Dateiname.');
+        $pdf = base64_decode(s($inhalt), true);
+        pruefe($pdf !== false && str_starts_with($pdf, '%PDF-'), 'Die Datei ist kein PDF.');
+        pruefe(strlen($pdf) <= PDF_MAX, 'Das PDF ist zu groß zum Verschicken. Bitte herunterladen.', 413);
+        try {
+            mail_sofort($e, $n['email'], mail_pdf($db, $n['vorname'], kuerze(tr($titel), 200) ?: $name, $name), [[$name, 'application/pdf', $pdf]]);
+        } catch (Throwable $f) {
+            throw new Fehler('E-Mail konnte nicht verschickt werden: ' . $f->getMessage(), 502);
+        }
+        return ['an' => $n['email']];
+    }
+
     public function testMail(mixed $an = null): array
     {
         $db = $this->db();
@@ -1011,6 +1057,13 @@ function betreiber_pruefen(array $alt, mixed $neu): array
 }
 
 /** Startpasswort an das neue Konto schicken (wenn eingeschaltet); die Antwort sagt, ob eine Mail unterwegs ist */
+function zahlungskonto_laden(PDO $db): array
+{
+    $k = json_decode((string) wert($db, "select wert from einstellungen where schluessel = 'zahlungskonto'"), true);
+    $leer = ['name' => '', 'iban' => '', 'bic' => ''];
+    return array_merge($leer, is_array($k) ? array_intersect_key($k, $leer) : []);
+}
+
 /** Info an alte und neue Adresse, dass die E-Mail-Adresse geändert wurde (Schutz vor unbemerkter Übernahme) */
 function email_geaendert_melden(PDO $db, string $vorname, string $alt, string $neu): bool
 {
