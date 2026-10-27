@@ -123,9 +123,10 @@ function position_aus_zeile(array $p): array
     ];
 }
 
-function note_aus_zeile(PDO $db, array $z): array
+/** $positionen: schon geladene Zeilen aus note_positionen (sonst werden sie hier geholt) */
+function note_aus_zeile(PDO $db, array $z, ?array $positionen = null): array
 {
-    $positionen = array_map('position_aus_zeile', zeilen($db, 'select * from note_positionen where note_id = ? order by reihenfolge', [$z['id']]));
+    $positionen = array_map('position_aus_zeile', $positionen ?? zeilen($db, 'select * from note_positionen where note_id = ? order by reihenfolge', [$z['id']]));
     return [
         'id' => $z['id'], 'nummer' => $z['nummer'], 'jahr' => (int) $z['jahr'], 'laufende_nummer' => (int) $z['laufende_nummer'],
         'monat' => $z['monat'], 'medium' => medium_oder($z['medium']), 'autor_id' => $z['autor_id'], 'status' => $z['status'],
@@ -169,10 +170,23 @@ function sicht(array $n, array $note): array
     return $k;
 }
 
-function noten_liste(PDO $db, array $n, string $where = '', array $params = [], string $order = 'eingereicht_am desc'): array
+function noten_liste(PDO $db, array $n, string $where = '', array $params = [], string $order = 'eingereicht_am desc', string $limit = ''): array
 {
-    return array_map(fn ($z) => sicht($n, note_aus_zeile($db, $z)), zeilen($db, "select * from noten $where order by $order", $params));
+    $zeilen = zeilen($db, "select * from noten $where order by $order $limit", $params);
+    // Leistungen aller Noten gesammelt laden statt mit einer Abfrage pro Note
+    $positionen = [];
+    foreach (array_chunk(array_column($zeilen, 'id'), 500) as $ids) {
+        $platz = implode(',', array_fill(0, count($ids), '?'));
+        foreach (zeilen($db, "select * from note_positionen where note_id in ($platz) order by reihenfolge", $ids) as $p) $positionen[$p['note_id']][] = $p;
+    }
+    return array_map(fn ($z) => sicht($n, note_aus_zeile($db, $z, $positionen[$z['id']] ?? [])), $zeilen);
 }
+
+const REDAKTION_SORTIERUNG = [
+    'eingereicht_asc' => 'eingereicht_am asc', 'eingereicht_desc' => 'eingereicht_am desc',
+    'betrag_desc' => '(select sum(betrag_cent) from note_positionen np where np.note_id = noten.id) desc, eingereicht_am desc',
+    'name' => 'nummer asc', // die Nummer beginnt mit dem Nachnamen
+];
 
 function verlauf_eintragen(PDO $db, string $noteId, array $n, string $aktion, array $details = []): void
 {
@@ -209,10 +223,10 @@ final class Honorare
         'aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'erstesPasswortSetzen', 'passwortAendern',
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'meineArtikel',
         'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
-        'alleNoten', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
+        'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
         'offeneZahlungen', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
-        'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'alleNotenAdmin', 'noteLoeschen',
+        'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'noteLoeschen',
         'loeschprotokoll', 'einstellungenSpeichern', 'statistik', 'exportieren',
         'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail', 'linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren',
         'registrierungslinkErstellen', 'registrierungslinks', 'registrierungslinkWiderrufen',
@@ -597,6 +611,63 @@ final class Honorare
         return noten_liste($this->db(), brauche($this->ctx, 'redaktion'));
     }
 
+    /**
+     * Liste für Redaktion und Admin: am Server gefiltert und seitenweise (auch bei vielen tausend Abrechnungen schnell).
+     * $filter: status, medium, monat, suche, sortierung, limit (bis 200), offset
+     */
+    public function redaktionListe(mixed $filter = []): array
+    {
+        $db = $this->db();
+        $n = brauche($this->ctx, 'redaktion');
+        $f = is_array($filter) ? $filter : [];
+        $wo = [];
+        $p = [];
+        if (isset(STATUS_LABEL[$f['status'] ?? ''])) { $wo[] = 'status = ?'; $p[] = $f['status']; }
+        if (ist_medium($f['medium'] ?? '')) { $wo[] = 'medium = ?'; $p[] = $f['medium']; }
+        if (preg_match('/^\d{4}-\d{2}$/', s($f['monat'] ?? ''))) { $wo[] = 'monat = ?'; $p[] = $f['monat']; }
+        $suche = mb_strtolower(kuerze(tr($f['suche'] ?? ''), 100));
+        if ($suche !== '') {
+            $wo[] = '(lower(nummer) like ? or lower(autor_json) like ?)';
+            array_push($p, "%$suche%", "%$suche%");
+        }
+        $where = $wo ? 'where ' . implode(' and ', $wo) : '';
+        $limit = max(1, min(200, (int) ($f['limit'] ?? 100)));
+        $offset = max(0, (int) ($f['offset'] ?? 0));
+        $zaehler = array_fill_keys(array_keys(STATUS_LABEL), 0);
+        foreach (zeilen($db, 'select status, count(*) anzahl from noten group by status') as $z) $zaehler[$z['status']] = (int) $z['anzahl'];
+        return [
+            'noten' => noten_liste($db, $n, $where, $p, REDAKTION_SORTIERUNG[$f['sortierung'] ?? ''] ?? 'eingereicht_am asc', "limit $limit offset $offset"),
+            'anzahl' => (int) wert($db, "select count(*) from noten $where", $p),
+            'summe' => euro((int) wert($db, "select coalesce(sum(np.betrag_cent), 0) from note_positionen np where np.note_id in (select id from noten $where)", $p)),
+            'zaehler' => $zaehler,
+            'monate' => array_column(zeilen($db, 'select distinct monat from noten order by monat desc limit 36'), 'monat'),
+        ];
+    }
+
+    /** Zusatzinfos für die Prüfansicht: Jahressumme der Person, Artikel, die schon anderswo abgerechnet sind */
+    public function pruefInfo(mixed $noteId = null): array
+    {
+        $db = $this->db();
+        brauche($this->ctx, 'redaktion');
+        $x = note_holen($db, $noteId);
+        $jahr = substr($x['monat'], 0, 4);
+        $imJahr = $x['autor_id'] ? zeile($db, "select count(*) anzahl, coalesce(sum((select sum(betrag_cent) from note_positionen np where np.note_id = n.id)), 0) summe
+            from noten n where n.autor_id = ? and n.monat like ? and n.status <> 'abgelehnt'", [$x['autor_id'], "$jahr-%"]) : null;
+        $urls = array_values(array_unique(array_filter(array_column($x['positionen'], 'artikel_url'))));
+        $doppelt = [];
+        if ($urls) {
+            $platz = implode(',', array_fill(0, count($urls), '?'));
+            foreach (zeilen($db, "select np.artikel_url, n.nummer from note_positionen np join noten n on n.id = np.note_id
+                    where np.artikel_url in ($platz) and n.id <> ? and n.status <> 'abgelehnt'", [...$urls, $x['id']]) as $z) {
+                $doppelt[$z['artikel_url']] ??= $z['nummer'];
+            }
+        }
+        return [
+            'jahr' => $jahr, 'jahr_anzahl' => (int) ($imJahr['anzahl'] ?? 0), 'jahr_summe' => euro((int) ($imJahr['summe'] ?? 0)),
+            'doppelt' => (object) $doppelt,
+        ];
+    }
+
     public function note(mixed $noteId = null): array
     {
         $n = ich($this->ctx);
@@ -705,6 +776,19 @@ final class Honorare
     }
 
     // ---------------------------------------------------------------- Buchhaltung
+    /** Summe und Anzahl der im laufenden Jahr bezahlten Prämienabrechnungen (ohne die ganzen Abrechnungen zu laden) */
+    public function ausgezahltImJahr(): array
+    {
+        $db = $this->db();
+        brauche($this->ctx, 'buchhaltung');
+        $seit = substr(heute_iso(), 0, 4) . '-01-01';
+        return [
+            'anzahl' => (int) wert($db, "select count(*) from noten where status = 'bezahlt' and bezahlt_am >= ?", [$seit]),
+            'summe' => euro((int) wert($db, "select coalesce(sum(np.betrag_cent), 0) from note_positionen np join noten n on n.id = np.note_id
+                where n.status = 'bezahlt' and n.bezahlt_am >= ?", [$seit])),
+        ];
+    }
+
     public function offeneZahlungen(): array
     {
         return noten_liste($this->db(), brauche($this->ctx, 'buchhaltung'), "where status = 'angenommen'", [], 'entschieden_am');
@@ -898,11 +982,6 @@ final class Honorare
     }
 
     // ---------------------------------------------------------------- Admin: Prämienabrechnungen & Einstellungen
-    public function alleNotenAdmin(): array
-    {
-        return noten_liste($this->db(), brauche($this->ctx, 'admin'));
-    }
-
     public function noteLoeschen(mixed $noteId = null): bool
     {
         $db = $this->db();

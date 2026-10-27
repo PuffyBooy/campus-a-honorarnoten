@@ -422,6 +422,24 @@ npm run admin -- deine@email.at    # erstes Admin-Konto, zeigt das Startpasswort
 - Programmcode, Datenbank und Sicherungen liegen in `app/` und sind per `.htaccess` gesperrt.
 - Das Passwort des E-Mail-Postfachs wird nie an den Browser geschickt und ist nicht im Datenexport.
 
+## Leistung und Lasttest
+
+Die App ist für viele Daten ausgelegt: Die Redaktion bekommt ihre Liste **am Server gefiltert und in Seiten**
+(100 Abrechnungen, dann „Weitere laden“), die Leistungen werden gesammelt statt einzeln geladen, Summen
+rechnet die Datenbank, und die wichtigen Spalten haben Indizes.
+
+Der Lasttest füllt eine leere Test-Datenbank mit rund **190 Konten, 10 000 Abrechnungen, 30 000 Leistungen
+und 50 000 Protokolleinträgen** und misst die wichtigsten Funktionen (Median aus 5 Läufen, inkl. JSON):
+
+```bash
+npm run lasttest                                    # SQLite
+HONORARE_MYSQL='{"host":"127.0.0.1","name":"hn_last","benutzer":"hn","passwort":"…"}' npm run lasttest   # MySQL (leere Datenbank!)
+```
+
+Ergebnis (MariaDB, ein Kern): alle Funktionen **unter 100 ms**, z. B. Redaktion „Zu prüfen“ 15 ms,
+Liste aller Abrechnungen 47 ms, Admin-Übersicht 24 ms, Protokoll 29 ms. Vorher brauchte die
+Redaktionsliste bei dieser Menge über 600 ms und schickte 18 MB an den Browser, jetzt rund 180 KB.
+
 ## Demo auf GitHub Pages veröffentlichen
 
 1. In GitHub: **Settings → Pages → Source: „GitHub Actions“**.

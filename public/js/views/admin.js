@@ -438,12 +438,15 @@ const emailAbfragen = (n) => bestaetigen({
   ja: 'E-Mail ändern',
 });
 
+// Suche in Admin → Abrechnungen (bleibt beim Neuladen erhalten)
+let notenSuche = '';
+
+/** Alle Prämienabrechnungen (neueste zuerst, seitenweise) mit Löschen und Löschprotokoll */
 async function noten(inhalt, { store, neuLaden }) {
-  const [liste, protokoll] = await Promise.all([store.alleNotenAdmin(), store.loeschprotokoll()]);
-  inhalt.innerHTML = `
-    ${liste.length ? `<table class="tabelle">
-      <thead><tr><th>Nummer</th><th>Name</th><th>Abrechnung</th><th class="rechts">Betrag</th><th>Status</th><th></th></tr></thead>
-      <tbody>${liste.map((n) => `
+  const filter = { status: '', suche: notenSuche, sortierung: 'eingereicht_desc', limit: 100 };
+  const [daten, protokoll] = await Promise.all([store.redaktionListe(filter), store.loeschprotokoll()]);
+  const liste = daten.noten;
+  const zeilen = (noten) => noten.map((n) => `
         <tr data-id="${esc(n.id)}">
           <td data-label="Nummer"><a href="#/redaktion/${esc(n.id)}" class="nummer">${esc(n.nummer)}</a></td>
           <td data-label="Name">${esc(vollerName(n.autor))}</td>
@@ -451,7 +454,17 @@ async function noten(inhalt, { store, neuLaden }) {
           <td data-label="Betrag" class="rechts">${esc(formatEuro(n.betrag))}</td>
           <td data-label="Status">${statusBadge(n.status)}</td>
           <td data-label=""><button type="button" class="btn btn-klein btn-gefahr" data-loeschen>Löschen</button></td>
-        </tr>`).join('')}</tbody></table>` : '<section class="karte"><p>Keine Prämienabrechnungen vorhanden.</p></section>'}
+        </tr>`).join('');
+  inhalt.innerHTML = `
+    <div class="protokoll-filter">
+      <input id="n-suche" type="search" placeholder="Name oder Nummer suchen" value="${esc(notenSuche)}" aria-label="Suchen">
+      <span class="klein">${daten.anzahl} ${daten.anzahl === 1 ? 'Abrechnung' : 'Abrechnungen'}, neueste zuerst</span>
+    </div>
+    ${liste.length ? `<table class="tabelle">
+      <thead><tr><th>Nummer</th><th>Name</th><th>Abrechnung</th><th class="rechts">Betrag</th><th>Status</th><th></th></tr></thead>
+      <tbody>${zeilen(liste)}</tbody></table>
+      ${daten.anzahl > liste.length ? '<p><button type="button" class="btn" id="n-mehr">Weitere laden</button></p>' : ''}`
+    : '<section class="karte"><p>Keine Prämienabrechnungen gefunden.</p></section>'}
     <p class="tipp">Löschen ist endgültig – bezahlte Prämienabrechnungen vorher sichern.</p>
     <section class="karte">
       <h2>Löschprotokoll</h2>
@@ -460,6 +473,23 @@ async function noten(inhalt, { store, neuLaden }) {
         : '<p class="klein">Noch nichts gelöscht.</p>'}
     </section>`;
 
+  let warten;
+  inhalt.querySelector('#n-suche').addEventListener('input', (ev) => {
+    clearTimeout(warten);
+    warten = setTimeout(async () => {
+      notenSuche = ev.target.value;
+      await neuLaden();
+      const f = document.getElementById('n-suche');
+      f?.focus();
+      f?.setSelectionRange(f.value.length, f.value.length);
+    }, 300);
+  });
+  inhalt.querySelector('#n-mehr')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    const mehr = await store.redaktionListe({ ...filter, offset: liste.length });
+    liste.push(...mehr.noten);
+    inhalt.querySelector('tbody').insertAdjacentHTML('beforeend', zeilen(mehr.noten));
+    if (liste.length >= daten.anzahl) ev.target.remove();
+  }));
   inhalt.querySelector('tbody')?.addEventListener('click', (ev) => {
     if (!ev.target.closest('[data-loeschen]')) return;
     const n = liste.find((x) => x.id === ev.target.closest('tr').dataset.id);

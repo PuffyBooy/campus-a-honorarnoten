@@ -756,6 +756,57 @@ export function alleNoten() {
   return db.noten.map((x) => sicht(n, x));
 }
 
+const STATUS_WERTE = ['eingereicht', 'angenommen', 'abgelehnt', 'bezahlt'];
+const REDAKTION_SORTIERUNG = {
+  eingereicht_asc: (a, b) => a.eingereicht_am.localeCompare(b.eingereicht_am),
+  eingereicht_desc: (a, b) => b.eingereicht_am.localeCompare(a.eingereicht_am),
+  betrag_desc: (a, b) => summe(b.positionen) - summe(a.positionen) || b.eingereicht_am.localeCompare(a.eingereicht_am),
+  name: (a, b) => a.nummer.localeCompare(b.nummer),
+};
+
+/** Wie auf dem Server: gefiltert und seitenweise */
+export function redaktionListe({ status = '', medium = '', monat = '', suche = '', sortierung = '', limit = 100, offset = 0 } = {}) {
+  const n = brauche('redaktion');
+  const q = trim(suche).toLowerCase();
+  const treffer = db.noten
+    .filter((x) => !STATUS_WERTE.includes(status) || x.status === status)
+    .filter((x) => !medium || mediumOder(x.medium) === medium)
+    .filter((x) => !/^\d{4}-\d{2}$/.test(monat) || x.monat === monat)
+    .filter((x) => !q || x.nummer.toLowerCase().includes(q) || JSON.stringify(x.autor).toLowerCase().includes(q))
+    .sort(REDAKTION_SORTIERUNG[sortierung] ?? REDAKTION_SORTIERUNG.eingereicht_asc);
+  limit = Math.max(1, Math.min(200, Number(limit) || 100));
+  return {
+    noten: treffer.slice(Number(offset) || 0, (Number(offset) || 0) + limit).map((x) => sicht(n, x)),
+    anzahl: treffer.length,
+    summe: treffer.reduce((s, x) => s + Math.round(summe(x.positionen) * 100), 0) / 100,
+    zaehler: Object.fromEntries(STATUS_WERTE.map((st) => [st, db.noten.filter((x) => x.status === st).length])),
+    monate: [...new Set(db.noten.map((x) => x.monat))].sort().reverse().slice(0, 36),
+  };
+}
+
+/** Zusatzinfos für die Prüfansicht: Jahressumme der Person, schon anderswo abgerechnete Artikel */
+export function pruefInfo(noteId) {
+  brauche('redaktion');
+  const x = noteHolen(noteId);
+  const jahr = x.monat.slice(0, 4);
+  const imJahr = db.noten.filter((y) => y.autor_id && y.autor_id === x.autor_id && y.monat.startsWith(jahr) && y.status !== 'abgelehnt');
+  const doppelt = {};
+  for (const p of x.positionen) {
+    if (!p.artikel_url) continue;
+    const andere = db.noten.find((y) => y.id !== x.id && y.status !== 'abgelehnt' && y.positionen.some((q) => q.artikel_url === p.artikel_url));
+    if (andere) doppelt[p.artikel_url] = andere.nummer;
+  }
+  return {
+    jahr, jahr_anzahl: imJahr.length, jahr_summe: imJahr.reduce((s, y) => s + Math.round(summe(y.positionen) * 100), 0) / 100, doppelt,
+  };
+}
+
+export function ausgezahltImJahr() {
+  brauche('buchhaltung');
+  const bezahlt = db.noten.filter((x) => x.status === 'bezahlt' && x.bezahlt_am >= `${heuteIso().slice(0, 4)}-01-01`);
+  return { anzahl: bezahlt.length, summe: bezahlt.reduce((s, x) => s + Math.round(summe(x.positionen) * 100), 0) / 100 };
+}
+
 export function note(noteId) {
   const n = ich();
   const x = noteHolen(noteId);
@@ -947,11 +998,6 @@ export function nutzerLoeschen(uid) {
   db.positionen = db.positionen.filter((p) => p.autor_id !== uid);
   protokoll('warnung', 'konten', `Konto gelöscht: ${anzeigename(n)} (${n.email})`);
   speichern();
-}
-
-export function alleNotenAdmin() {
-  const n = brauche('admin');
-  return db.noten.map((x) => sicht(n, x)).sort((a, b) => b.eingereicht_am.localeCompare(a.eingereicht_am));
 }
 
 export function noteLoeschen(noteId) {

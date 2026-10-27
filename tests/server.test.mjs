@@ -413,6 +413,33 @@ test('Admin: Übersicht und Sicherungen (jetzt sichern, herunterladen)', async (
   assert.ok((await k.admin.ok('protokoll', { bereich: 'sicherung' })).eintraege.some((e) => e.stufe === 'warnung' && /heruntergeladen/.test(e.text)));
 });
 
+test('Redaktion: Liste am Server gefiltert und seitenweise, Prüf-Infos, Jahressumme der Buchhaltung', async () => {
+  assert.equal((await k.anna.aufruf('redaktionListe')).status, 403);
+  const alle = await k.rita.ok('alleNoten');
+  const r = await k.rita.ok('redaktionListe', { status: '', limit: 2 });
+  assert.equal(r.anzahl, alle.length);
+  assert.equal(r.noten.length, 2);
+  assert.deepEqual(Object.keys(r.zaehler).sort(), ['abgelehnt', 'angenommen', 'bezahlt', 'eingereicht']);
+  assert.equal(Object.values(r.zaehler).reduce((a, b) => a + b, 0), alle.length);
+  const seite2 = await k.rita.ok('redaktionListe', { status: '', limit: 2, offset: 2 });
+  assert.ok(!seite2.noten.some((n) => r.noten.some((m) => m.id === n.id)), 'keine Doppelten zwischen den Seiten');
+  const bezahlt = await k.rita.ok('redaktionListe', { status: 'bezahlt' });
+  assert.ok(bezahlt.noten.every((n) => n.status === 'bezahlt'));
+  assert.equal(bezahlt.summe, Math.round(bezahlt.noten.reduce((s, n) => s + n.betrag * 100, 0)) / 100);
+  const anna = await k.rita.ok('redaktionListe', { suche: 'müller' });
+  assert.ok(anna.noten.length && anna.noten.every((n) => /Müller/.test(n.autor.nachname)));
+  const sortiert = await k.rita.ok('redaktionListe', { sortierung: 'betrag_desc' });
+  assert.ok(sortiert.noten.every((n, i, l) => i === 0 || l[i - 1].betrag >= n.betrag));
+  assert.ok(r.noten[0].positionen.length > 0, 'Leistungen sind dabei');
+  const info = await k.rita.ok('pruefInfo', alle[0].id);
+  assert.match(info.jahr, /^\d{4}$/);
+  assert.equal(typeof info.jahr_summe, 'number');
+  assert.equal(typeof info.doppelt, 'object');
+  const jahr = await k.kasse.ok('ausgezahltImJahr');
+  assert.equal(typeof jahr.anzahl, 'number');
+  assert.equal((await k.rita.aufruf('ausgezahltImJahr')).status, 403);
+});
+
 test('Admin: E-Mail-Adresse ändern, alte und neue Adresse bekommen eine Info', async () => {
   const bert = (await k.admin.ok('nutzerListe')).find((n) => n.email === 'bert@example.org');
   assert.equal((await k.rita.aufruf('emailAendern', bert.id, 'b@example.org')).status, 403);

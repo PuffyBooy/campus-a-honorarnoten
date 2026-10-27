@@ -90,7 +90,7 @@ async function anzeigen(inhalt, ctx, bezahlt) {
   try {
     [noten, imJahr, konto] = await Promise.all([
       bezahlt ? store.bezahlteNotenSeit(kalenderwoche(Date.now() - WOCHEN_ZURUECK * 7 * 86400000).montag) : store.offeneZahlungen(),
-      store.bezahlteNotenSeit(`${jahr}-01-01`),
+      store.ausgezahltImJahr(), // nur Summe und Anzahl, nicht alle Abrechnungen des Jahres
       store.zahlungskonto(),
     ]);
   } catch (e) {
@@ -107,7 +107,7 @@ async function anzeigen(inhalt, ctx, bezahlt) {
       <div class="kennzahl kennzahl-marke"><span class="kennzahl-titel">Offen zur Zahlung</span>
         <strong>${esc(formatEuro(summe(offen)))}</strong><span class="klein">${esc(anzahl(offen))}</span></div>
       <div class="kennzahl"><span class="kennzahl-titel">${esc(jahr)} ausgezahlt</span>
-        <strong>${esc(formatEuro(summe(imJahr)))}</strong><span class="klein">${esc(anzahl(imJahr))}</span></div>
+        <strong>${esc(formatEuro(imJahr.summe))}</strong><span class="klein">${imJahr.anzahl} ${imJahr.anzahl === 1 ? 'Prämienabrechnung' : 'Prämienabrechnungen'}</span></div>
       <div class="kennzahl"><span class="kennzahl-titel">Zahlungskonto</span>
         ${konto.iban ? `<strong class="kennzahl-text">${esc(konto.name)}</strong><span class="klein mono">…${esc(konto.iban.slice(-4))}</span>`
           : '<span class="klein">Noch nicht eingetragen (Admin → Einstellungen). Nötig für die SEPA-Datei.</span>'}</div>
