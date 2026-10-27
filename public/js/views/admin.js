@@ -1,45 +1,162 @@
 // Admin-Terminal: Benutzer & Rollen, Prämienabrechnungen löschen, Einstellungen, Datensicherung
 import {
-  ROLLEN_LABEL, STATUS_LABEL, esc, formatBetragPlain, formatEuro, formatMonat, formatZeitpunkt, parseBetrag, vollerName,
+  ROLLEN_LABEL, esc, formatBetragPlain, formatEuro, formatMonat, formatZeitpunkt, parseBetrag, vollerName,
 } from '../lib/format.js';
-import { downloadText } from '../lib/csv.js';
+import { downloadBlob, downloadText } from '../lib/csv.js';
 import { MEDIEN, MEDIUM_KEYS } from '../lib/campus.js';
 import { formatIban } from '../lib/iban.js';
 import { bestaetigen, fehlerText, kopierenMitFeedback, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 import { STANDARD_HOSTER, betreiberOder } from '../lib/rechtliches.js';
 
 const REITER = {
-  anfragen: 'Anfragen', benutzer: 'Benutzer', noten: 'Prämienabrechnungen', einstellungen: 'Einstellungen', mail: 'E-Mail', daten: 'Daten',
+  uebersicht: 'Übersicht', anfragen: 'Anfragen', einladen: 'Einladen', benutzer: 'Benutzer', noten: 'Abrechnungen',
+  protokoll: 'Protokoll', einstellungen: 'Einstellungen', mail: 'E-Mail', daten: 'Daten',
 };
+
+const STUFE_LABEL = { info: 'Info', warnung: 'Warnung', fehler: 'Fehler' };
+const stufeBadge = (s) => `<span class="stufe stufe-${esc(s)}">${esc(STUFE_LABEL[s] ?? s)}</span>`;
+const groesse = (b) => (b < 1024 ? `${b} B` : b < 1048576 ? `${(b / 1024).toFixed(1).replace('.', ',')} KB` : `${(b / 1048576).toFixed(1).replace('.', ',')} MB`);
+
+/** Startseite: das Wichtigste auf einen Blick, letzte Aktivität und Zustand des Systems */
+async function uebersicht(inhalt, { store }) {
+  const d = await store.dashboard();
+  const z = d.zahlen;
+  const sys = d.system;
+  const karte = (link, titel, wert, unten, art = '') => `
+    <a class="kennzahl kennzahl-link${art}" href="${link}"><span class="kennzahl-titel">${esc(titel)}</span>
+      <strong>${esc(String(wert))}</strong><span class="klein">${esc(unten)}</span></a>`;
+  inhalt.innerHTML = `
+    <section class="kennzahlen kennzahlen-5" aria-label="Überblick">
+      ${karte('#/redaktion', 'Zu prüfen', z.zu_pruefen, 'Abrechnungen bei der Redaktion', z.zu_pruefen ? ' kennzahl-marke' : '')}
+      ${karte('#/zahlung', 'Offen zur Zahlung', formatEuro(z.zur_zahlung_summe), `${z.zur_zahlung} angenommen`)}
+      ${karte('#/admin/anfragen', 'Zugangsanfragen', z.anfragen, 'offen', z.anfragen ? ' kennzahl-achtung' : '')}
+      ${karte('#/admin/benutzer', 'Konten', z.konten, `aktiv · ${z.entwuerfe} gespeicherte Leistungen`)}
+      ${karte('#/admin/protokoll', 'Letzte 7 Tage', `${z.fehler} / ${z.warnungen}`, 'Fehler / Warnungen',
+        z.fehler ? ' kennzahl-fehler' : z.warnungen ? ' kennzahl-achtung' : '')}
+    </section>
+    <div class="spalten">
+      <section class="karte">
+        <div class="kopfzeile"><h2>Letzte Aktivität</h2><a href="#/admin/protokoll" class="klein">Ganzes Protokoll</a></div>
+        ${d.aktivitaet.length ? `<ul class="aktivitaet">${d.aktivitaet.map((e) => `
+          <li><span class="punkt punkt-${esc(e.stufe)}" title="${esc(STUFE_LABEL[e.stufe])}"></span>
+            <span><span class="aktivitaet-text">${esc(e.text)}</span><br>
+              <span class="klein">${esc(formatZeitpunkt(e.zeit))}${e.wer ? ` · ${esc(e.wer)}` : ''}</span></span></li>`).join('')}</ul>`
+          : '<p class="klein">Noch keine Einträge.</p>'}
+      </section>
+      <section class="karte">
+        <h2>System</h2>
+        <dl class="angaben">
+          <dt>Datenbank</dt><dd>${esc(sys.datenbank)}</dd>
+          <dt>PHP</dt><dd>${esc(sys.php)}</dd>
+          ${sys.version ? `<dt>App-Version</dt><dd class="mono">${esc(sys.version)}</dd>` : ''}
+          <dt>E-Mail-Versand</dt><dd>${sys.mail.aktiv ? '<span class="badge badge-bezahlt">aktiv</span>' : '<span class="badge badge-abgelehnt">aus</span>'}
+            ${sys.mail.offen ? ` · ${sys.mail.offen} in der Warteschlange` : ''}
+            ${sys.mail.fehlgeschlagen ? ` · <a href="#/admin/mail">${sys.mail.fehlgeschlagen} fehlgeschlagen</a>` : ''}</dd>
+          <dt>Sicherungen</dt><dd>${sys.letzte_sicherung
+            ? `letzte ${esc(formatZeitpunkt(sys.letzte_sicherung.zeit))} (${esc(groesse(sys.letzte_sicherung.groesse))}) · ${sys.sicherungen} vorhanden`
+            : 'noch keine'} · <a href="#/admin/daten">ansehen</a></dd>
+        </dl>
+      </section>
+    </div>`;
+}
+
+// Filter des Protokolls (bleiben beim Neuladen erhalten)
+const protokollFilter = { stufe: '', bereich: '', suche: '' };
+
+/** Protokoll: alles, was im Hintergrund passiert, nach Info, Warnung und Fehler */
+async function protokoll(inhalt, { store, neuLaden }) {
+  const daten = await store.protokollLesen(protokollFilter);
+  let eintraege = daten.eintraege;
+  const zeilen = (liste) => liste.map((e) => `
+    <tr class="zeile-${esc(e.stufe)}">
+      <td data-label="Zeit" class="nowrap">${esc(formatZeitpunkt(e.zeit))}</td>
+      <td data-label="Stufe">${stufeBadge(e.stufe)}</td>
+      <td data-label="Bereich">${esc(daten.bereiche[e.bereich] ?? e.bereich)}</td>
+      <td data-label="Ereignis" class="umbruch">${esc(e.text)}</td>
+      <td data-label="Wer">${esc(e.wer || '–')}</td>
+    </tr>`).join('');
+  inhalt.innerHTML = `
+    <div class="protokoll-filter">
+      <div class="chips" role="group" aria-label="Stufe">
+        ${[['', 'Alle', daten.zaehler.alle], ...Object.entries(STUFE_LABEL).map(([k, l]) => [k, l, daten.zaehler[k]])].map(([k, l, n]) => `
+          <button type="button" class="chip${k ? ` chip-${k}` : ''}" data-stufe="${k}" aria-pressed="${protokollFilter.stufe === k}">${esc(l)} <span>${n}</span></button>`).join('')}
+      </div>
+      <select id="p-bereich" aria-label="Bereich"><option value="">Alle Bereiche</option>
+        ${Object.entries(daten.bereiche).map(([k, l]) => `<option value="${k}" ${protokollFilter.bereich === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select>
+      <input id="p-suche" type="search" placeholder="Suchen (Text oder Name)" value="${esc(protokollFilter.suche)}" aria-label="Suchen">
+      <button type="button" class="btn btn-klein" id="p-csv">CSV</button>
+    </div>
+    <p class="tipp">Wird automatisch im Hintergrund geschrieben und 1 Jahr aufgehoben. IP-Adressen nur gekürzt.</p>
+    ${eintraege.length ? `<table class="tabelle protokoll-tabelle">
+      <thead><tr><th>Zeit</th><th>Stufe</th><th>Bereich</th><th>Ereignis</th><th>Wer</th></tr></thead>
+      <tbody>${zeilen(eintraege)}</tbody></table>
+      ${daten.mehr ? '<p><button type="button" class="btn" id="p-mehr">Ältere laden</button></p>' : ''}`
+      : '<section class="karte"><p>Keine Einträge gefunden.</p></section>'}`;
+
+  const setzen = (feld, wert) => { protokollFilter[feld] = wert; neuLaden(); };
+  inhalt.querySelector('.chips').addEventListener('click', (ev) => {
+    const k = ev.target.closest('[data-stufe]');
+    if (k) setzen('stufe', k.dataset.stufe);
+  });
+  inhalt.querySelector('#p-bereich').addEventListener('change', (ev) => setzen('bereich', ev.target.value));
+  let warten;
+  inhalt.querySelector('#p-suche').addEventListener('input', (ev) => {
+    clearTimeout(warten);
+    warten = setTimeout(async () => {
+      protokollFilter.suche = ev.target.value;
+      await neuLaden();
+      const f = document.getElementById('p-suche');
+      f?.focus();
+      f?.setSelectionRange(f.value.length, f.value.length);
+    }, 300);
+  });
+  inhalt.querySelector('#p-mehr')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    const mehr = await store.protokollLesen({ ...protokollFilter, vor: eintraege.at(-1).zeit });
+    eintraege = [...eintraege, ...mehr.eintraege];
+    inhalt.querySelector('.protokoll-tabelle tbody').insertAdjacentHTML('beforeend', zeilen(mehr.eintraege));
+    if (!mehr.mehr) ev.target.remove();
+  }));
+  inhalt.querySelector('#p-csv').addEventListener('click', () => {
+    const csv = [['Zeit', 'Stufe', 'Bereich', 'Ereignis', 'Wer'],
+      ...eintraege.map((e) => [e.zeit, STUFE_LABEL[e.stufe], daten.bereiche[e.bereich] ?? e.bereich, e.text, e.wer])]
+      .map((r) => r.map((x) => `"${String(x ?? '').replace(/"/g, '""')}"`).join(';')).join('\r\n');
+    downloadText(`protokoll-${new Date().toISOString().slice(0, 10)}.csv`, `\ufeff${csv}`);
+  });
+}
 
 // Zuletzt erzeugte Zugangsdaten – bleiben sichtbar, bis der Admin sie wegklickt
 let zugangsdaten = null;
 
 function zugangsText(z) {
-  const adresse = location.origin + location.pathname;
-  return `Hallo ${z.vorname},\n\ndein Zugang zu den Anerkennungsprämien von campus a college ist bereit.\n\n`
-    + `Adresse: ${adresse}\nE-Mail: ${z.email}\nStartpasswort: ${z.passwort}\n\n`
+  return `Hallo ${z.vorname},\n\ndein Zugang zu den Anerkennungsprämien von campus a college und campus a ist bereit.\n\n`
+    + `Mit diesem Link bist du direkt angemeldet (gilt einmal, 7 Tage):\n${z.link}\n\n`
+    + `Oder anmelden mit\nE-Mail: ${z.email}\nStartpasswort: ${z.passwort}\n\n`
     + 'Beim ersten Anmelden legst du dein eigenes Passwort fest.\n\nLiebe Grüße\ndeine Redaktion';
 }
 
 function zugangsdatenHtml(z) {
+  // Mit eingerichtetem E-Mail-Versand geht alles automatisch hinaus – dann nur zur Info
   const mailto = `mailto:${encodeURIComponent(z.email)}?subject=${encodeURIComponent('Dein Zugang zu den Anerkennungsprämien')}`
     + `&body=${encodeURIComponent(zugangsText(z))}`;
   return `
     <section class="karte zugangsdaten" role="status">
       <h2>Zugangsdaten für ${esc(z.vorname)}</h2>
-      ${z.mail ? `<p class="erfolgbox">Die Zugangsdaten werden automatisch per E-Mail an ${esc(z.email)} geschickt.</p>` : ''}
-      <p>Das Startpasswort wird nur jetzt angezeigt.</p>
+      ${z.mail ? `<p class="erfolgbox">Die Zugangsdaten gehen automatisch per E-Mail an <strong>${esc(z.email)}</strong>,
+        mit einem Knopf, der direkt anmeldet. Du musst nichts weiter tun.</p>`
+        : '<p>Der E-Mail-Versand ist nicht eingerichtet. Bitte die Zugangsdaten selbst weitergeben. Sie werden nur jetzt angezeigt.</p>'}
       <div class="kopierblock">
         <div class="kopierzeile"><span class="kopier-label">E-Mail</span><span class="kopier-wert">${esc(z.email)}</span><span></span></div>
         <div class="kopierzeile"><span class="kopier-label">Startpasswort</span>
           <span class="kopier-wert mono">${esc(z.passwort)}</span>
           <button type="button" class="btn btn-klein" data-z="pw">Kopieren</button></div>
+        ${z.link ? `<div class="kopierzeile"><span class="kopier-label">Link zum direkten Anmelden (einmal, 7 Tage)</span>
+          <span class="kopier-wert klein">${esc(z.link)}</span>
+          <button type="button" class="btn btn-klein" data-z="link">Kopieren</button></div>` : ''}
       </div>
       <div class="aktionen">
-        <a class="btn${z.mail ? '' : ' btn-primaer'}" href="${esc(mailto)}">E-Mail vorbereiten</a>
-        <button type="button" class="btn" data-z="text">Text kopieren</button>
-        <button type="button" class="btn" data-z="fertig">Erledigt</button>
+        ${z.mail ? '' : `<a class="btn btn-primaer" href="${esc(mailto)}">E-Mail vorbereiten</a>
+        <button type="button" class="btn" data-z="text">Text kopieren</button>`}
+        <button type="button" class="btn" data-z="fertig">${z.mail ? 'Ok' : 'Erledigt'}</button>
       </div>
     </section>`;
 }
@@ -49,17 +166,101 @@ function zugangsdatenBinden(box, neuLaden) {
     const k = ev.target.closest('[data-z]');
     if (!k || !zugangsdaten) return;
     if (k.dataset.z === 'pw') kopierenMitFeedback(k, zugangsdaten.passwort);
+    if (k.dataset.z === 'link') kopierenMitFeedback(k, zugangsdaten.link);
     if (k.dataset.z === 'text') kopierenMitFeedback(k, zugangsText(zugangsdaten));
     if (k.dataset.z === 'fertig') { zugangsdaten = null; neuLaden(); }
   });
 }
 
-function rollenAuswahl(vorauswahl = ['autor']) {
-  return `<span class="rollen-wahl">${Object.entries(ROLLEN_LABEL).map(([r, l]) => `
+function rollenAuswahl(vorauswahl = ['autor'], ohne = []) {
+  return `<span class="rollen-wahl">${Object.entries(ROLLEN_LABEL).filter(([r]) => !ohne.includes(r)).map(([r, l]) => `
     <label class="check"><input type="checkbox" data-rolle="${r}" ${vorauswahl.includes(r) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</span>`;
 }
 
 const gewaehlteRollen = (el) => Array.from(el.querySelectorAll('[data-rolle]:checked'), (x) => x.dataset.rolle);
+
+// Zuletzt erstellter Registrierungslink – der Link selbst ist nur jetzt sichtbar (gespeichert wird nur ein Hash)
+let neuerLink = null;
+const LINK_GUELTIG = { 1: '1 Tag', 3: '3 Tage', 7: '7 Tage', 14: '14 Tage', 30: '30 Tage' };
+
+/** Registrierungslinks: verschicken, wer ihn hat, legt sein Konto selbst an (begrenzte Zeit und Anzahl) */
+async function einladen(inhalt, { store, neuLaden, istDemo }) {
+  const links = await store.registrierungslinks();
+  const nutzbar = (l) => (l.max == null ? `${l.nutzungen} verwendet` : `${l.nutzungen} von ${l.max} verwendet`);
+  inhalt.innerHTML = `
+    ${neuerLink ? `<section class="karte zugangsdaten" role="status">
+      <h2>Registrierungslink erstellt</h2>
+      ${neuerLink.mail ? '<p class="erfolgbox">Die Einladung geht per E-Mail hinaus.</p>' : ''}
+      <p>Gilt ${esc(LINK_GUELTIG[neuerLink.tage])}, ${neuerLink.max == null ? 'beliebig oft' : neuerLink.max === 1 ? 'für eine Person' : `für ${neuerLink.max} Personen`}.
+        <strong>Der Link wird nur jetzt angezeigt.</strong></p>
+      <div class="kopierblock"><div class="kopierzeile"><span class="kopier-label">Link</span>
+        <span class="kopier-wert klein">${esc(neuerLink.link)}</span>
+        <button type="button" class="btn btn-klein" id="l-kopieren">Kopieren</button></div></div>
+      <div class="aktionen"><button type="button" class="btn" id="l-ok">Ok</button></div>
+    </section>` : ''}
+    <form class="karte" id="l-form" novalidate>
+      <h2>Registrierungslink erstellen</h2>
+      <p class="tipp">Wer den Link bekommt, legt sein Konto selbst an, ohne dass du freischalten musst.
+        Der Link läuft ab und gilt nur so oft, wie du hier einstellst.</p>
+      <div class="zeile">
+        <div class="feld"><label for="l-tage">Gültig</label>
+          <select id="l-tage" name="tage">${Object.entries(LINK_GUELTIG).map(([t, l]) => `<option value="${t}" ${t === '7' ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
+        <div class="feld"><label for="l-max">Wie oft</label>
+          <select id="l-max" name="max"><option value="1">Für eine Person</option><option value="5">Für bis zu 5 Personen</option>
+            <option value="20">Für bis zu 20 Personen</option><option value="">Beliebig oft (bis zum Ablauf)</option></select></div>
+      </div>
+      <p class="klein">Rollen der neuen Konten:</p>
+      ${rollenAuswahl(['autor'], ['admin'])}
+      <div class="zeile">
+        <div class="feld"><label for="l-email">Gleich per E-Mail schicken an <span class="optional">(optional)</span></label>
+          <input id="l-email" name="email" type="email" inputmode="email" placeholder="name@example.org"></div>
+        <div class="feld"><label for="l-notiz">Notiz <span class="optional">(optional, nur für dich)</span></label>
+          <input id="l-notiz" name="notiz" maxlength="200" placeholder="z. B. Neue Klasse 7B"></div>
+      </div>
+      ${istDemo ? '<p class="klein">In der Demo werden keine E-Mails verschickt. Den Link kannst du hier kopieren und im selben Browser öffnen.</p>' : ''}
+      <p class="feldfehler" role="alert"></p>
+      <button type="submit" class="btn btn-primaer">Link erstellen</button>
+    </form>
+    <section class="karte">
+      <h2>Bisherige Links</h2>
+      ${links.length ? `<table class="tabelle"><thead><tr><th>Erstellt</th><th>Notiz</th><th>Rollen</th><th>Nutzung</th><th>Gültig bis</th><th></th></tr></thead>
+        <tbody>${links.map((l) => `<tr data-id="${esc(l.id)}">
+          <td data-label="Erstellt"><span>${esc(formatZeitpunkt(l.erstellt_am))}<br><span class="klein">${esc(l.erstellt_von)}</span></span></td>
+          <td data-label="Notiz">${esc(l.notiz || '–')}</td>
+          <td data-label="Rollen">${esc(l.rollen.map((r) => ROLLEN_LABEL[r] ?? r).join(', '))}</td>
+          <td data-label="Nutzung">${esc(nutzbar(l))}</td>
+          <td data-label="Gültig bis"><span>${esc(formatZeitpunkt(l.gueltig_bis))}<br>${l.aktiv ? '<span class="badge badge-bezahlt">aktiv</span>'
+            : `<span class="badge badge-abgelehnt">${l.widerrufen_am ? 'zurückgezogen' : 'abgelaufen'}</span>`}</span></td>
+          <td data-label="">${l.aktiv ? '<button type="button" class="btn btn-klein btn-gefahr" data-widerrufen>Zurückziehen</button>' : ''}</td>
+        </tr>`).join('')}</tbody></table>` : '<p class="klein">Noch keine Registrierungslinks.</p>'}
+    </section>`;
+
+  inhalt.querySelector('#l-kopieren')?.addEventListener('click', (ev) => kopierenMitFeedback(ev.currentTarget, neuerLink.link));
+  inhalt.querySelector('#l-ok')?.addEventListener('click', () => { neuerLink = null; neuLaden(); });
+  const form = inhalt.querySelector('#l-form');
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const fehler = form.querySelector('.feldfehler');
+    fehler.textContent = '';
+    await mitSperre(form.querySelector('[type=submit]'), async () => {
+      try {
+        neuerLink = await store.registrierungslinkErstellen({
+          tage: Number(form.tage.value), max: form.max.value === '' ? null : Number(form.max.value),
+          rollen: gewaehlteRollen(form), email: form.email.value, notiz: form.notiz.value,
+        });
+        neuLaden();
+      } catch (e) {
+        fehler.textContent = fehlerText(e);
+      }
+    });
+  });
+  inhalt.querySelector('tbody')?.addEventListener('click', (ev) => {
+    if (!ev.target.closest('[data-widerrufen]')) return;
+    const id = ev.target.closest('tr').dataset.id;
+    if (!confirm('Diesen Link zurückziehen? Danach kann sich niemand mehr damit registrieren.')) return;
+    versuche(() => store.registrierungslinkWiderrufen(id), 'Link zurückgezogen.', neuLaden);
+  });
+}
 
 async function anfragen(inhalt, { store, neuLaden }) {
   const alle = await store.anfragen();
@@ -467,7 +668,8 @@ async function mail(inhalt, { store, nutzer: ich, neuLaden, istDemo }) {
   }));
 }
 
-function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
+async function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
+  const sich = istDemo ? null : await store.sicherungen();
   inhalt.innerHTML = istDemo ? `
     <div class="spalten">
       <section class="karte">
@@ -486,10 +688,46 @@ function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
       </section>
     </div>` : `
     <section class="karte">
+      <div class="kopfzeile"><h2>Sicherungen</h2><button type="button" class="btn btn-primaer" id="d-sichern">Jetzt sichern</button></div>
+      <p class="tipp">Der Server sichert jeden Tag automatisch die ganze Datenbank und hebt die Sicherungen
+        ${esc(String(sich.tage))} Tage auf. Zusätzlich empfehlen wir das Backup von World4You (Kundenmenü → Backups).
+        Sicherungen enthalten IBANs und Adressen: vertraulich aufbewahren.</p>
+      ${sich.liste.length ? `<table class="tabelle"><thead><tr><th>Datei</th><th>Erstellt</th><th class="rechts">Größe</th><th></th></tr></thead>
+        <tbody>${sich.liste.map((b) => `<tr data-name="${esc(b.name)}">
+          <td data-label="Datei" class="mono umbruch">${esc(b.name)}</td>
+          <td data-label="Erstellt">${esc(formatZeitpunkt(b.zeit))}</td>
+          <td data-label="Größe" class="rechts">${esc(groesse(b.groesse))}</td>
+          <td data-label=""><button type="button" class="btn btn-klein" data-laden>Herunterladen</button></td></tr>`).join('')}</tbody></table>`
+        : '<p class="klein">Noch keine Sicherung vorhanden. Die erste entsteht beim nächsten Aufruf der App oder mit „Jetzt sichern“.</p>'}
+    </section>
+    <section class="karte">
       <h2>Datenexport</h2>
-      <p><strong>Enthält IBANs und Adressen – vertraulich aufbewahren.</strong></p>
-      <button type="button" class="btn btn-primaer" id="d-export">Datenexport herunterladen</button>
+      <p>Alle Daten als JSON-Datei, z. B. zum Auswerten. <strong>Enthält IBANs und Adressen, vertraulich aufbewahren.</strong></p>
+      <button type="button" class="btn" id="d-export">Datenexport herunterladen</button>
     </section>`;
+
+  inhalt.querySelector('#d-sichern')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    try {
+      const b = await store.jetztSichern();
+      meldung(`Sicherung erstellt: ${b.name}`, 'erfolg');
+      neuLaden();
+    } catch (e) {
+      meldung(fehlerText(e), 'fehler');
+    }
+  }));
+  inhalt.querySelector('tbody')?.addEventListener('click', (ev) => {
+    const k = ev.target.closest('[data-laden]');
+    if (!k) return;
+    mitSperre(k, async () => {
+      try {
+        const r = await store.sicherungHerunterladen(k.closest('tr').dataset.name);
+        const bytes = Uint8Array.from(atob(r.inhalt), (c) => c.charCodeAt(0));
+        downloadBlob(r.name, new Blob([bytes], { type: 'application/octet-stream' }));
+      } catch (e) {
+        meldung(fehlerText(e), 'fehler');
+      }
+    });
+  });
 
   inhalt.querySelector('#d-export').addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
     try {
@@ -524,23 +762,16 @@ function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
 export async function render(el, ctx) {
   const s = await ctx.store.statistik();
   if (!ctx.istAktuell()) return;
-  const tab = REITER[ctx.params.tab] ? ctx.params.tab : (s.anfragen ? 'anfragen' : 'benutzer');
+  const tab = REITER[ctx.params.tab] ? ctx.params.tab : 'uebersicht';
   el.innerHTML = `
-    <h1>Admin-Terminal</h1>
-    <section class="kennzahlen" aria-label="Überblick">
-      <div class="kennzahl${s.anfragen ? ' hervorgehoben' : ''}"><span class="zahl">${s.anfragen}</span><span>offene Anfragen</span></div>
-      <div class="kennzahl"><span class="zahl">${s.nutzer}</span><span>Konten</span></div>
-      <div class="kennzahl"><span class="zahl">${s.entwuerfe}</span><span>gespeicherte Leistungen</span></div>
-      ${['eingereicht', 'angenommen', 'bezahlt'].map((st) => `
-        <div class="kennzahl"><span class="zahl">${s[st]}</span><span>${esc(STATUS_LABEL[st])}</span></div>`).join('')}
-    </section>
+    <h1>Admin</h1>
     <nav class="reiter" aria-label="Bereiche">
       ${Object.entries(REITER).map(([k, l]) => `<a href="#/admin/${k}"${k === tab ? ' aria-current="page"' : ''}>${esc(l)}${
-        k === 'anfragen' && s.anfragen ? ` <span class="zaehler">${s.anfragen}</span>` : ''}</a>`).join('')}
+        k === 'anfragen' && s.anfragen ? ` <span class="zaehler zaehler-wichtig">${s.anfragen}</span>` : ''}</a>`).join('')}
     </nav>
     <div id="a-zugang">${zugangsdaten ? zugangsdatenHtml(zugangsdaten) : ''}</div>
     <div id="a-inhalt"></div>`;
   zugangsdatenBinden(el.querySelector('#a-zugang'), ctx.neuLaden);
   const inhalt = el.querySelector('#a-inhalt');
-  await ({ anfragen, benutzer, noten, einstellungen, mail, daten })[tab](inhalt, ctx);
+  await ({ uebersicht, anfragen, einladen, benutzer, noten, protokoll, einstellungen, mail, daten })[tab](inhalt, ctx);
 }

@@ -102,8 +102,14 @@ function api(): array
     if ($name === 'anmelden') {
         $email = strtolower(tr($args[0] ?? ''));
         if (!versuch_erlaubt($db, "login-ip:$ip", 30, 900) || !versuch_erlaubt($db, "login:$email", 10, 900)) {
+            protokoll($db, 'warnung', 'anmeldung', 'Zu viele Anmeldeversuche, vorübergehend gesperrt: ' . kuerze($email, 200));
             return [429, ['fehler' => 'Zu viele Anmeldeversuche. Bitte in 15 Minuten erneut versuchen.']];
         }
+    }
+    // Links: gegen Durchprobieren von Tokens
+    if (in_array($name, ['linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren'], true) && !versuch_erlaubt($db, "link:$ip", 30, 900)) {
+        protokoll($db, 'warnung', 'anmeldung', 'Zu viele Versuche mit Links (Anmelde- oder Registrierungslink), vorübergehend gesperrt');
+        return [429, ['fehler' => 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.']];
     }
     if ($name === 'zugangAnfragen' && !versuch_erlaubt($db, "anfrage:$ip", 5, 3600)) {
         return [429, ['fehler' => 'Zu viele Anfragen. Bitte später erneut versuchen.']];
@@ -136,6 +142,11 @@ try {
 } catch (Throwable $e) {
     error_log('Prämienabrechnungen: ' . $e);
     [$status, $daten] = [500, ['fehler' => 'Interner Fehler. Bitte später erneut versuchen.']];
+    try {
+        protokoll(datenbank(), 'fehler', 'system', 'Interner Fehler bei ' . kuerze((string) ($_GET['f'] ?? '?'), 50) . ': '
+            . $e->getMessage() . ' (' . basename($e->getFile()) . ':' . $e->getLine() . ')');
+    } catch (Throwable) {
+    }
 }
 antworten($status, $daten);
 try {

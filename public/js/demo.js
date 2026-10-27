@@ -177,6 +177,19 @@ export async function demoDaten(db, { passwortHash }) {
       nachricht: '', status: 'offen', am: iso(tageZurueck(0, 8)) },
   );
 
+  // Beispiel-Protokoll für Admin → Protokoll und die Übersicht
+  db.protokoll = [
+    [9, 8, 'info', 'sicherung', 'Tägliche Sicherung erstellt: honorarnoten-Beispiel.sql (184,2 KB)', ''],
+    [6, 9, 'info', 'anmeldung', 'Angemeldet', 'Rita Redaktion'],
+    [5, 22, 'warnung', 'anmeldung', 'Anmeldung fehlgeschlagen für jonas@demo.at', 'Jonas Weiß'],
+    [5, 22, 'info', 'anmeldung', 'Angemeldet', 'Jonas Weiß'],
+    [4, 13, 'warnung', 'mail', 'E-Mail „Deine Prämienabrechnung ist bezahlt“ an maria@demo.at nicht verschickt (Versuch 1 von 5): Mailserver: 421 Too many connections', ''],
+    [3, 10, 'fehler', 'mail', 'E-Mail „Neue Zugangsanfrage“ an admin@demo.at nicht verschickt (aufgegeben nach 5 Versuchen): Anmeldung beim Mailserver fehlgeschlagen', ''],
+    [2, 12, 'info', 'abrechnungen', 'Eingereicht: WEISS-JO-2026-02', 'Jonas Weiß'],
+    [1, 11, 'info', 'konten', 'Zugang angefragt: Sophie Neumann (sophie@demo.at)', 'Sophie Neumann'],
+    [0, 8, 'info', 'sicherung', 'Tägliche Sicherung erstellt: honorarnoten-Beispiel.sql (186,0 KB)', ''],
+  ].map(([tage, stunde, stufe, bereich, text, wer], i) => ({ id: i + 1, zeit: iso(tageZurueck(tage, stunde)), stufe, bereich, text, wer, ip: '' }));
+
   db.einstellungen.datenschutzKontakt = 'office@campus-a-college.at';
   // Beispielkonto für die SEPA-Datei der Buchhaltung
   db.einstellungen.zahlungskonto = { name: 'campus a Medien GmbH', iban: 'AT022050302101023600', bic: 'SPIHAT22XXX' };

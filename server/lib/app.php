@@ -6,6 +6,7 @@ require_once __DIR__ . '/basis.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/regeln.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/protokoll.php';
 require_once __DIR__ . '/artikel.php';
 require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/mail-vorlagen.php';
@@ -73,6 +74,7 @@ function taegliche_sicherung(PDO $db): ?string
     $heute = $ordner . '/honorarnoten-' . heute_iso();
     if (is_file("$heute.sqlite") || is_file("$heute.sql")) return null;
     $ziel = sichern($db, "$heute.sqlite");
+    protokoll($db, 'info', 'sicherung', 'Tägliche Sicherung erstellt: ' . basename($ziel) . ' (' . groesse_text((int) filesize($ziel)) . ')');
     $tage = (int) konfiguration()['backup_tage'];
     foreach (glob($ordner . '/honorarnoten-*.sql*') ?: [] as $f) {
         if ($f !== $ziel && filemtime($f) < time() - $tage * 86400) @unlink($f);
@@ -93,5 +95,14 @@ function hintergrundarbeit(PDO $db): void
         taegliche_sicherung($db);
     } catch (Throwable $e) {
         error_log('Prämienabrechnungen: Sicherung: ' . $e->getMessage());
+        protokoll($db, 'fehler', 'sicherung', 'Tägliche Sicherung fehlgeschlagen: ' . $e->getMessage());
     }
+}
+
+/** 1536 -> „1,5 KB“ */
+function groesse_text(int $bytes): string
+{
+    if ($bytes < 1024) return "$bytes B";
+    if ($bytes < 1024 * 1024) return number_format($bytes / 1024, 1, ',', '.') . ' KB';
+    return number_format($bytes / 1024 / 1024, 1, ',', '.') . ' MB';
 }

@@ -37,6 +37,17 @@ export const abmelden = f('abmelden');
 export const zugangAnfragen = f('zugangAnfragen');
 export const erstesPasswortSetzen = f('erstesPasswortSetzen');
 export const passwortAendern = f('passwortAendern');
+export const linkAnmelden = f('linkAnmelden');
+export const einladungPruefen = f('einladungPruefen');
+export const mitLinkRegistrieren = f('mitLinkRegistrieren');
+export const registrierungslinkErstellen = f('registrierungslinkErstellen');
+export const registrierungslinks = f('registrierungslinks');
+export const registrierungslinkWiderrufen = f('registrierungslinkWiderrufen');
+export const dashboard = f('dashboard');
+export const protokollLesen = f('protokoll');
+export const sicherungen = f('sicherungen');
+export const jetztSichern = f('jetztSichern');
+export const sicherungHerunterladen = f('sicherungHerunterladen');
 
 // Profil
 export const profilSpeichern = f('profilSpeichern');

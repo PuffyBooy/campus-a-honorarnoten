@@ -393,12 +393,6 @@ section.fehlerbox { border: 0; }
 }
 
 /* ---------- Admin ---------- */
-.kennzahlen { display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: .5rem; margin-bottom: 1rem; }
-.kennzahl {
-  background: var(--flaeche); border: 1px solid var(--rand); border-radius: var(--radius); padding: .6rem .8rem;
-  display: flex; flex-direction: column; font-size: .85rem; color: var(--text-leise);
-}
-.kennzahl .zahl { font-size: 1.6rem; font-weight: 700; color: var(--text); font-family: var(--schrift-titel); }
 .rollen-wahl { display: flex; flex-wrap: wrap; gap: .25rem .75rem; }
 .check { display: inline-flex; gap: .3rem; align-items: center; font-weight: 400; font-size: .9rem; margin: 0; white-space: nowrap; }
 .aktionen.eng { margin: 0; gap: .3rem; }
@@ -497,7 +491,6 @@ body.modus-demo .fuss-demo { display: block; }
   display: inline-block; min-width: 1.35em; padding: 0 .35em; border-radius: 999px;
   background: var(--akzent); color: #fff; font-size: .75rem; line-height: 1.35em; text-align: center; vertical-align: 1px;
 }
-.kennzahl.hervorgehoben { border-color: var(--akzent); box-shadow: inset 0 3px 0 var(--akzent); }
 .zitat { border-left: 3px solid var(--rand); padding-left: .75rem; color: var(--text-leise); }
 .zugangsdaten { border: 2px solid var(--erfolg); background: var(--erfolg-hell); }
 .zugangsdaten .kopierblock { background: var(--flaeche); }
@@ -613,3 +606,42 @@ body.modus-demo .fuss-demo { display: block; }
   .inhalt:has(.arbeitsplatz.mit-auswahl) :is(.reiter, .redaktion-filter) { display: none; }
 }
 .kennzahl-text { font-size: 1rem !important; }
+.karte.schmal:has(#reg-form) { max-width: 580px; }
+.artikel-filter { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: .5rem 0 .75rem; }
+.artikel-filter input[type=search] { flex: 1 1 12rem; }
+.artikel-filter select { flex: 0 1 12rem; width: auto; }
+#l-form .rollen-wahl { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin-bottom: .75rem; }
+
+/* ---- Admin: Übersicht und Protokoll */
+.kennzahlen-5 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
+a.kennzahl-link { color: inherit; text-decoration: none; transition: box-shadow .15s, transform .15s; }
+a.kennzahl-link:hover { box-shadow: 0 4px 18px rgb(0 0 0 / 10%); transform: translateY(-1px); }
+.kennzahl-achtung { box-shadow: inset 0 0 0 2px var(--warnung-hell), var(--schatten); }
+.kennzahl-achtung strong { color: var(--warnung); }
+.kennzahl-fehler { box-shadow: inset 0 0 0 2px var(--gefahr-hell), var(--schatten); }
+.kennzahl-fehler strong { color: var(--gefahr); }
+.aktivitaet { list-style: none; margin: 0; padding: 0; }
+.aktivitaet li { display: flex; gap: .6rem; align-items: flex-start; padding: .5rem 0; border-bottom: 1px solid var(--rand); }
+.aktivitaet li:last-child { border-bottom: 0; }
+.aktivitaet-text { overflow-wrap: anywhere; }
+.punkt { flex: none; width: .6rem; height: .6rem; border-radius: 50%; margin-top: .45rem; background: var(--marke); }
+.punkt-warnung { background: #d99a00; }
+.punkt-fehler { background: var(--gefahr); }
+.stufe { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 700; }
+.stufe-info { background: var(--marke-hell); color: var(--marke-dunkel); }
+.stufe-warnung { background: var(--warnung-hell); color: var(--warnung); }
+.stufe-fehler { background: var(--gefahr-hell); color: var(--gefahr); }
+.protokoll-filter { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin-bottom: .25rem; }
+.protokoll-filter select { width: auto; }
+.protokoll-filter input[type=search] { flex: 1 1 14rem; width: auto; }
+.chips { display: flex; flex-wrap: wrap; gap: .35rem; }
+.chip { font: inherit; font-size: .85rem; font-weight: 600; padding: .35rem .75rem; border-radius: 999px; border: 1px solid var(--rand); background: var(--flaeche); cursor: pointer; }
+.chip span { color: var(--text-leise); font-weight: 500; margin-left: .2rem; }
+.chip[aria-pressed="true"] { background: var(--marke); border-color: var(--marke); color: #fff; }
+.chip[aria-pressed="true"] span { color: rgb(255 255 255 / 85%); }
+.chip-warnung[aria-pressed="true"] { background: var(--warnung); border-color: var(--warnung); }
+.chip-fehler[aria-pressed="true"] { background: var(--gefahr); border-color: var(--gefahr); }
+.protokoll-tabelle tr.zeile-fehler td { background: #fff7f6; }
+.nowrap { white-space: nowrap; }
+.umbruch { overflow-wrap: anywhere; }
+a.kennzahl-link.kennzahl-marke { color: #fff; }

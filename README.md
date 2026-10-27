@@ -66,7 +66,9 @@ Lokal starten: `npm run dev` → http://localhost:5173
    **Artikel übernehmen:** Unter „Mein Monat“ stehen **alle eigenen Artikel** von
    campus-a-college.at und campus-a.at (je nach hinterlegten Profil-Links) mit Medium, Datum, Ressort
    und Kategorie (z. B. „Meinung“). „Übernehmen“ füllt Medium, Titel und Veröffentlichungsdatum aus
-   und verknüpft die Leistung mit dem Artikel.
+   und verknüpft die Leistung mit dem Artikel. Die Liste lässt sich **nach Titel durchsuchen**, nach
+   **Medium filtern** (campus a / campus a college, wenn beide Profile verknüpft sind) und auf „nur noch
+   nicht erfasste“ einschränken.
    Jeder Artikel lässt sich nur einmal abrechnen, schon erfasste sind markiert. Die Redaktion sieht in
    der Prämienabrechnung bei jeder Leistung den Link zum Artikel.
 3. **Monatsabrechnung:** Einmal im Monat die gesammelten Leistungen auswählen und als
@@ -127,6 +129,25 @@ Lokal starten: `npm run dev` → http://localhost:5173
    (mit Löschprotokoll), Rechnungsempfänger, **Prämiensätze** und Datenschutzkontakt einstellen,
    Sicherung herunterladen/einspielen, Demo zurücksetzen. Weicht ein eingereichter Betrag vom
    Standardsatz ab, sieht die Redaktion in der Detailansicht einen Hinweis.
+   **Übersicht:** Die Admin-Startseite zeigt, was zu tun ist (zu prüfen, offen zur Zahlung, Anfragen,
+   Konten, Fehler und Warnungen der letzten 7 Tage, jeweils anklickbar), die letzte Aktivität und den
+   Zustand des Systems (Datenbank, PHP, E-Mail-Versand mit Warteschlange, letzte Sicherung).
+   **Protokoll:** Im Hintergrund wird mitgeschrieben, was passiert: Anmeldungen (auch fehlgeschlagene und
+   Sperren), Konten, Abrechnungen, Zahlungen, Einstellungen, E-Mails (nicht verschickte als Warnung bzw.
+   Fehler), Sicherungen und interne Fehler. Filter nach Info/Warnung/Fehler, Bereich und Suche, ältere
+   Einträge nachladen, CSV-Export. Aufbewahrt 1 Jahr, IP-Adressen nur gekürzt.
+   **Sicherungen:** Unter Admin → Daten stehen alle Sicherungen des Servers (täglich automatisch, 30 Tage
+   aufgehoben) zum Herunterladen, dazu „Jetzt sichern“. Zusätzlich empfiehlt sich das Backup von World4You.
+   **Zugangs-Mail mit Anmeldelink:** Neue Konten (und „Passwort zurücksetzen“) bekommen automatisch eine
+   E-Mail mit einem Knopf, der **direkt anmeldet** (gilt einmal, 7 Tage); danach legt man das eigene
+   Passwort fest. Das Startpasswort steht als Rückfall in der Mail. Ist der E-Mail-Versand eingerichtet,
+   zeigt der Admin nur noch eine Bestätigung, ohne eigenen Mail-Knopf.
+   **Einladen (Registrierungslinks):** Unter Admin → Einladen einen Link erstellen: gültig 1 bis 30 Tage,
+   für eine Person, bis zu 5 oder 20 Personen oder beliebig oft, mit festen Rollen (nie Admin). Wer den
+   Link öffnet, legt sein Konto selbst an (Name, E-Mail, Passwort, Bestätigung der Datenschutzerklärung),
+   ohne Freischalten. Optional geht die Einladung gleich per E-Mail hinaus. Gespeichert wird nur ein Hash,
+   der Link ist nur beim Erstellen sichtbar; Links lassen sich zurückziehen, die Admins bekommen bei
+   jeder Registrierung eine Nachricht (Benachrichtigung „Zugangsanfragen“).
 
 8. **Externe Honorarnote (Generator):** Für bezahlte Aufträge von **anderen Firmen** (dort ist es weiterhin ein Honorar) erstellt man unter
    „Externe Honorarnote“ eine allgemeine Honorarnote: Empfänger und Leistungen eingeben, die
