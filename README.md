@@ -197,9 +197,30 @@ HTTPS, Schreibrechte) und fragt dann nach:
 - den **Zugangsdaten des E-Mail-Postfachs** (Adresse und Passwort; Server `smtp.world4you.com`,
   Port 587, STARTTLS sind schon eingetragen) und dem **Postfach der Redaktion**.
 
+Welche Adressen? Zwei Postfächer reichen: **`honorare@deine-domain.at`** als Absender (die App
+verschickt damit) und **`redaktion@deine-domain.at`** als Postfach der Redaktion (hier kommen neue
+Honorarnoten an).
+
 Zum Schluss geht eine **Test-E-Mail** hinaus. Die Einrichtung funktioniert nur, solange es noch kein
 Konto gibt – deshalb direkt nach dem Hochladen erledigen. Danach unter `https://deine-domain.at`
 mit dem Startpasswort anmelden und ein eigenes Passwort festlegen.
+
+### Impressum, Datenschutz und Hinweis zum Betreiber
+
+Unter **Admin → Einstellungen → Betreiber der App** Name, Anschrift und E-Mail der Person eintragen, die
+die App betreibt. Daraus entstehen automatisch das **Impressum** (`#/impressum`) und die
+**Datenschutzerklärung** (`#/datenschutz`). Beide sind ohne Anmeldung erreichbar und unten auf jeder Seite
+verlinkt. Eigene Ergänzungen sind möglich. Die Texte sind eine Vorlage und **keine Rechtsberatung** –
+am besten einmal prüfen lassen.
+
+Ist der Haken **„Der Betreiber ist nicht bei der campus a Medien GmbH angestellt“** gesetzt (Standard),
+sehen alle einen **Hinweis**: Wer die App betreibt, ist nicht bei campus a angestellt, hat aber als
+Admin Zugriff auf alle Daten (auch Adressen und IBANs), und die Daten liegen bei World4You.
+- auf der Anmeldeseite und in der Datenschutzerklärung,
+- beim Konto einrichten mit Pflicht-Häkchen „zur Kenntnis genommen“,
+- bei allen anderen als Banner, bis sie „Zur Kenntnis genommen“ klicken (Zeitpunkt wird gespeichert).
+
+Ändern sich Name, Anschrift, Hosting oder der Haken, müssen alle den Hinweis neu bestätigen.
 
 ### Automatische E-Mails
 

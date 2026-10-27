@@ -41,6 +41,8 @@ export const passwortAendern = f('passwortAendern');
 // Profil
 export const profilSpeichern = f('profilSpeichern');
 export const einstellungen = f('einstellungen');
+export const rechtliches = f('rechtliches');
+export const hinweisBestaetigen = f('hinweisBestaetigen');
 /** Konto fertig eingerichtet? (Autor:innen: Adresse, Bankverbindung, mindestens ein Profil-Link) */
 export const profilVollstaendig = kontoFertig;
 

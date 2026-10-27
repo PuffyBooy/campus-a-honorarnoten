@@ -5,6 +5,7 @@ import {
 import { downloadText } from '../lib/csv.js';
 import { MEDIEN, MEDIUM_KEYS } from '../lib/campus.js';
 import { fehlerText, kopierenMitFeedback, meldung, mitSperre, statusBadge } from '../lib/ui.js';
+import { STANDARD_HOSTER, betreiberOder } from '../lib/rechtliches.js';
 
 const REITER = {
   anfragen: 'Anfragen', benutzer: 'Benutzer', noten: 'Honorarnoten', einstellungen: 'Einstellungen', mail: 'E-Mail', daten: 'Daten',
@@ -245,6 +246,7 @@ async function noten(inhalt, { store, neuLaden }) {
 
 async function einstellungen(inhalt, { store, neuLaden }) {
   const e = await store.einstellungen();
+  const b = betreiberOder(e.betreiber);
   inhalt.innerHTML = `
     <form class="karte" id="e-form" novalidate>
       <h2>Rechnungsempfänger</h2>
@@ -274,6 +276,29 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <h2 class="abstand-oben">Datenschutz</h2>
       <label for="e-kontakt">Kontakt für Datenschutzanfragen (E-Mail)</label>
       <input id="e-kontakt" name="kontakt" type="email" value="${esc(e.datenschutzKontakt)}">
+      <h2 class="abstand-oben" id="betreiber">Betreiber der App (Impressum und Datenschutz)</h2>
+      <p class="tipp">Daraus entstehen <a href="#/impressum" target="_blank">Impressum</a> und
+        <a href="#/datenschutz" target="_blank">Datenschutzerklärung</a>. Die Texte sind eine Vorlage, keine
+        Rechtsberatung – am besten einmal prüfen lassen.</p>
+      <label for="e-b-name">Name (Person oder Verein, der die App betreibt)</label>
+      <input id="e-b-name" name="b_name" maxlength="150" value="${esc(b.name)}">
+      <label for="e-b-anschrift">Anschrift</label>
+      <textarea id="e-b-anschrift" name="b_anschrift" rows="2" maxlength="300">${esc(b.anschrift)}</textarea>
+      <div class="zeile">
+        <div class="feld"><label for="e-b-email">E-Mail</label><input id="e-b-email" name="b_email" type="email" value="${esc(b.email)}"></div>
+        <div class="feld"><label for="e-b-telefon">Telefon <span class="optional">(optional)</span></label>
+          <input id="e-b-telefon" name="b_telefon" maxlength="50" value="${esc(b.telefon)}"></div>
+      </div>
+      <label class="check bestaetigen"><input type="checkbox" name="b_extern" ${b.extern ? 'checked' : ''}>
+        Der Betreiber ist <strong>nicht</strong> bei der ${esc(e.empfaenger.name || 'campus a Medien GmbH')} angestellt – alle
+        bekommen einen Hinweis, den sie zur Kenntnis nehmen müssen.</label>
+      <label for="e-b-hoster">Hosting</label>
+      <input id="e-b-hoster" name="b_hoster" maxlength="300" value="${esc(b.hoster)}" placeholder="${esc(STANDARD_HOSTER)}">
+      <label for="e-b-zi">Zusätzlicher Text fürs Impressum <span class="optional">(optional)</span></label>
+      <textarea id="e-b-zi" name="b_zusatz_impressum" rows="2" maxlength="5000">${esc(b.zusatz_impressum)}</textarea>
+      <label for="e-b-zd">Zusätzlicher Text für die Datenschutzerklärung <span class="optional">(optional)</span></label>
+      <textarea id="e-b-zd" name="b_zusatz_datenschutz" rows="2" maxlength="5000">${esc(b.zusatz_datenschutz)}</textarea>
+      <p class="tipp">Ändern sich Name, Anschrift, Hosting oder „nicht angestellt“, müssen alle den Hinweis neu bestätigen.</p>
       <p class="feldfehler" role="alert"></p>
       <button type="submit" class="btn btn-primaer">Speichern</button>
     </form>`;
@@ -306,6 +331,11 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       empfaenger: { name: form.name.value, strasse: form.strasse.value, plz_ort: form.plz_ort.value, uid: form.uid.value },
       datenschutzKontakt: form.kontakt.value,
       honorarsaetze,
+      betreiber: {
+        name: form.b_name.value, anschrift: form.b_anschrift.value, email: form.b_email.value, telefon: form.b_telefon.value,
+        extern: form.b_extern.checked, hoster: form.b_hoster.value,
+        zusatz_impressum: form.b_zusatz_impressum.value, zusatz_datenschutz: form.b_zusatz_datenschutz.value,
+      },
     }), 'Einstellungen gespeichert.', neuLaden);
   });
 }

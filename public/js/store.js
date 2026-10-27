@@ -15,6 +15,7 @@ import {
 } from './lib/campus.js';
 import { KONTO_FEHLT, darfRedigieren, kontoFertig, rollenNormalisieren } from './lib/konto.js';
 import { DEMO_PASSWORT } from './demo-konten.js';
+import { BETREIBER_STANDARD, betreiberOder } from './lib/rechtliches.js';
 
 const SPEICHER_KEY = 'campus-a-honorare:v1';
 const SITZUNG_KEY = 'campus-a-honorare:sitzung';
@@ -53,6 +54,7 @@ function leereDb() {
       empfaenger: { ...STANDARD_EMPFAENGER },
       datenschutzKontakt: '',
       honorarsaetze: saetzeNormalisieren(STANDARD_SAETZE),
+      betreiber: { ...BETREIBER_STANDARD },
     },
   };
 }
@@ -804,10 +806,25 @@ export function einstellungen() {
   const e = { ...leereDb().einstellungen, ...kopie(db.einstellungen) };
   delete e.auftraggeber; // früheres SEPA-Konto, nicht mehr verwendet
   e.honorarsaetze = saetzeNormalisieren(e.honorarsaetze); // ältere Sätze ohne Medium gelten für beide
+  e.betreiber = betreiberOder(e.betreiber);
   return e;
 }
 
-export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorarsaetze }) {
+/** Angaben für Impressum, Datenschutzerklärung und den Hinweis zum Betreiber – auch ohne Anmeldung */
+export function rechtliches() {
+  const e = { ...leereDb().einstellungen, ...kopie(db.einstellungen) };
+  return { betreiber: betreiberOder(e.betreiber), empfaenger: e.empfaenger, datenschutzKontakt: e.datenschutzKontakt };
+}
+
+/** Hinweis zum Betreiber zur Kenntnis genommen */
+export function hinweisBestaetigen() {
+  const n = ich();
+  n.hinweis_bestaetigt_am = new Date().toISOString();
+  speichern();
+  return nutzerSicht(n);
+}
+
+export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorarsaetze, betreiber }) {
   brauche('admin');
   pruefe(!leer(empfaenger?.name), 'Bitte den Namen des Rechnungsempfängers angeben.');
   let saetze;
@@ -824,6 +841,7 @@ export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorar
     },
     datenschutzKontakt: trim(datenschutzKontakt),
     honorarsaetze: saetze,
+    betreiber: betreiber ? betreiberPruefen(betreiberOder(db.einstellungen.betreiber), betreiber) : betreiberOder(db.einstellungen.betreiber),
   };
   speichern();
 }
@@ -865,6 +883,19 @@ export function mailEinstellungenSpeichern(d = {}) {
 export function testMail() {
   brauche('admin');
   throw new Fehler('In der Demo werden keine E-Mails verschickt – das geht nur auf dem eigenen Server.');
+}
+
+/** wie betreiber_pruefen() auf dem Server: neuer Stand, wenn sich Wichtiges ändert */
+function betreiberPruefen(alt, neu) {
+  const text = (x, max) => String(x ?? '').replace(/\r/g, '').trim().slice(0, max);
+  const b = {
+    name: trim(neu.name).slice(0, 150), anschrift: text(neu.anschrift, 300), email: trim(neu.email).toLowerCase(),
+    telefon: trim(neu.telefon).slice(0, 50), extern: neu.extern !== false, hoster: trim(neu.hoster) || BETREIBER_STANDARD.hoster,
+    zusatz_impressum: text(neu.zusatz_impressum, 5000), zusatz_datenschutz: text(neu.zusatz_datenschutz, 5000),
+  };
+  pruefe(!b.email || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(b.email), 'Bitte eine gültige E-Mail-Adresse des Betreibers angeben.');
+  const geaendert = ['name', 'anschrift', 'extern', 'hoster'].some((k) => b[k] !== alt[k]);
+  return { ...b, stand: geaendert || !alt.stand ? new Date().toISOString() : alt.stand };
 }
 
 /** Sicherung aller Daten als JSON (enthält IBANs – vertraulich behandeln!) */

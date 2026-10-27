@@ -208,6 +208,10 @@ const MIGRATIONEN = [
     );
     create index mails_offen on mails(gesendet_am);
     SQL,
+    // Version 7: wann der Hinweis zum Betreiber (nicht bei campus a angestellt) zur Kenntnis genommen wurde
+    <<<'SQL'
+    alter table nutzer add column hinweis_bestaetigt_am text;
+    SQL,
 ];
 
 function oeffne_datenbank(string $pfad): PDO

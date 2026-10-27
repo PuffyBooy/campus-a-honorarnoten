@@ -52,7 +52,7 @@ export async function render(el, { store, nutzer, navigate, neuLaden }) {
           })).join('')}
         </fieldset>
         <aside class="datenschutz" aria-label="Datenschutzhinweis">
-          <strong>Datenschutz:</strong> Adresse und Bankverbindung sieht nur die Buchhaltung, sie dienen nur der Auszahlung.
+          <strong>Datenschutz:</strong> Adresse und Bankverbindung sieht nur die Buchhaltung, sie dienen nur der Auszahlung. Mehr in der <a href="#/datenschutz">Datenschutzerklärung</a>.
           ${kontakt ? `Fragen, Auskunft oder Löschung: <a href="mailto:${esc(kontakt)}">${esc(kontakt)}</a>.` : ''}
         </aside>` : ''}
         <p class="feldfehler" id="pe-formular" role="alert"></p>

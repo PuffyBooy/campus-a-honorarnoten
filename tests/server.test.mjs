@@ -514,6 +514,37 @@ test('Admin: Note löschen mit Protokoll, Export ohne Passwörter', async () => 
   assert.ok(!exp.includes('smtp-geheim'), 'kein Passwort des Mail-Postfachs');
 });
 
+test('Impressum und Datenschutz: Betreiber, öffentlich lesbar, Hinweis bestätigen', async () => {
+  const gast = client();
+  const leer = await gast.ok('rechtliches');
+  assert.equal(leer.betreiber.name, '', 'ohne Anmeldung lesbar, Standard ohne Betreiber');
+  assert.match(leer.betreiber.hoster, /World4You/);
+  const basisDaten = { empfaenger: { name: 'campus a Medien GmbH' }, datenschutzKontakt: 'datenschutz@example.org' };
+  const betreiber = { name: 'Max Muster', anschrift: 'Weg 1\n1010 Wien', email: 'max@example.org', extern: true };
+  assert.match((await k.admin.aufruf('einstellungenSpeichern', { ...basisDaten, betreiber: { ...betreiber, email: 'x' } })).fehler, /Betreibers/);
+  assert.equal((await k.rita.aufruf('einstellungenSpeichern', { ...basisDaten, betreiber })).status, 403);
+  await k.admin.ok('einstellungenSpeichern', { ...basisDaten, betreiber });
+  const r = await gast.ok('rechtliches');
+  assert.equal(r.betreiber.name, 'Max Muster');
+  assert.equal(r.betreiber.anschrift, 'Weg 1\n1010 Wien');
+  assert.equal(r.datenschutzKontakt, 'datenschutz@example.org');
+  assert.ok(r.betreiber.stand, 'Stand gesetzt');
+  assert.equal(r.empfaenger.name, 'campus a Medien GmbH');
+  assert.equal(r.empfaenger.iban, undefined);
+
+  // Hinweis zur Kenntnis nehmen; nur bei wichtigen Änderungen gilt ein neuer Stand
+  assert.equal((await gast.aufruf('hinweisBestaetigen')).status, 401);
+  const anna = await k.anna.ok('hinweisBestaetigen');
+  assert.ok(anna.hinweis_bestaetigt_am >= r.betreiber.stand);
+  await k.admin.ok('einstellungenSpeichern', { ...basisDaten, betreiber: { ...betreiber, telefon: '0660 123' } });
+  assert.equal((await gast.ok('rechtliches')).betreiber.stand, r.betreiber.stand, 'Telefon ändert den Stand nicht');
+  await new Promise((ok) => setTimeout(ok, 5));
+  await k.admin.ok('einstellungenSpeichern', { ...basisDaten, betreiber: { ...betreiber, anschrift: 'Neu 2, 1020 Wien' } });
+  assert.ok((await gast.ok('rechtliches')).betreiber.stand > anna.hinweis_bestaetigt_am, 'neue Anschrift: neu bestätigen');
+  // auch für Angemeldete über die Einstellungen
+  assert.equal((await k.anna.ok('einstellungen')).betreiber.name, 'Max Muster');
+});
+
 test('Schutz: CSRF-Header, fremde Origin, unbekannte Funktionen', async () => {
   const ohne = await fetch(`${basis}/api/aktuellerNutzer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(ohne.status, 403);

@@ -3,8 +3,9 @@
 import { DEMO_KONTEN, DEMO_PASSWORT } from '../demo-konten.js';
 import { esc } from '../lib/format.js';
 import { fehlerText, mitSperre } from '../lib/ui.js';
+import { hinweisHtml } from '../lib/rechtliches.js';
 
-export function render(el, { store, istDemo, nachAnmeldung }) {
+export function render(el, { store, istDemo, recht, nachAnmeldung }) {
   el.innerHTML = `
     <div class="login-raster">
       <section class="karte">
@@ -37,8 +38,10 @@ export function render(el, { store, istDemo, nachAnmeldung }) {
                     placeholder="z. B. Schule, Klasse oder wofür du schreibst"></textarea>
           <p class="feldfehler" role="alert"></p>
           <button class="btn btn-primaer btn-breit" type="submit">Zugang anfragen</button>
-          <p class="tipp">Die Redaktion schickt dir nach der Freischaltung ein Startpasswort.</p>
+          <p class="tipp">Die Redaktion schickt dir nach der Freischaltung ein Startpasswort.
+            Mit der Anfrage gelten die <a href="#/datenschutz">Datenschutzhinweise</a>.</p>
         </form>
+        ${recht && hinweisHtml(recht) ? `<aside class="hinweis-betreiber">${hinweisHtml(recht)}</aside>` : ''}
       </section>
 
       ${istDemo ? `<section class="karte demo">

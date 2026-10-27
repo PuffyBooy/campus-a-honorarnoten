@@ -142,6 +142,8 @@ $wert = fn ($k, $standard = '') => h($_POST[$k] ?? $standard);
         <?php else: ?>
           <div class="hinweisbox">E-Mails sind noch ausgeschaltet. Einrichten unter <strong>Admin → E-Mail</strong>.</div>
         <?php endif ?>
+        <p class="tipp">Danach unter <strong>Admin → Einstellungen → Betreiber der App</strong> Name und Anschrift eintragen –
+          daraus entstehen Impressum und Datenschutzerklärung.</p>
         <p><a class="btn btn-primaer" href="./">Zur Anmeldung</a></p>
       </section>
     <?php elseif ($anzahl > 0): ?>

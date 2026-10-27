@@ -9,6 +9,12 @@ const STANDARD_EMPFAENGER = [
     'plz_ort' => '1070 Wien',
     'uid' => 'ATU81242718',
 ];
+const STANDARD_HOSTER = 'World4You Internet Services GmbH, Wolfgang-Pauli-Straße 2, BT3, 4020 Linz, Österreich';
+// Wer die App betreibt (Impressum, Datenschutz, Hinweis „nicht bei campus a angestellt“) – wie public/js/lib/rechtliches.js
+const BETREIBER_STANDARD = [
+    'name' => '', 'anschrift' => '', 'email' => '', 'telefon' => '', 'extern' => true, 'hoster' => STANDARD_HOSTER,
+    'zusatz_impressum' => '', 'zusatz_datenschutz' => '', 'stand' => '',
+];
 const ARTIKEL_DOPPELT = 'Dieser Artikel ist schon als Leistung gespeichert oder abgerechnet.';
 
 /** Kontext einer Anfrage */
@@ -54,6 +60,7 @@ function nutzer_aus_zeile(?array $z): ?array
         ],
         'erstellt_am' => $z['erstellt_am'],
         'letzter_login' => $z['letzter_login'],
+        'hinweis_bestaetigt_am' => $z['hinweis_bestaetigt_am'] ?? null,
     ];
 }
 
@@ -86,13 +93,14 @@ function brauche(Ctx $ctx, string $rolle): array
 
 function einstellungen_laden(PDO $db): array
 {
-    $e = ['empfaenger' => STANDARD_EMPFAENGER, 'datenschutzKontakt' => '', 'honorarsaetze' => standard_saetze()];
+    $e = ['empfaenger' => STANDARD_EMPFAENGER, 'datenschutzKontakt' => '', 'honorarsaetze' => standard_saetze(), 'betreiber' => BETREIBER_STANDARD];
     foreach (zeilen($db, 'select * from einstellungen') as $z) {
         // „auftraggeber“: früheres SEPA-Konto, „mail“: eigene Einstellungen (mit Passwort, nie an den Browser)
         if (in_array($z['schluessel'], ['auftraggeber', 'mail'], true)) continue;
         $e[$z['schluessel']] = json_decode($z['wert'], true);
     }
     $e['honorarsaetze'] = saetze_normalisieren($e['honorarsaetze']); // ältere Sätze ohne Medium gelten für beide
+    $e['betreiber'] = array_merge(BETREIBER_STANDARD, array_intersect_key(is_array($e['betreiber']) ? $e['betreiber'] : [], BETREIBER_STANDARD));
     return $e;
 }
 
@@ -189,11 +197,11 @@ final class Honorare
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'nutzerLoeschen', 'alleNotenAdmin', 'noteLoeschen',
         'loeschprotokoll', 'einstellungenSpeichern', 'statistik', 'exportieren',
-        'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail',
+        'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail', 'rechtliches', 'hinweisBestaetigen',
     ];
 
-    /** ohne Anmeldung erlaubt */
-    public const OEFFENTLICH = ['aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen'];
+    /** ohne Anmeldung erlaubt (Impressum und Datenschutz müssen für alle lesbar sein) */
+    public const OEFFENTLICH = ['aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'rechtliches'];
 
     public function __construct(private Ctx $ctx)
     {
@@ -308,6 +316,22 @@ final class Honorare
             bic_normalisieren($d['bic'] ?? ''), $links['campus_profil'], $links['campus_a_profil'], $n['id'],
         ]);
         return nutzer_laden($db, $n['id']);
+    }
+
+    /** Angaben für Impressum, Datenschutzerklärung und den Hinweis zum Betreiber – auch ohne Anmeldung */
+    public function rechtliches(): array
+    {
+        $e = einstellungen_laden($this->db());
+        return ['betreiber' => $e['betreiber'], 'empfaenger' => $e['empfaenger'], 'datenschutzKontakt' => $e['datenschutzKontakt']];
+    }
+
+    /** Hinweis zum Betreiber zur Kenntnis genommen (auch beim ersten Anmelden mit dem Startpasswort) */
+    public function hinweisBestaetigen(): array
+    {
+        $this->ctx->erlaubtMitStartpasswort = true;
+        $n = ich($this->ctx);
+        q($this->db(), 'update nutzer set hinweis_bestaetigt_am = ? where id = ?', [jetzt(), $n['id']]);
+        return nutzer_laden($this->db(), $n['id']);
     }
 
     public function einstellungen(): array
@@ -795,8 +819,10 @@ final class Honorare
         $kontakt = tr($d['datenschutzKontakt'] ?? '');
         pruefe($kontakt === '' || ist_email($kontakt), 'Bitte eine gültige E-Mail-Adresse für Datenschutzanfragen angeben.');
         $saetze = saetze_normalisieren($d['honorarsaetze'] ?? einstellungen_laden($db)['honorarsaetze']);
+        $betreiber = betreiber_pruefen(einstellungen_laden($db)['betreiber'], $d['betreiber'] ?? null);
         $speichere = $db->prepare('insert into einstellungen (schluessel, wert) values (?, ?) on conflict(schluessel) do update set wert = excluded.wert');
-        transaktion($db, function () use ($speichere, $e, $kontakt, $saetze) {
+        transaktion($db, function () use ($speichere, $e, $kontakt, $saetze, $betreiber) {
+            $speichere->execute(['betreiber', json_text($betreiber)]);
             $speichere->execute(['empfaenger', json_text([
                 'name' => kuerze(tr($e['name']), 150), 'strasse' => kuerze(tr($e['strasse'] ?? ''), 150),
                 'plz_ort' => kuerze(tr($e['plz_ort'] ?? ''), 100), 'uid' => kuerze(tr($e['uid'] ?? ''), 30),
@@ -885,6 +911,30 @@ final class Honorare
 }
 
 // ------------------------------------------------------------------ interne Helfer
+
+/**
+ * Angaben zum Betreiber prüfen. Ändern sich Name, Anschrift, Hoster oder „nicht angestellt“, gilt ein neuer
+ * Stand – dann müssen alle den Hinweis noch einmal zur Kenntnis nehmen.
+ */
+function betreiber_pruefen(array $alt, mixed $neu): array
+{
+    if (!is_array($neu)) return $alt;
+    $b = [
+        'name' => kuerze(tr($neu['name'] ?? ''), 150),
+        'anschrift' => kuerze(trim(str_replace("\r", '', s($neu['anschrift'] ?? ''))), 300),
+        'email' => strtolower(tr($neu['email'] ?? '')),
+        'telefon' => kuerze(tr($neu['telefon'] ?? ''), 50),
+        'extern' => (bool) ($neu['extern'] ?? true),
+        'hoster' => kuerze(tr($neu['hoster'] ?? '') ?: STANDARD_HOSTER, 300),
+        'zusatz_impressum' => kuerze(trim(str_replace("\r", '', s($neu['zusatz_impressum'] ?? ''))), 5000),
+        'zusatz_datenschutz' => kuerze(trim(str_replace("\r", '', s($neu['zusatz_datenschutz'] ?? ''))), 5000),
+    ];
+    pruefe($b['email'] === '' || ist_email($b['email']), 'Bitte eine gültige E-Mail-Adresse des Betreibers angeben.');
+    $wichtig = ['name', 'anschrift', 'extern', 'hoster'];
+    $geaendert = array_filter($wichtig, fn ($k) => $b[$k] !== $alt[$k]);
+    $b['stand'] = $geaendert || $alt['stand'] === '' ? jetzt() : $alt['stand'];
+    return $b;
+}
 
 /** Startpasswort an das neue Konto schicken (wenn eingeschaltet); die Antwort sagt, ob eine Mail unterwegs ist */
 function zugang_melden(PDO $db, array $z, bool $neu = true): array
