@@ -16,7 +16,7 @@ header('Cache-Control: no-store');
 
 $pruefungen = [
     ['PHP 8.1 oder neuer', version_compare(PHP_VERSION, '8.1.0', '>='), 'Im World4You-Kundenbereich unter „Webspace → Einstellungen“ eine aktuelle PHP-Version wählen (gerade: ' . PHP_VERSION . ').'],
-    ['SQLite (pdo_sqlite)', extension_loaded('pdo_sqlite'), 'Die PHP-Erweiterung pdo_sqlite fehlt – bitte beim World4You-Support nachfragen.'],
+    ['Datenbank (MySQL oder SQLite)', extension_loaded('pdo_mysql') || extension_loaded('pdo_sqlite'), 'Weder pdo_mysql noch pdo_sqlite ist verfügbar – bitte beim World4You-Support nachfragen.'],
     ['mbstring', extension_loaded('mbstring'), 'Die PHP-Erweiterung mbstring fehlt.'],
     ['cURL (für Artikel von campus-a-college.at)', extension_loaded('curl'), 'Die PHP-Erweiterung curl fehlt – Artikel können dann nicht geladen werden.'],
     ['OpenSSL (für verschlüsselten E-Mail-Versand)', extension_loaded('openssl'), 'Die PHP-Erweiterung openssl fehlt.'],
@@ -27,7 +27,7 @@ $pruefungen = [
 
 function ordner_beschreibbar(): bool
 {
-    $ordner = dirname(konfiguration()['datenbank']);
+    $ordner = daten_ordner();
     if (!is_dir($ordner)) @mkdir($ordner, 0755, true);
     return is_dir($ordner) && is_writable($ordner);
 }
@@ -42,20 +42,51 @@ $db = null;
 $anzahl = null;
 $fehler = '';
 $ergebnis = null;
+$istPost = ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST';
+$f = fn ($k) => tr($_POST[$k] ?? '');
+$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
+$herkunftOk = $origin === '' || parse_url($origin, PHP_URL_HOST) === parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_HOST);
+// MySQL, wenn so eingerichtet oder wenn SQLite fehlt (z. B. bei World4You)
+$mitMysql = is_array(konfiguration()['datenbank']) || !extension_loaded('pdo_sqlite');
+$mysqlFormular = false;
 if ($grundlagenOk) {
-    try {
-        $db = datenbank();
-        $anzahl = (int) wert($db, 'select count(*) from nutzer');
-    } catch (Throwable $e) {
-        $fehler = 'Die Datenbank konnte nicht angelegt werden: ' . $e->getMessage();
+    if ($mitMysql && !is_array(konfiguration()['datenbank'])) {
+        $mysqlFormular = true;
+    } else {
+        try {
+            $db = datenbank();
+            $anzahl = (int) wert($db, 'select count(*) from nutzer');
+        } catch (Throwable $e) {
+            $fehler = ($mitMysql ? 'Keine Verbindung zur MySQL-Datenbank: ' : 'Die Datenbank konnte nicht angelegt werden: ') . $e->getMessage();
+            $mysqlFormular = $mitMysql;
+        }
     }
 }
 
-if ($db && $anzahl === 0 && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
-    $origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-    $f = fn ($k) => tr($_POST[$k] ?? '');
+// MySQL-Zugangsdaten prüfen und speichern (nur solange keine funktionierende Verbindung besteht)
+if ($mysqlFormular && $istPost && $herkunftOk) {
+    $mysql = [
+        'typ' => 'mysql', 'host' => $f('db_host') ?: 'localhost', 'port' => (int) ($f('db_port') ?: 3306),
+        'name' => $f('db_name'), 'benutzer' => $f('db_benutzer'), 'passwort' => (string) ($_POST['db_passwort'] ?? ''),
+    ];
     try {
-        pruefe($origin === '' || parse_url($origin, PHP_URL_HOST) === parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_HOST), 'Anfrage abgelehnt.');
+        pruefe($mysql['name'] !== '' && $mysql['benutzer'] !== '', 'Bitte Name der Datenbank und Benutzer angeben.');
+        $versuch = oeffne_mysql($mysql); // legt auch die Tabellen an
+        $anzahl = (int) wert($versuch, 'select count(*) from nutzer');
+        konfig_speichern(['datenbank' => $mysql]);
+        $db = datenbank(true);
+        $mysqlFormular = false;
+        $fehler = '';
+    } catch (Fehler $e) {
+        $fehler = $e->getMessage();
+    } catch (Throwable $e) {
+        $fehler = 'Keine Verbindung zur MySQL-Datenbank: ' . $e->getMessage() . ' – bitte die Zugangsdaten prüfen.';
+    }
+}
+
+if ($db && $anzahl === 0 && $istPost) {
+    try {
+        pruefe($herkunftOk, 'Anfrage abgelehnt.');
         pruefe(!leer($f('vorname')) && !leer($f('nachname')), 'Bitte Vor- und Nachnamen angeben.');
         pruefe(ist_email(strtolower($f('email'))), 'Bitte eine gültige E-Mail-Adresse für das Admin-Konto angeben.');
         $mailAn = $f('absender') !== '' || ($_POST['passwort'] ?? '') !== '';
@@ -151,9 +182,24 @@ $wert = fn ($k, $standard = '') => h($_POST[$k] ?? $standard);
         <p class="tipp">Passwort vergessen? Per SSH: <code>php app/cli.php passwort deine@email.at</code></p>
         <p><a class="btn btn-primaer" href="./">Zur Anmeldung</a></p>
       </section>
-    <?php elseif ($db): ?>
+    <?php elseif ($db || $mysqlFormular): ?>
       <form class="karte" method="post" action="einrichten.php" novalidate>
-        <h2>1. Dein Admin-Konto</h2>
+        <?php if ($mysqlFormular): ?>
+          <h2>Datenbank (MySQL)</h2>
+          <p class="tipp">Die Zugangsdaten stehen im World4You-Kundenbereich unter <strong>Datenbanken</strong> (MySQL).
+            Gibt es noch keine Datenbank, dort zuerst eine anlegen. Die Tabellen legt die App selbst an.</p>
+          <div class="zeile">
+            <div class="feld"><label for="db_host">Server (Host)</label><input id="db_host" name="db_host" value="<?= $wert('db_host', 'localhost') ?>"></div>
+            <div class="feld"><label for="db_port">Port</label><input id="db_port" name="db_port" inputmode="numeric" value="<?= $wert('db_port', '3306') ?>"></div>
+          </div>
+          <label for="db_name">Name der Datenbank</label>
+          <input id="db_name" name="db_name" autocomplete="off" value="<?= $wert('db_name') ?>">
+          <div class="zeile">
+            <div class="feld"><label for="db_benutzer">Benutzer</label><input id="db_benutzer" name="db_benutzer" autocomplete="off" value="<?= $wert('db_benutzer') ?>"></div>
+            <div class="feld"><label for="db_passwort">Passwort</label><input id="db_passwort" name="db_passwort" type="password" autocomplete="new-password"></div>
+          </div>
+        <?php endif ?>
+        <h2<?= $mysqlFormular ? ' class="abstand-oben"' : '' ?>>1. Dein Admin-Konto</h2>
         <div class="zeile">
           <div class="feld"><label for="vorname">Vorname</label><input id="vorname" name="vorname" required value="<?= $wert('vorname') ?>"></div>
           <div class="feld"><label for="nachname">Nachname</label><input id="nachname" name="nachname" required value="<?= $wert('nachname') ?>"></div>

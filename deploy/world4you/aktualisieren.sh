@@ -22,7 +22,7 @@ done
 [ -n "$php" ] || { echo "Kein PHP 8.1 oder neuer gefunden." >&2; exit 1; }
 
 alt="$(cat "$ziel/app/version.txt" 2>/dev/null || echo '–')"
-if [ -f "$ziel/app/daten/honorarnoten.sqlite" ]; then
+if [ -f "$ziel/app/daten/honorarnoten.sqlite" ] || [ -f "$ziel/app/daten/konfig.php" ]; then
   "$php" "$ziel/app/cli.php" backup
 fi
 

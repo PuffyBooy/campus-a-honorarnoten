@@ -11,7 +11,7 @@ Die App läuft in zwei Betriebsarten – derselbe Code, nur die Datenhaltung ist
 | | **Demo** (GitHub Pages) | **Server** (World4You-Webspace) |
 |---|---|---|
 | Wofür | Herzeigen, Ausprobieren | echter Betrieb |
-| Daten | nur im jeweiligen Browser | gemeinsame Datenbank (SQLite) auf dem Webspace |
+| Daten | nur im jeweiligen Browser | gemeinsame Datenbank (MySQL oder SQLite) auf dem Webspace |
 | Rechte | nur im Browser geprüft | auf dem Server geprüft, nicht umgehbar |
 | E-Mails | keine | automatisch (neue Prämienabrechnungen, Bestätigungen, Zugangsdaten …) |
 | Anleitung | [Ausprobieren](#ausprobieren-demo) | [Auf World4You installieren](#auf-world4you-installieren-echter-betrieb) |
@@ -159,8 +159,8 @@ dann weiterhin von Hand eintragen.
 ## Auf World4You installieren (echter Betrieb)
 
 Der Server-Teil ist in **PHP** geschrieben und läuft auf normalem Webspace mit Apache und PHP 8.1+
-– also auch auf dem **Webhosting von World4You**. Er braucht **keinen Datenbankserver** (die
-Datenbank ist eine einzelne SQLite-Datei), keine Zusatzpakete und keinen Cronjob.
+– also auch auf dem **Webhosting von World4You**. Als Datenbank nimmt er **MySQL** (bei World4You
+dabei) oder – wo verfügbar – eine einzelne SQLite-Datei. Keine Zusatzpakete, kein Cronjob.
 
 ### 1. Im World4You-Kundenbereich ([my.world4you.com](https://my.world4you.com))
 
@@ -191,9 +191,12 @@ app/daten/           Datenbank und tägliche Sicherungen (entsteht automatisch)
 
 ### 3. Einrichten
 
-`https://deine-domain.at/einrichten.php` öffnen. Die Seite prüft den Webspace (PHP-Version, SQLite,
+`https://deine-domain.at/einrichten.php` öffnen. Die Seite prüft den Webspace (PHP-Version, Datenbank,
 HTTPS, Schreibrechte) und fragt dann nach:
 
+- den **MySQL-Zugangsdaten** (Server, Name der Datenbank, Benutzer, Passwort) – stehen im
+  World4You-Kundenbereich unter **Datenbanken**; gibt es noch keine, dort zuerst eine anlegen. Die
+  Tabellen legt die App selbst an. (Fehlt nur, wenn der Webspace SQLite kann – dann braucht es nichts.)
 - **deinem Admin-Konto** (Name, E-Mail) – danach wird das **Startpasswort** angezeigt,
 - den **Zugangsdaten des E-Mail-Postfachs** (Adresse und Passwort; Server `smtp.world4you.com`,
   Port 587, STARTTLS sind schon eingetragen) und der **Antwortadresse** (optional).
@@ -277,11 +280,15 @@ Aufruf nach einem Update automatisch angepasst.
 
 ### Backups
 
-- Jeden Tag legt die App beim ersten Aufruf eine Kopie der Datenbank in `app/daten/backups/` an
-  und hebt sie 30 Tage auf. **Ab und zu per FTP auf den eigenen Rechner kopieren!**
+- Jeden Tag legt die App beim ersten Aufruf eine Sicherung in `app/daten/backups/` an und hebt sie
+  30 Tage auf – bei MySQL als `.sql`-Datei, bei SQLite als Kopie der Datenbank-Datei. **Ab und zu per
+  FTP/scp auf den eigenen Rechner kopieren!** World4You sichert MySQL-Datenbanken zusätzlich selbst.
 - Zusätzlich: **Admin → Daten → Datenexport** (JSON, enthält IBANs – vertraulich).
-- Wiederherstellen: `app/daten/honorarnoten.sqlite` per FTP durch eine Sicherung ersetzen
-  (Datei umbenennen auf `honorarnoten.sqlite`).
+- Wiederherstellen (MySQL): im World4You-Kundenbereich **phpMyAdmin** öffnen, die Datenbank wählen,
+  *Importieren* und die `.sql`-Datei hochladen (sie ersetzt alle Tabellen).
+  SQLite: `app/daten/honorarnoten.sqlite` durch eine Sicherung ersetzen.
+- Die MySQL-Zugangsdaten stehen in `app/daten/konfig.php` (per `.htaccess` gesperrt). Ändert sich das
+  Passwort der Datenbank, dort eintragen – oder die Datei löschen und `/einrichten.php` erneut öffnen.
 
 ### Passwort vergessen
 
@@ -361,6 +368,7 @@ npm run dev          # Demo lokal auf Port 5173
 npm run dev:server   # Server-Modus lokal auf Port 3000 (braucht PHP 8.1+)
 npm test             # alle Tests: Hilfsfunktionen, Server (Rechte, Abläufe, Schutz, E-Mails)
 HONORARE_PHP=php8.1 npm test   # dieselben Tests mit einer anderen PHP-Version
+HONORARE_TEST_MYSQL='{"host":"127.0.0.1","benutzer":"…","passwort":"…"}' npm test   # Server-Tests mit MySQL
 npm run paket        # Paket für World4You bauen
 bash scripts/vendor.sh   # JSZip und pdf-lib aktualisieren
 ```

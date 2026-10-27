@@ -218,7 +218,203 @@ const MIGRATIONEN = [
     SQL,
 ];
 
-function oeffne_datenbank(string $pfad): PDO
+// MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
+// kommen als weitere Einträge dazu – in MIGRATIONEN (SQLite) und hier.
+const MYSQL_MIGRATIONEN = [
+    // Version 1 = Stand von SQLite-Version 8
+    <<<'SQL'
+    create table if not exists nutzer (
+      id                    varchar(36) not null primary key,
+      email                 varchar(200) not null unique,
+      vorname               varchar(100) not null,
+      nachname              varchar(100) not null,
+      rollen                varchar(200) not null default '[]',
+      aktiv                 tinyint not null default 1,
+      muss_passwort_aendern tinyint not null default 1,
+      passwort              varchar(255) not null,
+      strasse               varchar(150) not null default '',
+      plz_ort               varchar(100) not null default '',
+      kontoinhaber          varchar(100) not null default '',
+      iban                  varchar(64) not null default '',
+      bic                   varchar(16) not null default '',
+      erstellt_am           varchar(30) not null,
+      letzter_login         varchar(30) null,
+      campus_profil         varchar(64) not null default '',
+      campus_a_profil       varchar(64) not null default '',
+      hinweis_bestaetigt_am varchar(30) null,
+      benachrichtigungen    varchar(1000) not null default '{}'
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists sitzungen (
+      token_hash  char(64) not null primary key,
+      nutzer_id   varchar(36) not null,
+      erstellt_am varchar(30) not null,
+      laeuft_ab   varchar(30) not null,
+      index sitzungen_nutzer (nutzer_id),
+      foreign key (nutzer_id) references nutzer(id) on delete cascade
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists anfragen (
+      id             varchar(36) not null primary key,
+      vorname        varchar(100) not null,
+      nachname       varchar(100) not null,
+      email          varchar(200) not null,
+      nachricht      varchar(1000) not null default '',
+      status         varchar(20) not null default 'offen',
+      am             varchar(30) not null,
+      bearbeitet_am  varchar(30) null,
+      bearbeitet_von varchar(250) null,
+      check (status in ('offen', 'freigeschaltet', 'abgelehnt'))
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists positionen (
+      id                varchar(36) not null primary key,
+      autor_id          varchar(36) not null,
+      kategorie         varchar(20) not null,
+      art               varchar(100) not null,
+      titel             varchar(200) not null,
+      veroeffentlichung varchar(10) not null,
+      ausgabe           varchar(100) not null default '',
+      vereinbart_mit    varchar(100) not null default '',
+      betrag_cent       int not null,
+      notiz             varchar(1000) not null default '',
+      erstellt_am       varchar(30) not null,
+      geaendert_am      varchar(30) null,
+      kolumnenart       varchar(100) not null default '',
+      artikel_url       varchar(320) not null default '',
+      medium            varchar(20) not null default 'college',
+      anzahl            int not null default 0,
+      zurueck_nummer    varchar(255) not null default '',
+      zurueck_grund     varchar(1000) not null default '',
+      index positionen_autor (autor_id),
+      index positionen_artikel (artikel_url),
+      foreign key (autor_id) references nutzer(id) on delete cascade,
+      check (kategorie in ('kolumne', 'ausserordentlich', 'redigieren')),
+      check (betrag_cent > 0)
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists noten (
+      id               varchar(36) not null primary key,
+      nummer           varchar(255) not null unique,
+      jahr             int not null,
+      laufende_nummer  int not null,
+      monat            varchar(7) not null,
+      autor_id         varchar(36) null,
+      status           varchar(20) not null,
+      eingereicht_am   varchar(30) not null,
+      entschieden_am   varchar(30) null,
+      bezahlt_am       varchar(30) null,
+      ablehnungsgrund  varchar(1000) not null default '',
+      zurueckgeholt_am varchar(30) null,
+      autor_json       text not null,
+      zahlung_json     text not null,
+      empfaenger_json  text not null,
+      medium           varchar(20) not null default 'college',
+      index noten_autor (autor_id),
+      index noten_status (status),
+      index noten_medium (medium),
+      foreign key (autor_id) references nutzer(id) on delete set null,
+      check (status in ('eingereicht', 'angenommen', 'abgelehnt', 'bezahlt')),
+      check (status <> 'abgelehnt' or ablehnungsgrund <> ''),
+      check (status <> 'bezahlt' or bezahlt_am is not null)
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists note_positionen (
+      id                      varchar(36) not null,
+      note_id                 varchar(36) not null,
+      reihenfolge             int not null,
+      kategorie               varchar(20) not null,
+      art                     varchar(100) not null,
+      titel                   varchar(200) not null,
+      veroeffentlichung       varchar(10) not null,
+      ausgabe                 varchar(100) not null default '',
+      vereinbart_mit          varchar(100) not null default '',
+      notiz                   varchar(1000) not null default '',
+      betrag_cent             int not null,
+      betrag_eingereicht_cent int not null,
+      betrag_vermerk          varchar(500) not null default '',
+      kolumnenart             varchar(100) not null default '',
+      artikel_url             varchar(320) not null default '',
+      medium                  varchar(20) not null default 'college',
+      anzahl                  int not null default 0,
+      primary key (note_id, id),
+      foreign key (note_id) references noten(id) on delete cascade,
+      check (betrag_cent > 0)
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists kommentare (
+      id             varchar(36) not null primary key,
+      note_id        varchar(36) not null,
+      verfasser_id   varchar(36) null,
+      verfasser_name varchar(250) not null,
+      text           text not null,
+      am             varchar(30) not null,
+      foreign key (note_id) references noten(id) on delete cascade
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists verlauf (
+      id          varchar(36) not null primary key,
+      note_id     varchar(36) not null,
+      akteur_id   varchar(36) null,
+      akteur_name varchar(250) not null,
+      aktion      varchar(50) not null,
+      details     text not null,
+      am          varchar(30) not null,
+      index verlauf_note (note_id),
+      foreign key (note_id) references noten(id) on delete cascade
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists loeschprotokoll (
+      id            varchar(36) not null primary key,
+      nummer        varchar(255) not null,
+      geloescht_von varchar(250) not null,
+      am            varchar(30) not null
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists einstellungen (
+      schluessel varchar(100) not null primary key,
+      wert       mediumtext not null
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists artikel (
+      url       varchar(320) not null primary key,
+      titel     varchar(200) not null,
+      datum     varchar(10) not null,
+      ressort   varchar(100) not null default '',
+      region    varchar(100) not null default '',
+      kategorie varchar(100) not null default '',
+      geholt_am varchar(30) not null
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists versuche (
+      schluessel varchar(255) not null,
+      zeit       bigint not null,
+      index versuche_schluessel (schluessel, zeit)
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists artikel_listen (
+      schluessel varchar(100) not null primary key,
+      zeit       bigint not null,
+      artikel    mediumtext not null
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists mails (
+      id           varchar(36) not null primary key,
+      an           varchar(255) not null,
+      betreff      varchar(500) not null,
+      html         mediumtext not null,
+      text         mediumtext not null,
+      erstellt_am  varchar(30) not null,
+      gesendet_am  varchar(30) null,
+      versuche     int not null default 0,
+      fehler       varchar(1000) not null default '',
+      gesperrt_bis bigint not null default 0,
+      index mails_offen (gesendet_am)
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    SQL,
+];
+
+/** Tabellen in der Reihenfolge, in der sie eingespielt werden können (für die Sicherung) */
+const TABELLEN = ['nutzer', 'sitzungen', 'anfragen', 'positionen', 'noten', 'note_positionen', 'kommentare', 'verlauf',
+    'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails'];
+
+/**
+ * Datenbank öffnen und auf den neuesten Stand bringen.
+ * $ziel: Pfad einer SQLite-Datei – oder ['typ' => 'mysql', 'host', 'port', 'name', 'benutzer', 'passwort'].
+ */
+function oeffne_datenbank(string|array $ziel): PDO
+{
+    return is_array($ziel) ? oeffne_mysql($ziel) : oeffne_sqlite($ziel);
+}
+
+function oeffne_sqlite(string $pfad): PDO
 {
     if ($pfad !== ':memory:') {
         $ordner = dirname($pfad);
@@ -242,19 +438,67 @@ function oeffne_datenbank(string $pfad): PDO
     return $db;
 }
 
+function oeffne_mysql(array $k): PDO
+{
+    $dsn = 'mysql:host=' . ($k['host'] ?? 'localhost') . ';port=' . (int) ($k['port'] ?? 3306) . ';dbname=' . ($k['name'] ?? '') . ';charset=utf8mb4';
+    $db = new PDO($dsn, $k['benutzer'] ?? '', $k['passwort'] ?? '', [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_TIMEOUT => 10,
+        PDO::ATTR_EMULATE_PREPARES => false,
+        PDO::ATTR_STRINGIFY_FETCHES => false,
+    ]);
+    $db->exec("set names utf8mb4 collate utf8mb4_unicode_ci, time_zone = '+00:00', "
+        . "sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'");
+    $db->exec('create table if not exists schema_version (version int not null) engine=InnoDB');
+    $version = (int) $db->query('select coalesce(max(version), 0) from schema_version')->fetchColumn();
+    if ($version < count(MYSQL_MIGRATIONEN)) {
+        // nur eine Anfrage gleichzeitig darf das Schema ändern (Tabellen anlegen beendet Transaktionen in MySQL)
+        $db->query("select get_lock('anerkennungspraemien_schema', 30)");
+        try {
+            $version = (int) $db->query('select coalesce(max(version), 0) from schema_version')->fetchColumn();
+            for ($v = $version; $v < count(MYSQL_MIGRATIONEN); $v++) {
+                foreach (array_filter(array_map('trim', explode(';', MYSQL_MIGRATIONEN[$v]))) as $befehl) $db->exec($befehl);
+                $db->exec('insert into schema_version (version) values (' . ($v + 1) . ')');
+            }
+        } finally {
+            $db->query("select release_lock('anerkennungspraemien_schema')");
+        }
+    }
+    return $db;
+}
+
+function ist_mysql(PDO $db): bool
+{
+    return $db->getAttribute(PDO::ATTR_DRIVER_NAME) === 'mysql';
+}
+
 /** Führt $fn in einer Transaktion aus (alles oder nichts). Verschachtelt: läuft in der äußeren mit. */
 function transaktion(PDO $db, callable $fn): mixed
 {
     if ($db->inTransaction()) return $fn();
-    $db->exec('begin immediate');
+    // SQLite: gleich die Schreibsperre holen, damit zwei Anfragen sich nicht gegenseitig blockieren
+    ist_mysql($db) ? $db->beginTransaction() : $db->exec('begin immediate');
     try {
         $r = $fn();
-        $db->exec('commit');
+        ist_mysql($db) ? $db->commit() : $db->exec('commit');
         return $r;
     } catch (Throwable $e) {
-        $db->exec('rollback');
+        ist_mysql($db) ? $db->rollBack() : $db->exec('rollback');
         throw $e;
     }
+}
+
+/** Einfügen oder – wenn es den Schlüssel schon gibt – ändern (SQLite und MySQL) */
+function upsert(PDO $db, string $tabelle, array $werte, array $schluessel): void
+{
+    $spalten = array_keys($werte);
+    $aendern = array_diff($spalten, $schluessel);
+    $sql = "insert into $tabelle (" . implode(', ', $spalten) . ') values (' . implode(', ', array_fill(0, count($spalten), '?')) . ')';
+    $sql .= ist_mysql($db)
+        ? ' on duplicate key update ' . implode(', ', array_map(fn ($s) => "$s = values($s)", $aendern))
+        : ' on conflict(' . implode(', ', $schluessel) . ') do update set ' . implode(', ', array_map(fn ($s) => "$s = excluded.$s", $aendern));
+    q($db, $sql, array_values($werte));
 }
 
 /** Abfrage mit Parametern; liefert das Statement */
@@ -281,11 +525,31 @@ function wert(PDO $db, string $sql, array $params = []): mixed
     return q($db, $sql, $params)->fetchColumn();
 }
 
-/** Konsistente Sicherungskopie der Datenbank */
-function sichern(PDO $db, string $ziel): void
+/**
+ * Sicherungskopie: SQLite als Kopie der Datei (.sqlite), MySQL als SQL-Datei (.sql) zum Einspielen
+ * über phpMyAdmin. Liefert den Pfad der Sicherung.
+ */
+function sichern(PDO $db, string $ziel): string
 {
     $ordner = dirname($ziel);
     if (!is_dir($ordner)) mkdir($ordner, 0700, true);
+    if (ist_mysql($db)) {
+        $ziel = preg_replace('/\.sqlite$/', '', $ziel) . (str_ends_with($ziel, '.sql') ? '' : '.sql');
+        $f = fopen($ziel, 'w');
+        fwrite($f, "-- Sicherung der Anerkennungsprämien vom " . jetzt() . "\n-- Einspielen: phpMyAdmin -> Importieren (in eine leere Datenbank)\n");
+        fwrite($f, "set names utf8mb4;\nset foreign_key_checks = 0;\n");
+        foreach (['schema_version', ...TABELLEN] as $t) {
+            $create = $db->query("show create table $t")->fetch(PDO::FETCH_NUM)[1];
+            fwrite($f, "\ndrop table if exists $t;\n$create;\n");
+            foreach ($db->query("select * from $t", PDO::FETCH_ASSOC) as $z) {
+                $w = array_map(fn ($x) => $x === null ? 'null' : (is_int($x) ? (string) $x : $db->quote((string) $x)), array_values($z));
+                fwrite($f, "insert into $t (" . implode(', ', array_keys($z)) . ') values (' . implode(', ', $w) . ");\n");
+            }
+        }
+        fwrite($f, "set foreign_key_checks = 1;\n");
+        fclose($f);
+        return $ziel;
+    }
     if (file_exists($ziel)) unlink($ziel);
     try {
         q($db, 'vacuum into ?', [$ziel]);
@@ -296,4 +560,5 @@ function sichern(PDO $db, string $ziel): void
             if ($quelle === '' || !copy($quelle, $ziel)) throw new RuntimeException('Sicherung nicht möglich.');
         });
     }
+    return $ziel;
 }

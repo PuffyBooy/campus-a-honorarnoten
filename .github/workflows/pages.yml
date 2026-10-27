@@ -27,9 +27,14 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
-          extensions: pdo_sqlite, mbstring, curl, openssl
+          extensions: pdo_sqlite, pdo_mysql, mbstring, curl, openssl
           coverage: none
       - run: npm test
+      # dieselben Tests noch einmal mit MySQL (wie bei World4You); MySQL ist auf dem Runner vorinstalliert
+      - run: sudo systemctl start mysql
+      - run: npm test
+        env:
+          HONORARE_TEST_MYSQL: '{"host":"127.0.0.1","benutzer":"root","passwort":"root"}'
 
   # Paket zum Hochladen auf World4You (unter Actions -> dieser Lauf -> Artifacts herunterladen)
   world4you:

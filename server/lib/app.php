@@ -15,41 +15,66 @@ date_default_timezone_set('Europe/Vienna');
 mb_internal_encoding('UTF-8');
 
 /**
- * Einstellungen: optional server/konfig.php (gibt ein Array zurück), Umgebungsvariablen haben Vorrang.
- *   datenbank       Pfad der Datenbank-Datei (Standard: server/daten/honorarnoten.sqlite)
- *   backup_tage     wie lange automatische Sicherungen aufgehoben werden (Standard 30)
+ * Einstellungen. Die Einrichtungsseite schreibt app/daten/konfig.php (z. B. die MySQL-Zugangsdaten);
+ * von Hand geht auch app/konfig.php. Umgebungsvariablen (für Tests) haben Vorrang.
+ *   datenbank     Pfad einer SQLite-Datei (Standard: app/daten/honorarnoten.sqlite) oder
+ *                 ['typ' => 'mysql', 'host' => …, 'port' => 3306, 'name' => …, 'benutzer' => …, 'passwort' => …]
+ *   backup_tage   wie lange automatische Sicherungen aufgehoben werden (Standard 30)
  */
-function konfiguration(): array
+function konfiguration(bool $neu = false): array
 {
     static $k = null;
-    if ($k !== null) return $k;
-    $datei = __DIR__ . '/../konfig.php';
-    $eigene = is_file($datei) ? (require $datei) : [];
-    $k = array_merge([
-        'datenbank' => dirname(__DIR__) . '/daten/honorarnoten.sqlite',
-        'backup_tage' => 30,
-    ], is_array($eigene) ? $eigene : []);
+    if ($k !== null && !$neu) return $k;
+    $k = ['datenbank' => null, 'backup_tage' => 30];
+    foreach ([__DIR__ . '/../konfig.php', daten_ordner() . '/konfig.php'] as $datei) {
+        $eigene = is_file($datei) ? (require $datei) : [];
+        if (is_array($eigene)) $k = array_merge($k, $eigene);
+    }
     if (getenv('HONORARE_DATENBANK')) $k['datenbank'] = getenv('HONORARE_DATENBANK');
+    if (getenv('HONORARE_MYSQL')) $k['datenbank'] = ['typ' => 'mysql'] + (json_decode((string) getenv('HONORARE_MYSQL'), true) ?: []);
+    $k['datenbank'] ??= daten_ordner() . '/honorarnoten.sqlite';
     return $k;
 }
 
-function datenbank(): PDO
+/** Ordner für Datenbank (SQLite), Sicherungen und die Einstellungen der Einrichtung */
+function daten_ordner(): string
+{
+    if (getenv('HONORARE_DATEN')) return rtrim((string) getenv('HONORARE_DATEN'), '/');
+    if (getenv('HONORARE_DATENBANK') && getenv('HONORARE_DATENBANK') !== ':memory:') return dirname((string) getenv('HONORARE_DATENBANK'));
+    return dirname(__DIR__) . '/daten';
+}
+
+/** Einstellungen der Einrichtung speichern (app/daten/konfig.php, nur für PHP lesbar) */
+function konfig_speichern(array $werte): void
+{
+    $datei = daten_ordner() . '/konfig.php';
+    $alt = is_file($datei) ? (require $datei) : [];
+    $inhalt = "<?php\n// Von der Einrichtung geschrieben – enthält Zugangsdaten, nicht weitergeben.\nreturn "
+        . var_export(array_merge(is_array($alt) ? $alt : [], $werte), true) . ";\n";
+    if (!is_dir(dirname($datei))) mkdir(dirname($datei), 0700, true);
+    if (file_put_contents($datei, $inhalt, LOCK_EX) === false) throw new RuntimeException('Die Einstellungen konnten nicht gespeichert werden (Ordner app/daten beschreibbar?).');
+    @chmod($datei, 0600);
+    if (function_exists('opcache_invalidate')) @opcache_invalidate($datei, true);
+    konfiguration(true);
+}
+
+function datenbank(bool $neu = false): PDO
 {
     static $db = null;
+    if ($neu) $db = null;
     return $db ??= oeffne_datenbank(konfiguration()['datenbank']);
 }
 
 /** Tägliche Sicherung in daten/backups (ohne Cronjob: beim ersten Aufruf des Tages), alte werden gelöscht */
 function taegliche_sicherung(PDO $db): ?string
 {
-    $pfad = konfiguration()['datenbank'];
-    if ($pfad === ':memory:') return null;
-    $ordner = dirname($pfad) . '/backups';
-    $ziel = $ordner . '/honorarnoten-' . heute_iso() . '.sqlite';
-    if (is_file($ziel)) return null;
-    sichern($db, $ziel);
+    if (konfiguration()['datenbank'] === ':memory:') return null;
+    $ordner = daten_ordner() . '/backups';
+    $heute = $ordner . '/honorarnoten-' . heute_iso();
+    if (is_file("$heute.sqlite") || is_file("$heute.sql")) return null;
+    $ziel = sichern($db, "$heute.sqlite");
     $tage = (int) konfiguration()['backup_tage'];
-    foreach (glob($ordner . '/honorarnoten-*.sqlite') ?: [] as $f) {
+    foreach (glob($ordner . '/honorarnoten-*.sql*') ?: [] as $f) {
         if ($f !== $ziel && filemtime($f) < time() - $tage * 86400) @unlink($f);
     }
     return $ziel;

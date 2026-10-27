@@ -11,8 +11,10 @@ Anerkennungsprämien – Paket für World4You
    der Domain hochladen – auch die versteckten Dateien ".htaccess" (in FileZilla:
    Server -> Versteckte Dateien anzeigen).
 
-3. Im Browser https://deine-domain.at/einrichten.php öffnen, Admin-Konto anlegen und
-   die Zugangsdaten des E-Mail-Postfachs eintragen. Fertig.
+3. Im Browser https://deine-domain.at/einrichten.php öffnen und eintragen:
+   - die MySQL-Zugangsdaten (Kundenbereich -> Datenbanken; ggf. zuerst eine Datenbank anlegen),
+   - dein Admin-Konto,
+   - das E-Mail-Postfach office@… mit Passwort. Fertig.
 
 Mit SSH statt FTP:
    scp anerkennungspraemien-world4you.zip BENUTZER@SERVER:

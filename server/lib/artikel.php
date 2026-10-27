@@ -188,9 +188,7 @@ function artikel_von_profil(PDO $db, string $profilId, string $medium = STANDARD
     $liste = $bisher;
     if (!$cache || $neu || time() - (int) $cache['zeit'] >= ARTIKEL_LISTE_GUELTIG) {
         $liste = liste_holen($medium, $profilId, $holen, $bisher);
-        q($db, 'insert into artikel_listen (schluessel, zeit, artikel) values (?, ?, ?)
-            on conflict(schluessel) do update set zeit = excluded.zeit, artikel = excluded.artikel',
-            [$schluessel, time(), json_text($liste)]);
+        upsert($db, 'artikel_listen', ['schluessel' => $schluessel, 'zeit' => time(), 'artikel' => json_text($liste)], ['schluessel']);
     }
 
     $details = [];
@@ -210,10 +208,8 @@ function artikel_von_profil(PDO $db, string $profilId, string $medium = STANDARD
             if (!$d || $d['datum'] === '') continue;
             $d['titel'] = $d['titel'] ?: $a['titel'];
             $d['ressort'] = $d['ressort'] ?: $a['ressort'];
-            q($db, 'insert into artikel (url, titel, datum, ressort, region, kategorie, geholt_am) values (?, ?, ?, ?, ?, ?, ?)
-                on conflict(url) do update set titel = excluded.titel, datum = excluded.datum, ressort = excluded.ressort,
-                region = excluded.region, kategorie = excluded.kategorie, geholt_am = excluded.geholt_am',
-                [$a['url'], $d['titel'], $d['datum'], $d['ressort'], $d['region'], $d['kategorie'], jetzt()]);
+            upsert($db, 'artikel', ['url' => $a['url'], 'titel' => $d['titel'], 'datum' => $d['datum'], 'ressort' => $d['ressort'],
+                'region' => $d['region'], 'kategorie' => $d['kategorie'], 'geholt_am' => jetzt()], ['url']);
             $details[$a['url']] = $d;
         }
     }
