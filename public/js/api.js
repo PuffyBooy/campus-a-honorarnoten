@@ -86,6 +86,7 @@ export const nutzerListe = f('nutzerListe');
 export const rollenSetzen = f('rollenSetzen');
 export const nutzerAktivSetzen = f('nutzerAktivSetzen');
 export const passwortZuruecksetzen = f('passwortZuruecksetzen');
+export const emailAendern = f('emailAendern');
 export const nutzerLoeschen = f('nutzerLoeschen');
 export const alleNotenAdmin = f('alleNotenAdmin');
 export const noteLoeschen = f('noteLoeschen');

@@ -209,7 +209,7 @@ final class Honorare
         'alleNoten', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'kommentieren', 'kommentare', 'verlaufVon',
         'offeneZahlungen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
-        'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'nutzerLoeschen', 'alleNotenAdmin', 'noteLoeschen',
+        'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'alleNotenAdmin', 'noteLoeschen',
         'loeschprotokoll', 'einstellungenSpeichern', 'statistik', 'exportieren',
         'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail', 'rechtliches', 'hinweisBestaetigen', 'benachrichtigungenSpeichern',
     ];
@@ -329,6 +329,7 @@ final class Honorare
             kuerze(tr($d['plz_ort'] ?? ''), 100), kuerze(tr($d['kontoinhaber'] ?? ''), 70), iban_normalisieren($d['iban'] ?? ''),
             bic_normalisieren($d['bic'] ?? ''), $links['campus_profil'], $links['campus_a_profil'], $n['id'],
         ]);
+        if ($email !== $n['email']) email_geaendert_melden($db, $n['vorname'], $n['email'], $email);
         return nutzer_laden($db, $n['id']);
     }
 
@@ -813,6 +814,21 @@ final class Honorare
         return zugang_melden($db, ['email' => $n['email'], 'vorname' => $n['vorname'], 'passwort' => $passwort], false);
     }
 
+    /** E-Mail-Adresse eines Kontos ändern (z. B. Tippfehler). Alte und neue Adresse bekommen eine Info-Mail. */
+    public function emailAendern(mixed $uid = null, mixed $email = null): array
+    {
+        $db = $this->db();
+        brauche($this->ctx, 'admin');
+        $n = nutzer_laden($db, s($uid));
+        pruefe($n, 'Dieses Konto gibt es nicht (mehr).', 404);
+        $neu = strtolower(tr($email));
+        pruefe(ist_email($neu) && strlen($neu) <= 200, 'Bitte eine gültige E-Mail-Adresse angeben.');
+        pruefe($neu !== $n['email'], 'Das ist schon die E-Mail-Adresse dieses Kontos.');
+        pruefe(!wert($db, 'select 1 from nutzer where email = ? and id <> ?', [$neu, $n['id']]), 'Diese E-Mail-Adresse wird schon verwendet.');
+        q($db, 'update nutzer set email = ? where id = ?', [$neu, $n['id']]);
+        return ['email' => $neu, 'mail' => email_geaendert_melden($db, $n['vorname'], $n['email'], $neu)];
+    }
+
     public function nutzerLoeschen(mixed $uid = null): bool
     {
         $db = $this->db();
@@ -980,6 +996,14 @@ function betreiber_pruefen(array $alt, mixed $neu): array
 }
 
 /** Startpasswort an das neue Konto schicken (wenn eingeschaltet); die Antwort sagt, ob eine Mail unterwegs ist */
+/** Info an alte und neue Adresse, dass die E-Mail-Adresse geändert wurde (Schutz vor unbemerkter Übernahme) */
+function email_geaendert_melden(PDO $db, string $vorname, string $alt, string $neu): bool
+{
+    if (!mail_einstellungen($db)['aktiv']) return false;
+    foreach ([$alt, $neu] as $an) mail_einreihen($db, $an, mail_email_geaendert($db, $vorname, $alt, $neu));
+    return true;
+}
+
 function zugang_melden(PDO $db, array $z, bool $neu = true): array
 {
     $e = mail_einstellungen($db);

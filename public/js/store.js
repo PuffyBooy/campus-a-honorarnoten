@@ -788,6 +788,18 @@ export async function passwortZuruecksetzen(uid) {
   return { email: n.email, vorname: n.vorname, passwort };
 }
 
+/** E-Mail-Adresse eines Kontos ändern (Admin) */
+export function emailAendern(uid, email) {
+  const { n } = adminNutzer(uid);
+  const neu = trim(email).toLowerCase();
+  pruefe(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(neu) && neu.length <= 200, 'Bitte eine gültige E-Mail-Adresse angeben.');
+  pruefe(neu !== n.email, 'Das ist schon die E-Mail-Adresse dieses Kontos.');
+  pruefe(!db.nutzer.some((x) => x.email === neu && x.id !== uid), 'Diese E-Mail-Adresse wird schon verwendet.');
+  n.email = neu;
+  speichern();
+  return { email: neu, mail: false };
+}
+
 /** Konto löschen (Datenschutz). Abgeschickte Prämienabrechnungen bleiben für die Buchhaltung erhalten. */
 export function nutzerLoeschen(uid) {
   const { admin, n } = adminNutzer(uid);

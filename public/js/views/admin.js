@@ -4,7 +4,7 @@ import {
 } from '../lib/format.js';
 import { downloadText } from '../lib/csv.js';
 import { MEDIEN, MEDIUM_KEYS } from '../lib/campus.js';
-import { fehlerText, kopierenMitFeedback, meldung, mitSperre, statusBadge } from '../lib/ui.js';
+import { bestaetigen, fehlerText, kopierenMitFeedback, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 import { STANDARD_HOSTER, betreiberOder } from '../lib/rechtliches.js';
 
 const REITER = {
@@ -158,6 +158,7 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
           <td data-label="Profil">${n.rollen.includes('autor')
             ? (store.profilVollstaendig(n) ? '✓ vollständig' : '<span class="klein">unvollständig</span>') : '–'}</td>
           <td data-label="Aktionen"><span class="aktionen eng">
+            <button type="button" class="btn btn-klein" data-aktion="email">E-Mail ändern</button>
             <button type="button" class="btn btn-klein" data-aktion="pw">Passwort zurücksetzen</button>
             <button type="button" class="btn btn-klein" data-aktion="aktiv">${n.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button>
             <button type="button" class="btn btn-klein btn-gefahr" data-aktion="loeschen">Löschen</button>
@@ -203,6 +204,16 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
       if (!confirm(`Konto von ${vollerName(n)} löschen?\n\nGespeicherte, nicht abgeschickte Leistungen werden mitgelöscht. `
         + 'Abgeschickte Prämienabrechnungen bleiben für die Buchhaltung erhalten.')) return;
       versuche(() => store.nutzerLoeschen(n.id), 'Konto gelöscht.', neuLaden);
+    } else if (knopf.dataset.aktion === 'email') {
+      const neu = await emailAbfragen(n);
+      if (!neu) return;
+      try {
+        const r = await store.emailAendern(n.id, neu);
+        meldung(`E-Mail von ${vollerName(n)} geändert${r.mail ? '. Alte und neue Adresse bekommen eine Info-Mail' : ''}.`, 'erfolg');
+        neuLaden();
+      } catch (e) {
+        meldung(fehlerText(e), 'fehler');
+      }
     } else if (knopf.dataset.aktion === 'pw') {
       if (!confirm(`Passwort von ${vollerName(n)} zurücksetzen? Es wird ein neues Startpasswort erzeugt.`)) return;
       try {
@@ -214,6 +225,16 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
     }
   });
 }
+
+/** Neue E-Mail-Adresse für ein Konto abfragen (null = abgebrochen) */
+const emailAbfragen = (n) => bestaetigen({
+  titel: `E-Mail von ${vollerName(n)} ändern`,
+  html: `<p>Bisher: <strong>${esc(n.email)}</strong></p>
+    <p class="klein">Angemeldet wird ab dann mit der neuen Adresse, das Passwort bleibt gleich. Alte und neue Adresse
+      bekommen eine Info-Mail (wenn der E-Mail-Versand eingerichtet ist).</p>`,
+  eingabe: { label: 'Neue E-Mail-Adresse', wert: n.email, typ: 'email' },
+  ja: 'E-Mail ändern',
+});
 
 async function noten(inhalt, { store, neuLaden }) {
   const [liste, protokoll] = await Promise.all([store.alleNotenAdmin(), store.loeschprotokoll()]);

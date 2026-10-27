@@ -283,6 +283,24 @@ test('Admin: Rollen, letzter Admin, Deaktivieren beendet Sitzungen', async () =>
   await k.admin.ok('nutzerAktivSetzen', bert.id, true);
 });
 
+test('Admin: E-Mail-Adresse ändern, alte und neue Adresse bekommen eine Info', async () => {
+  const bert = (await k.admin.ok('nutzerListe')).find((n) => n.email === 'bert@example.org');
+  assert.equal((await k.rita.aufruf('emailAendern', bert.id, 'b@example.org')).status, 403);
+  assert.match((await k.admin.aufruf('emailAendern', bert.id, 'kein-mail')).fehler, /gültige/);
+  assert.match((await k.admin.aufruf('emailAendern', bert.id, 'ANNA@example.org')).fehler, /schon verwendet/);
+  assert.match((await k.admin.aufruf('emailAendern', bert.id, 'bert@example.org')).fehler, /schon die E-Mail/);
+  const r = await k.admin.ok('emailAendern', bert.id, ' Bert.Neu@Example.org ');
+  assert.deepEqual(r, { email: 'bert.neu@example.org', mail: true });
+  assert.ok(await mailAbwarten(php.smtp, (m) => m.an === 'bert@example.org' && m.betreff === 'Deine E-Mail-Adresse wurde geändert'));
+  assert.ok(await mailAbwarten(php.smtp, (m) => m.an === 'bert.neu@example.org' && m.betreff === 'Deine E-Mail-Adresse wurde geändert'));
+  // angemeldet wird ab jetzt mit der neuen Adresse, das Passwort bleibt
+  assert.equal((await client().aufruf('anmelden', 'bert@example.org', 'geheim12345')).status, 401);
+  const neu = client();
+  await neu.ok('anmelden', 'bert.neu@example.org', 'geheim12345');
+  assert.equal((await neu.ok('aktuellerNutzer')).email, 'bert.neu@example.org');
+  await k.admin.ok('emailAendern', bert.id, 'bert@example.org');
+});
+
 test('Prämiensätze: Admin legt fest, alle sehen sie, ungültige Werte abgelehnt', async () => {
   const basisDaten = { empfaenger: { name: 'campus a Medien GmbH' }, datenschutzKontakt: '' };
   assert.deepEqual((await k.anna.ok('einstellungen')).honorarsaetze, {

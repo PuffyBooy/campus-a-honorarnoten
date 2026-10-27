@@ -110,7 +110,8 @@ Lokal starten: `npm run dev` → http://localhost:5173
    erneut herunterladen.
 7. **Admin-Terminal:** Zugangsanfragen freischalten oder ablehnen (offene Anfragen werden in der
    Navigation gezählt), Personen direkt anlegen, Rollen vergeben (Checkboxen), Konten
-   deaktivieren oder löschen, Passwort zurücksetzen (neues Startpasswort). Prämienabrechnungen löschen
+   deaktivieren oder löschen, Passwort zurücksetzen (neues Startpasswort), **E-Mail-Adresse ändern**
+   (alte und neue Adresse bekommen eine Info-Mail). Prämienabrechnungen löschen
    (mit Löschprotokoll), Rechnungsempfänger, **Prämiensätze** und Datenschutzkontakt einstellen,
    Sicherung herunterladen/einspielen, Demo zurücksetzen. Weicht ein eingereichter Betrag vom
    Standardsatz ab, sieht die Redaktion in der Detailansicht einen Hinweis.

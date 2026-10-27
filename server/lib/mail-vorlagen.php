@@ -290,6 +290,19 @@ function mail_zugang(PDO $db, array $z, bool $neu = true): array
     ]);
 }
 
+function mail_email_geaendert(PDO $db, string $vorname, string $alt, string $neu): array
+{
+    return mail_bauen([
+        'betreff' => 'Deine E-Mail-Adresse wurde geändert',
+        'vorschau' => 'Für dein Konto bei den Anerkennungsprämien gilt jetzt eine neue E-Mail-Adresse.',
+        'titel' => 'E-Mail-Adresse geändert',
+        'absaetze' => ["Hallo $vorname,", 'die E-Mail-Adresse deines Kontos bei den Anerkennungsprämien wurde geändert. Zum Anmelden verwendest du ab jetzt die neue Adresse, dein Passwort bleibt gleich.'],
+        'tabelle' => [['Bisher', $alt], ['Neu', $neu, true]],
+        'hinweis' => ['Warst du das nicht? Dann melde dich bitte sofort beim Admin.', 'gefahr'],
+        'knopf' => ['Zur Anmeldung', app_link($db)],
+    ]);
+}
+
 function mail_test(PDO $db, string $an): array
 {
     return mail_bauen([
