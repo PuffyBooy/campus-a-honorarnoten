@@ -5,13 +5,12 @@
   "scripts": {
     "test": "node --disable-warning=ExperimentalWarning --test tests/*.test.mjs",
     "dev": "npx --yes http-server public -p 5173 -c-1",
-    "start": "node --disable-warning=ExperimentalWarning server/server.js",
-    "dev:server": "COOKIE_SECURE=0 TRUST_PROXY=0 node --disable-warning=ExperimentalWarning server/server.js",
-    "admin": "node --disable-warning=ExperimentalWarning server/cli.js admin",
-    "passwort": "node --disable-warning=ExperimentalWarning server/cli.js passwort",
-    "backup": "node --disable-warning=ExperimentalWarning server/cli.js backup"
+    "dev:server": "HONORARE_DATENBANK=daten/honorarnoten.sqlite php -S 127.0.0.1:3000 server/router.php",
+    "admin": "HONORARE_DATENBANK=daten/honorarnoten.sqlite php server/cli.php admin",
+    "paket": "scripts/world4you-paket.sh"
   },
   "engines": {
-    "node": ">=22.13"
+    "node": ">=22.13",
+    "php": ">=8.1"
   }
 }

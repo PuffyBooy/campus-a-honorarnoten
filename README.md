@@ -8,16 +8,16 @@ Honorarnoten als **ein PDF** herunter, überweist und markiert die Woche als bez
 
 Die App läuft in zwei Betriebsarten – derselbe Code, nur die Datenhaltung ist anders:
 
-| | **Demo** (GitHub Pages) | **Server** (eigener VPS) |
+| | **Demo** (GitHub Pages) | **Server** (World4You-Webspace) |
 |---|---|---|
 | Wofür | Herzeigen, Ausprobieren | echter Betrieb |
-| Daten | nur im jeweiligen Browser | gemeinsame Datenbank (SQLite) auf dem Server |
+| Daten | nur im jeweiligen Browser | gemeinsame Datenbank (SQLite) auf dem Webspace |
 | Rechte | nur im Browser geprüft | auf dem Server geprüft, nicht umgehbar |
-| Kosten | gratis | Software gratis, nur der Server (VPS) kostet |
-| Anleitung | [Ausprobieren](#ausprobieren-demo) | [Auf einem VPS installieren](#auf-einem-vps-installieren-echter-betrieb) |
+| E-Mails | keine | automatisch (neue Honorarnoten, Bestätigungen, Zugangsdaten …) |
+| Anleitung | [Ausprobieren](#ausprobieren-demo) | [Auf World4You installieren](#auf-world4you-installieren-echter-betrieb) |
 
-Welche Betriebsart aktiv ist, steht in `public/js/modus.js`. Der Server liefert diese Datei
-automatisch mit `MODUS = 'server'` aus – man muss nichts umstellen.
+Welche Betriebsart aktiv ist, steht in `public/js/modus.js`. Das Paket für World4You stellt diese
+Datei automatisch auf `MODUS = 'server'` – man muss nichts umstellen.
 
 ## Ausprobieren (Demo)
 
@@ -44,8 +44,9 @@ Lokal starten: `npm run dev` → http://localhost:5173
 
 1. **Zugang anfragen:** Selbst registrieren geht nicht. Neue Personen schicken auf der Startseite
    eine Anfrage (Name, E-Mail, optional eine Nachricht). Ein Admin schaltet sie im Reiter
-   „Anfragen“ frei, wählt die Rollen und bekommt ein **Startpasswort**. Das gibt er weiter, per
-   „E-Mail vorbereiten“ oder „Text kopieren“.
+   „Anfragen“ frei, wählt die Rollen und bekommt ein **Startpasswort**. Auf dem Server geht es
+   automatisch per E-Mail an die neue Person (abschaltbar unter Admin → E-Mail); sonst gibt der
+   Admin es per „E-Mail vorbereiten“ oder „Text kopieren“ weiter.
 
    **Konto einrichten (Pflicht beim ersten Anmelden):** Mit dem Startpasswort kommt man nur auf die
    Seite „Konto einrichten“ und muss dort alles auf einmal anlegen: eigenes Passwort, Name, Adresse,
@@ -138,7 +139,7 @@ PDF-Layout dort mit angepasst werden.
 
 Beide Seiten laufen mit TYPO3 (gleiches System, aber **eigene Profile**: dieselbe Person hat auf jeder
 Seite eine andere Profil-ID) und haben keine Schnittstelle für Artikeldaten. Der Server liest deshalb
-die normalen Seiten aus ([`server/campus-artikel.js`](server/campus-artikel.js)):
+die normalen Seiten aus ([`server/lib/artikel.php`](server/lib/artikel.php)):
 
 - `/profil/<ID>?fetchNews=1` – Artikelliste der Profilseite (12 pro Seite, der Server blättert alle Seiten durch)
 - `/news/detail/<name>` (campus-a-college.at) bzw. `/news/news-detail/<name>` (campus-a.at) –
@@ -146,7 +147,8 @@ die normalen Seiten aus ([`server/campus-artikel.js`](server/campus-artikel.js))
 
 Die Adressen beider Seiten stehen in [`public/js/lib/campus.js`](public/js/lib/campus.js).
 
-Beim ersten Aufruf pro Person werden alle Artikelseiten gelesen (bei 150 Artikeln ca. 20 Sekunden).
+Beim ersten Aufruf pro Person werden die Artikelseiten gelesen (6 gleichzeitig, höchstens 20 Sekunden
+pro Aufruf – bei sehr vielen Artikeln kommen die restlichen Daten beim nächsten Mal dazu).
 Die Artikeldaten landen in der Datenbank, danach wird nur noch die Liste auf neue Artikel geprüft
 (höchstens alle 10 Minuten oder über „Liste aktualisieren“). Der Abruf läuft über den Server, weil der
 Browser fremde Seiten nicht auslesen darf. **In der Demo** (GitHub Pages) gibt es deshalb nur Beispielartikel.
@@ -154,85 +156,122 @@ Browser fremde Seiten nicht auslesen darf. **In der Demo** (GitHub Pages) gibt e
 Baut campus-a-college.at seine Seiten um, muss das Auslesen angepasst werden. Leistungen lassen sich
 dann weiterhin von Hand eintragen.
 
-## Auf einem VPS installieren (echter Betrieb)
+## Auf World4You installieren (echter Betrieb)
 
-Die Server-Variante braucht **keine npm-Pakete und keinen Datenbankserver**: nur Node.js (ab 22.13).
-Die Datenbank ist eine einzelne Datei (SQLite). Davor läuft [Caddy](https://caddyserver.com), das
-automatisch ein kostenloses HTTPS-Zertifikat (Let's Encrypt) holt und erneuert.
+Der Server-Teil ist in **PHP** geschrieben und läuft auf normalem Webspace mit Apache und PHP 8.1+
+– also auch auf dem **Webhosting von World4You**. Er braucht **keinen Datenbankserver** (die
+Datenbank ist eine einzelne SQLite-Datei), keine Zusatzpakete und keinen Cronjob.
 
-**Du brauchst:**
-- einen VPS mit **Debian 12 oder Ubuntu 22.04/24.04** – z. B. Hetzner (ab ca. 4 € im Monat) oder den
-  „Always Free“-Tarif von Oracle Cloud; 1 CPU und 1 GB RAM reichen
-- eine **(Sub-)Domain**, z. B. `honorare.campus-a-college.at`, deren DNS-Eintrag (A-Record) auf die
-  IP-Adresse des Servers zeigt
-- offene Ports **80 und 443**
+### 1. Im World4You-Kundenbereich ([my.world4you.com](https://my.world4you.com))
 
-**Installation** (auf dem Server, als Benutzer mit sudo-Rechten):
+- **SSL-Zertifikat** für die Domain aktivieren (kostenlos) – die App läuft nur über `https://`.
+- **PHP-Version** auf 8.1 oder neuer stellen (*Webspace → Einstellungen*; am besten die neueste).
+- Ein **E-Mail-Postfach** für den Versand anlegen, z. B. `honorare@deine-domain.at`. Die zweite
+  Adresse kann das Postfach der Redaktion sein, das neue Honorarnoten bekommt.
 
-```bash
-sudo git clone https://github.com/PuffyBooy/campus-a-honorarnoten.git /opt/honorarnoten
-sudo bash /opt/honorarnoten/deploy/install.sh honorare.campus-a-college.at deine@email.at
+### 2. Paket hochladen
+
+Das fertige Paket baut GitHub bei jedem Update auf `main` automatisch: unter **Actions → „Tests, Demo
+und Paket“ → letzter Lauf → Artifacts → `honorarnoten-world4you`** herunterladen und entpacken.
+(Selbst bauen: `npm run paket` → `dist/world4you/` bzw. `dist/honorarnoten-world4you.zip`.)
+
+Den **gesamten Inhalt** per FTP (z. B. [FileZilla](https://filezilla-project.org), Zugangsdaten im
+Kundenbereich unter *FTP*) in den Hauptordner der Domain hochladen – **auch die versteckten Dateien
+`.htaccess`** (FileZilla: *Server → Versteckte Dateien anzeigen*).
+
+```
+.htaccess            HTTPS erzwingen, api/… weiterleiten, Sicherheits-Header
+index.html, css/, js/, vendor/, img/, vorlage/   die App
+api.php              Schnittstelle (ruft app/api.php auf)
+einrichten.php       Einrichtung nach dem Hochladen
+app/                 PHP-Code – per .htaccess gesperrt, nie über das Web erreichbar
+app/daten/           Datenbank und tägliche Sicherungen (entsteht automatisch)
 ```
 
-Das Skript installiert Node.js und Caddy, richtet den Dienst mit Autostart ein
-([`deploy/honorarnoten.service`](deploy/honorarnoten.service)), plant eine tägliche Sicherung und
-legt das **erste Admin-Konto** an. Am Ende steht das **Startpasswort** im Terminal. Damit unter
-`https://honorare.campus-a-college.at` anmelden und ein eigenes Passwort festlegen. Alle weiteren
-Personen fragen auf der Startseite einen Zugang an und werden im Admin-Terminal freigeschaltet.
+### 3. Einrichten
 
-**Wichtige Befehle:**
+`https://deine-domain.at/einrichten.php` öffnen. Die Seite prüft den Webspace (PHP-Version, SQLite,
+HTTPS, Schreibrechte) und fragt dann nach:
 
-| Was | Befehl |
+- **deinem Admin-Konto** (Name, E-Mail) – danach wird das **Startpasswort** angezeigt,
+- den **Zugangsdaten des E-Mail-Postfachs** (Adresse und Passwort; Server `smtp.world4you.com`,
+  Port 587, STARTTLS sind schon eingetragen) und dem **Postfach der Redaktion**.
+
+Zum Schluss geht eine **Test-E-Mail** hinaus. Die Einrichtung funktioniert nur, solange es noch kein
+Konto gibt – deshalb direkt nach dem Hochladen erledigen. Danach unter `https://deine-domain.at`
+mit dem Startpasswort anmelden und ein eigenes Passwort festlegen.
+
+### Automatische E-Mails
+
+Alle Mails haben das campus-a-Design (Kopf in der Markenfarbe, Übersicht, Knopf zur App) und eine
+reine Textfassung. Einstellen und testen unter **Admin → E-Mail**.
+
+| Wann | an wen |
 |---|---|
-| Status | `systemctl status honorarnoten` |
-| Protokoll ansehen | `journalctl -u honorarnoten -f` |
-| Neu starten | `sudo systemctl restart honorarnoten` |
-| Update auf neueste Version | `sudo bash /opt/honorarnoten/deploy/update.sh` |
-| Passwort vergessen (auch Admin) | `sudo bash /opt/honorarnoten/deploy/passwort.sh email@beispiel.at` |
-| Sicherung sofort | `sudo systemctl start honorarnoten-backup` |
+| Honorarnote eingereicht | Redaktion (mit allen Leistungen und Summe) + Eingangsbestätigung an die Autor:in |
+| angenommen | Autor:in (inkl. geänderter Beträge mit Vermerk) + Buchhaltung, falls eingetragen |
+| abgelehnt | Autor:in mit Begründung („Leistungen überarbeiten“) |
+| als bezahlt markiert | Autor:in mit Betrag und Zahlungsdatum |
+| neue Zugangsanfrage | Admin (bzw. Redaktion) |
+| Konto angelegt / Passwort zurückgesetzt | die Person, mit Startpasswort (abschaltbar) |
+
+Die Mails gehen über das World4You-Postfach (SMTP) hinaus, nachdem die App dem Browser schon
+geantwortet hat – niemand wartet darauf. Klappt der Versand nicht (Passwort falsch, Server kurz
+weg), wird es bis zu 5-mal erneut versucht; den letzten Fehler zeigt **Admin → E-Mail**.
+
+### Updates
+
+Neues Paket herunterladen und einfach drüber hochladen (alte Dateien überschreiben). **Den Ordner
+`app/daten/` nie löschen** – dort liegen Datenbank und Sicherungen. Die Datenbank wird beim ersten
+Aufruf nach einem Update automatisch angepasst.
 
 ### Backups
 
-- Jede Nacht um 3:15 Uhr landet eine Kopie der Datenbank in `/var/lib/honorarnoten/backups/`,
-  30 Tage lang (änderbar über `BACKUP_TAGE` in `/etc/honorarnoten.env`). `update.sh` sichert vor
-  jedem Update zusätzlich.
-- **Zusätzlich außer Haus sichern!** Liegt nur auf dem Server eine Kopie, ist bei einem Serverausfall
-  alles weg. Einfachste Lösung: regelmäßig vom eigenen Rechner holen, z. B.
-  `scp -r benutzer@server:/var/lib/honorarnoten/backups ./honorar-backups`, oder die Backup-Funktion
-  des VPS-Anbieters einschalten.
-- **Wiederherstellen:**
-  ```bash
-  sudo systemctl stop honorarnoten
-  sudo cp /var/lib/honorarnoten/backups/honorarnoten-DATUM.sqlite /var/lib/honorarnoten/honorarnoten.sqlite
-  sudo rm -f /var/lib/honorarnoten/honorarnoten.sqlite-wal /var/lib/honorarnoten/honorarnoten.sqlite-shm
-  sudo chown honorarnoten:honorarnoten /var/lib/honorarnoten/honorarnoten.sqlite
-  sudo systemctl start honorarnoten
-  ```
+- Jeden Tag legt die App beim ersten Aufruf eine Kopie der Datenbank in `app/daten/backups/` an
+  und hebt sie 30 Tage auf. **Ab und zu per FTP auf den eigenen Rechner kopieren!**
+- Zusätzlich: **Admin → Daten → Datenexport** (JSON, enthält IBANs – vertraulich).
+- Wiederherstellen: `app/daten/honorarnoten.sqlite` per FTP durch eine Sicherung ersetzen
+  (Datei umbenennen auf `honorarnoten.sqlite`).
 
-### Ohne Installationsskript starten
+### Passwort vergessen
 
-Zum Ausprobieren auf dem eigenen Rechner (Node.js 22.13 oder neuer):
+Andere Konten setzt der Admin unter **Admin → Benutzer → Passwort zurücksetzen** zurück. Für das
+Admin-Konto selbst per SSH (bei World4You in allen Paketen möglich, im Kundenbereich aktivieren):
 
 ```bash
-npm run dev:server             # http://127.0.0.1:3000, ohne HTTPS
-npm run admin -- deine@email.at  # erstes Admin-Konto, zeigt das Startpasswort
+php app/cli.php passwort deine@email.at      # neues Startpasswort
+php app/cli.php backup                       # Sicherung sofort
+php app/cli.php testmail an@beispiel.at      # Test-E-Mail
+php app/cli.php mails                        # wartende E-Mails sofort verschicken
 ```
 
-Oder mit Einstellungen aus einer `.env`-Datei: `./start.sh` (siehe Kommentare in [`start.sh`](start.sh)).
+(Falls `php` auf der Kommandozeile eine alte Version ist: `php83` bzw. `php84` verwenden.)
+
+### Andere Webspaces
+
+Das Paket läuft auf jedem Webspace mit **Apache, PHP 8.1+ und der Erweiterung pdo_sqlite**. Bei
+nginx statt Apache müssen die Regeln aus `.htaccess` in die Server-Konfiguration übernommen werden
+(`app/` sperren, `api/<Funktion>` → `api.php?f=<Funktion>`).
+
+### Lokal ausprobieren
+
+```bash
+npm run dev:server                 # http://127.0.0.1:3000 (PHP-Entwicklungsserver, ohne HTTPS)
+npm run admin -- deine@email.at    # erstes Admin-Konto, zeigt das Startpasswort
+```
 
 ### Sicherheit im Server-Modus
 
 - Alle Rechte (Rollen, Statuswechsel, wer IBAN und Adresse sehen darf) prüft der Server
-  ([`server/honorare.js`](server/honorare.js)); die Redaktion bekommt IBAN und Adresse gar nicht
-  erst ausgeliefert.
-- Passwörter mit scrypt gehasht, Startpasswörter müssen beim ersten Login geändert werden.
+  ([`server/lib/honorare.php`](server/lib/honorare.php)); die Redaktion bekommt IBAN und Adresse gar
+  nicht erst ausgeliefert – auch nicht in den E-Mails.
+- Passwörter mit bcrypt gehasht, Startpasswörter müssen beim ersten Login geändert werden.
 - Anmeldung über ein Sitzungs-Cookie (`HttpOnly`, `Secure`, `SameSite=Strict`), in der Datenbank
   nur als Hash gespeichert; Abmelden, Deaktivieren und Passwort-Reset beenden Sitzungen.
 - Schutz vor gefälschten Anfragen fremder Seiten (CSRF), Begrenzung von Anmeldeversuchen,
   strenge Content-Security-Policy, HTTPS mit HSTS.
-- Der Dienst läuft als eigener Benutzer ohne Rechte und darf nur in `/var/lib/honorarnoten` schreiben.
-- E-Mails verschickt der Server nicht (damit er gratis bleibt): Startpasswörter gibt der Admin über
-  „E-Mail vorbereiten“ weiter.
+- Programmcode, Datenbank und Sicherungen liegen in `app/` und sind per `.htaccess` gesperrt.
+- Das Passwort des E-Mail-Postfachs wird nie an den Browser geschickt und ist nicht im Datenexport.
 
 ## Demo auf GitHub Pages veröffentlichen
 
@@ -268,11 +307,18 @@ Das Logo in [`public/index.html`](public/index.html) an der markierten Stelle ei
 
 ```bash
 npm run dev          # Demo lokal auf Port 5173
-npm run dev:server   # Server-Modus lokal auf Port 3000
-npm test             # alle Tests: Hilfsfunktionen und Server (Rechte, Abläufe, Schutz)
+npm run dev:server   # Server-Modus lokal auf Port 3000 (braucht PHP 8.1+)
+npm test             # alle Tests: Hilfsfunktionen, Server (Rechte, Abläufe, Schutz, E-Mails)
+HONORARE_PHP=php8.1 npm test   # dieselben Tests mit einer anderen PHP-Version
+npm run paket        # Paket für World4You bauen
 bash scripts/vendor.sh   # JSZip und pdf-lib aktualisieren
 ```
 
-Aufbau: `public/` ist die Oberfläche (ohne Framework, ohne Build-Schritt), `server/` der Server
-(`server.js` HTTP und Schutz, `honorare.js` Geschäftslogik, `db.js` Datenbank, `auth.js`
-Passwörter und Sitzungen, `cli.js` Verwaltung), `deploy/` die Installationsskripte.
+Aufbau: `public/` ist die Oberfläche (ohne Framework, ohne Build-Schritt), `server/` der Server in
+PHP (`api.php` Schnittstelle und Schutz, `lib/honorare.php` Geschäftslogik, `lib/db.php` Datenbank,
+`lib/auth.php` Passwörter und Sitzungen, `lib/artikel.php` Artikel von campus-a-college.at,
+`lib/mail.php` und `lib/mail-vorlagen.php` E-Mails, `einrichten.php` Einrichtung, `cli.php`
+Verwaltung, `router.php` nur für die Entwicklung), `deploy/world4you/` die Dateien fürs Paket.
+Die Regeln, die Browser und Server beide kennen (IBAN, Nummer, Medien, Honorarsätze …), gibt es in
+JavaScript (`public/js/lib/`) und PHP (`server/lib/regeln.php`); `tests/php-gleich.test.mjs` prüft,
+dass beide gleich rechnen.

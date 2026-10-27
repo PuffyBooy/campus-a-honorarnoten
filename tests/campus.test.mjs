@@ -2,7 +2,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { artikelLink, artikelSuche, artikelUrlGueltig, hatArtikel, profilIdAusLink, profilLink, titelLink } from '../public/js/lib/campus.js';
-import { artikelParsen, artikelVonProfil, listeParsen } from '../server/campus-artikel.js';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { php, phpAufrufe } from './php-aufruf.mjs';
 import { artikelSeite, listeSeite1, listeSeite2 } from './campus-fixtures.mjs';
 
 test('Profil-Link auf campus-a-college.at erkennen', () => {
@@ -49,7 +52,8 @@ test('Titel immer klickbar: Artikel direkt, sonst Suche nach dem Titel', () => {
   assert.match(suche, />Graz &quot;von&quot; unten<\/a>$/);
 });
 
-test('Artikelliste einer Profilseite auslesen', () => {
+test('Artikelliste einer Profilseite auslesen (Server)', () => {
+  const listeParsen = (html, medium = 'college') => php('liste_parsen', html, medium);
   const { artikel, seiten } = listeParsen(listeSeite1);
   assert.deepEqual(artikel, [
     { url: 'https://www.campus-a-college.at/news/detail/das-packerl-wird-teurer', titel: 'Das Packerl wird teurer', ressort: 'Wirtschaft' },
@@ -62,43 +66,46 @@ test('Artikelliste einer Profilseite auslesen', () => {
   assert.deepEqual(listeParsen('<html>keine Artikel</html>'), { artikel: [], seiten: [] });
 });
 
-test('Artikelseite auslesen: Titel, Datum, Ressort, Region, Kategorie', () => {
+test('Artikelseite auslesen: Titel, Datum, Ressort, Region, Kategorie (Server)', () => {
+  const artikelParsen = (html) => php('artikel_parsen', html);
   const html = artikelSeite({ titel: 'Tom &amp; Jerry', ressort: 'Kultur', region: 'Wien', kategorie: 'Meinung', datum: '05.03.2026' });
   assert.deepEqual(artikelParsen(html), { titel: 'Tom & Jerry', datum: '2026-03-05', ressort: 'Kultur', region: 'Wien', kategorie: 'Meinung' });
   assert.equal(artikelParsen('<html><h1>Seite nicht gefunden</h1></html>'), null);
 });
 
-test('Artikel eines Profils: beim Aktualisieren nur neue Artikel nachladen', async () => {
-  const { oeffneDatenbank } = await import('../server/db.js');
-  const db = oeffneDatenbank(':memory:');
+test('Artikel eines Profils: beim Aktualisieren nur neue Artikel nachladen (Server)', () => {
+  const ordner = mkdtempSync(join(tmpdir(), 'honorare-artikel-'));
+  const db = join(ordner, 'test.sqlite');
+  const basis = 'https://www.campus-a-college.at';
+  const profil = '0123456789abcdef';
   const liste = (n, nr) => `<div id="newsSection">${n.map((slug) => `
     <span class="news-card-kicker"><span>Politik</span></span>
     <a class="news-card-title-link" href="/news/detail/${slug}">${slug}</a>`).join('')}
-    ${nr ? `<a href="/profil/0123456789abcdef?fetchNews=1&amp;tx_news_pi1%5BcurrentPage%5D=${nr}&amp;cHash=x">weiter</a>` : ''}</div>`;
-  const seite = { 1: ['c', 'b'], 2: ['a'] };
-  const abrufe = [];
-  const holen = async (url) => {
-    abrufe.push(url);
-    const u = new URL(url);
-    if (u.pathname.startsWith('/news/detail/')) {
-      const slug = u.pathname.split('/').pop();
-      const tag = { a: '01', b: '02', c: '03', d: '04' }[slug];
-      return artikelSeite({ titel: slug.toUpperCase(), ressort: 'Politik', region: 'Wien', kategorie: 'Meinung', datum: `${tag}.09.2026` });
-    }
-    const nr = u.searchParams.get('tx_news_pi1[currentPage]') ?? '1';
-    return liste(seite[nr], nr === '1' ? 2 : null);
-  };
-  const erst = await artikelVonProfil(db, '0123456789abcdef', { holen });
-  assert.deepEqual(erst.map((a) => a.titel), ['C', 'B', 'A']);
-  assert.equal(abrufe.length, 5, '2 Listenseiten + 3 Artikelseiten');
+    ${nr ? `<a href="/profil/${profil}?fetchNews=1&amp;tx_news_pi1%5BcurrentPage%5D=${nr}&amp;cHash=x">weiter</a>` : ''}</div>`;
+  const tag = { a: '01', b: '02', c: '03', d: '04' };
+  const seiten = (s1, s2) => ({
+    [`${basis}/profil/${profil}?fetchNews=1`]: liste(s1, 2),
+    [`${basis}/profil/${profil}?fetchNews=1&tx_news_pi1%5BcurrentPage%5D=2&cHash=x`]: liste(s2, null),
+    ...Object.fromEntries(Object.entries(tag).map(([slug, t]) => [`${basis}/news/detail/${slug}`,
+      artikelSeite({ titel: slug.toUpperCase(), ressort: 'Politik', region: 'Wien', kategorie: 'Meinung', datum: `${t}.09.2026` })])),
+  });
+  try {
+    const [erst] = phpAufrufe([{ fn: 'artikel_von_profil', db, seiten: seiten(['c', 'b'], ['a']), args: [profil, 'college', false] }]);
+    assert.deepEqual(erst.ok.artikel.map((a) => a.titel), ['C', 'B', 'A']);
+    assert.equal(erst.ok.abrufe.length, 5, '2 Listenseiten + 3 Artikelseiten');
 
-  // neuer Artikel ganz vorne: erste Seite reicht, nur der neue Artikel wird gelesen
-  seite[1] = ['d', 'c'];
-  seite[2] = ['b', 'a'];
-  abrufe.length = 0;
-  const danach = await artikelVonProfil(db, '0123456789abcdef', { holen, neu: true });
-  assert.deepEqual(danach.map((a) => a.titel), ['D', 'C', 'B', 'A']);
-  assert.deepEqual(abrufe.map((u) => new URL(u).pathname), ['/profil/0123456789abcdef', '/profil/0123456789abcdef', '/news/detail/d']);
+    // neuer Artikel ganz vorne: erste Seite reicht nicht (d ist neu), zweite nur bekannte – nur der neue Artikel wird gelesen
+    const [danach] = phpAufrufe([{ fn: 'artikel_von_profil', db, seiten: seiten(['d', 'c'], ['b', 'a']), args: [profil, 'college', true] }]);
+    assert.deepEqual(danach.ok.artikel.map((a) => a.titel), ['D', 'C', 'B', 'A']);
+    assert.deepEqual(danach.ok.abrufe.map((u) => new URL(u).pathname), [`/profil/${profil}`, `/profil/${profil}`, '/news/detail/d']);
+
+    // ohne „neu“ innerhalb von 10 Minuten: keine Abrufe
+    const [cache] = phpAufrufe([{ fn: 'artikel_von_profil', db, seiten: {}, args: [profil, 'college', false] }]);
+    assert.equal(cache.ok.artikel.length, 4);
+    assert.deepEqual(cache.ok.abrufe, []);
+  } finally {
+    rmSync(ordner, { recursive: true, force: true });
+  }
 });
 
 test('Zwei Medien: Profil-Links und Artikel-Adressen von campus-a.at', async () => {
@@ -122,6 +129,7 @@ test('Zwei Medien: Profil-Links und Artikel-Adressen von campus-a.at', async () 
 
 test('Artikelliste von campus-a.at auslesen (/news/news-detail/)', async () => {
   const { campusAListe } = await import('./campus-fixtures.mjs');
+  const listeParsen = (html, medium) => php('liste_parsen', html, medium);
   assert.deepEqual(listeParsen(campusAListe, 'campus-a').artikel, [{
     url: 'https://campus-a.at/news/news-detail/das-geschaeft-mit-universitaets-rankings',
     titel: 'Das Geschäft mit Universitäts-Rankings', ressort: 'Wissenschaft',

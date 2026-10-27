@@ -89,4 +89,7 @@ export const loeschprotokoll = f('loeschprotokoll');
 export const einstellungenSpeichern = f('einstellungenSpeichern');
 export const statistik = f('statistik');
 export const exportieren = f('exportieren');
+export const mailEinstellungen = f('mailEinstellungen');
+export const mailEinstellungenSpeichern = f('mailEinstellungenSpeichern');
+export const testMail = f('testMail');
 // Einspielen und Zurücksetzen gibt es nur in der Demo; auf dem Server über die Kommandozeile

@@ -1,23 +1,27 @@
-// Tests für den Server: Rollen, Rechte und Abläufe über die echte HTTP-API
+// Tests für den Server (PHP, wie auf World4You): Rollen, Rechte, Abläufe und E-Mails über die echte HTTP-API
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { serverErstellen } from '../server/server.js';
-import { adminAnlegen } from '../server/honorare.js';
+import { DatabaseSync } from 'node:sqlite';
+import { phpServerStarten, mailAbwarten } from './php-server.mjs';
 import { CAMPUS_A_PROFIL, campusSeiten, campusHolen } from './campus-fixtures.mjs';
 
-let server;
+let php;
 let db;
 let basis;
 
 before(async () => {
-  ({ server, db } = serverErstellen({
-    port: 0, host: '127.0.0.1', datenbank: ':memory:', proxy: false, cookieSecure: false, campusHolen,
-  }));
-  await new Promise((r) => server.listen(0, '127.0.0.1', r));
-  basis = `http://127.0.0.1:${server.address().port}`;
+  php = await phpServerStarten({ campusHolen });
+  basis = php.basis;
 });
 
-after(() => new Promise((r) => server.close(r)));
+after(async () => {
+  db?.close();
+  await php.stop();
+  assert.deepEqual(php.fehler, [], 'keine PHP-Fehler oder Warnungen');
+});
+
+/** Direkter Zugriff auf die Datenbank-Datei des PHP-Servers */
+const datenbank = () => (db ??= new DatabaseSync(php.datenbank));
 
 /** kleiner Client mit eigenem Cookie – wie ein Browser */
 function client() {
@@ -51,7 +55,7 @@ const AT_IBAN = 'AT611904300234573201';
 const k = {};
 
 test('erstes Admin-Konto und Startpasswort', async () => {
-  const { passwort } = await adminAnlegen(db, { email: 'Admin@Example.org', vorname: 'Alex', nachname: 'Admin' });
+  const passwort = php.cli('admin', 'Admin@Example.org', 'Alex', 'Admin').match(/Startpasswort:\s+(\S+)/)[1];
   k.admin = client();
   const ich = await k.admin.ok('anmelden', 'admin@example.org', passwort);
   assert.equal(ich.muss_passwort_aendern, true);
@@ -60,6 +64,33 @@ test('erstes Admin-Konto und Startpasswort', async () => {
   assert.match((await k.admin.aufruf('erstesPasswortSetzen', passwort)).fehler, /Startpasswort/);
   await k.admin.ok('erstesPasswortSetzen', 'admin-passwort-1');
   assert.equal((await k.admin.ok('aktuellerNutzer')).muss_passwort_aendern, false);
+});
+
+test('E-Mail-Versand einrichten (Admin): Passwort bleibt geheim, Test-E-Mail', async () => {
+  const mail = {
+    aktiv: true, host: '127.0.0.1', port: php.smtp.port, verschluesselung: 'keine', benutzer: 'honorare@example.org',
+    passwort: 'smtp-geheim', absender: 'honorare@example.org', absender_name: 'campus a Honorarnoten',
+    redaktion: 'redaktion@example.org', buchhaltung: 'kasse-postfach@example.org', admin: 'chef@example.org',
+    adresse: 'https://honorare.example.org',
+  };
+  assert.match((await k.admin.aufruf('mailEinstellungenSpeichern', { ...mail, redaktion: 'kein-mail' })).fehler, /gültige E-Mail/);
+  await k.admin.ok('mailEinstellungenSpeichern', mail);
+  const e = await k.admin.ok('mailEinstellungen');
+  assert.equal(e.passwort, undefined, 'Passwort wird nie ausgeliefert');
+  assert.equal(e.passwort_gesetzt, true);
+  assert.equal(e.adresse, 'https://honorare.example.org/');
+  // leeres Passwortfeld = unverändert
+  await k.admin.ok('mailEinstellungenSpeichern', { ...mail, passwort: '' });
+  const test = await k.admin.ok('testMail');
+  assert.equal(test.an, 'admin@example.org');
+  const m = php.smtp.mails.find((x) => x.betreff === 'Test-E-Mail der Honorarnoten');
+  assert.ok(m, 'Test-E-Mail angekommen');
+  assert.equal(m.an, 'admin@example.org');
+  assert.deepEqual(php.smtp.anmeldungen.slice(-2), ['honorare@example.org', 'smtp-geheim'], 'Anmeldung mit gespeichertem Passwort');
+  assert.match(m.von, /"campus a Honorarnoten" <honorare@example\.org>/);
+  assert.match(m.html, /Der E-Mail-Versand funktioniert/);
+  assert.match(m.text, /Zur App: https:\/\/honorare\.example\.org\//);
+  assert.equal((await k.admin.aufruf('mailEinstellungen')).status, 200);
 });
 
 test('Anmeldung: falsches Passwort und unbekannte E-Mail geben dieselbe Meldung', async () => {
@@ -84,6 +115,8 @@ test('Zugang anfragen und freischalten', async () => {
 
   const zugang = {};
   for (const a of anfragen) zugang[a.email] = await k.admin.ok('anfrageFreischalten', a.id, ['autor']);
+  assert.equal(zugang['anna@example.org'].mail, true, 'Zugangsdaten gehen per E-Mail hinaus');
+  k.zugang = zugang;
   assert.match((await k.admin.aufruf('anfrageFreischalten', anfragen[0].id, ['autor'])).fehler, /bereits bearbeitet/);
 
   k.anna = client();
@@ -248,7 +281,7 @@ test('Honorarsätze: Admin legt fest, alle sehen sie, ungültige Werte abgelehnt
     college: { kolumne: 17.5, ausserordentlich: null, redigieren: 2 }, 'campus-a': { kolumne: 25, ausserordentlich: 80 },
   });
   // ältere Einstellungen ohne Medium gelten für beide
-  db.prepare("update einstellungen set wert = ? where schluessel = 'honorarsaetze'").run(JSON.stringify({ kolumne: 16, ausserordentlich: null }));
+  datenbank().prepare("update einstellungen set wert = ? where schluessel = 'honorarsaetze'").run(JSON.stringify({ kolumne: 16, ausserordentlich: null }));
   assert.equal((await k.anna.ok('einstellungen')).honorarsaetze['campus-a'].kolumne, 16);
 });
 
@@ -439,12 +472,46 @@ test('Redigieren (campus a college): Kategorie wie Kolumne, Anzahl Texte × Satz
   assert.deepEqual([zurueck.kategorie, zurueck.anzahl, zurueck.betrag, zurueck.zurueck_grund], ['redigieren', 4, 10, 'Bitte Zeitraum angeben']);
 });
 
+test('E-Mails: Anfrage, Zugang, Einreichen, Annehmen, Ablehnen, Bezahlen', async () => {
+  const mail = (an, betreff) => mailAbwarten(php.smtp, (m) => m.an === an && betreff.test(m.betreff));
+  const anfrage = await mail('chef@example.org', /^Neue Zugangsanfrage: Anna Autorin$/);
+  assert.ok(anfrage, 'Zugangsanfrage an den Admin');
+  assert.match(anfrage.text, /Nachricht: „Hallo“/);
+  assert.match(anfrage.html, /href="https:\/\/honorare\.example\.org\/#\/admin\/anfragen"/);
+
+  const zugang = await mail('anna@example.org', /^Dein Zugang zu den Honorarnoten$/);
+  assert.ok(zugang?.text.includes(k.zugang['anna@example.org'].passwort), 'Startpasswort in der Willkommens-Mail');
+
+  const nummer = k.note.nummer;
+  const redaktion = await mail('redaktion@example.org', new RegExp(`^Neue Honorarnote von Anna Müller \\(${nummer}\\)$`));
+  assert.ok(redaktion, 'neue Honorarnote an die Redaktion');
+  assert.match(redaktion.html, new RegExp(`#/redaktion/${k.note.id}`));
+  assert.match(redaktion.text, /Kolumne 1 \(01\.09\.2026\): € 15,00/);
+  assert.match(redaktion.text, /Gesamt: € 75,50/);
+  assert.ok(!redaktion.text.includes('AT61'), 'keine IBAN in der Mail an die Redaktion');
+  assert.ok(await mail('anna@example.org', new RegExp(`^Deine Honorarnote ${nummer} ist eingegangen$`)), 'Eingangsbestätigung');
+
+  const angenommen = await mail('anna@example.org', new RegExp(`^Honorarnote ${nummer} angenommen$`));
+  assert.match(angenommen.text, /Betrag geändert bei „Interview“: € 60,50 → € 50,00 \(Laut Vereinbarung\)/);
+  assert.ok(await mail('kasse-postfach@example.org', new RegExp(`^Zur Zahlung: ${nummer} \\(€ 65,00\\)$`)), 'an die Buchhaltung');
+  assert.ok(await mail('anna@example.org', new RegExp(`^Honorarnote ${nummer} bezahlt$`)), 'bezahlt');
+
+  const abgelehnt = await mail('bert@example.org', /bitte überarbeiten$/);
+  assert.match(abgelehnt.text, /Begründung der Redaktion:\nNicht erschienen/);
+  assert.match(abgelehnt.html, /#\/leistungen/);
+  // Gestaltung: Kopf in Markenfarbe, Knopf, Textfassung
+  assert.match(redaktion.html, /background:#8a5370/);
+  assert.match(redaktion.html, /Honorarnote prüfen/);
+  assert.ok(php.smtp.mails.every((m) => m.text && m.html), 'jede Mail mit Text- und HTML-Fassung');
+});
+
 test('Admin: Note löschen mit Protokoll, Export ohne Passwörter', async () => {
   assert.equal((await k.rita.aufruf('noteLoeschen', k.note.id)).status, 403);
   await k.admin.ok('noteLoeschen', k.note.id);
   assert.equal((await k.admin.ok('loeschprotokoll'))[0].nummer, k.note.nummer);
   const exp = await k.admin.ok('exportieren');
-  assert.ok(!exp.includes('scrypt$'));
+  assert.ok(!exp.includes('$2y$') && !exp.includes('scrypt$'), 'keine Passwort-Hashes');
+  assert.ok(!exp.includes('smtp-geheim'), 'kein Passwort des Mail-Postfachs');
 });
 
 test('Schutz: CSRF-Header, fremde Origin, unbekannte Funktionen', async () => {
@@ -471,7 +538,8 @@ test('Statische Dateien: Modus, Pfad-Tricks, Sicherheits-Header', async () => {
   const start = await fetch(`${basis}/`);
   assert.equal(start.status, 200);
   assert.match(start.headers.get('content-security-policy'), /frame-ancestors 'none'/);
-  assert.equal((await fetch(`${basis}/%2e%2e/server/db.js`)).status, 404);
+  assert.equal((await fetch(`${basis}/%2e%2e/server/lib/db.php`)).status, 404);
+  assert.equal((await fetch(`${basis}/../server/lib/db.php`)).status, 404);
   assert.equal((await fetch(`${basis}/..%2fpackage.json`)).status, 404);
   assert.equal((await fetch(`${basis}/.nojekyll`)).status, 404);
 });

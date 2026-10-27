@@ -7,7 +7,7 @@ import { MEDIEN, MEDIUM_KEYS } from '../lib/campus.js';
 import { fehlerText, kopierenMitFeedback, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 
 const REITER = {
-  anfragen: 'Anfragen', benutzer: 'Benutzer', noten: 'Honorarnoten', einstellungen: 'Einstellungen', daten: 'Daten',
+  anfragen: 'Anfragen', benutzer: 'Benutzer', noten: 'Honorarnoten', einstellungen: 'Einstellungen', mail: 'E-Mail', daten: 'Daten',
 };
 
 // Zuletzt erzeugte Zugangsdaten – bleiben sichtbar, bis der Admin sie wegklickt
@@ -26,6 +26,7 @@ function zugangsdatenHtml(z) {
   return `
     <section class="karte zugangsdaten" role="status">
       <h2>Zugangsdaten für ${esc(z.vorname)}</h2>
+      ${z.mail ? `<p class="erfolgbox">Die Zugangsdaten werden automatisch per E-Mail an ${esc(z.email)} geschickt.</p>` : ''}
       <p>Das Startpasswort wird nur jetzt angezeigt.</p>
       <div class="kopierblock">
         <div class="kopierzeile"><span class="kopier-label">E-Mail</span><span class="kopier-wert">${esc(z.email)}</span><span></span></div>
@@ -34,7 +35,7 @@ function zugangsdatenHtml(z) {
           <button type="button" class="btn btn-klein" data-z="pw">Kopieren</button></div>
       </div>
       <div class="aktionen">
-        <a class="btn btn-primaer" href="${esc(mailto)}">E-Mail vorbereiten</a>
+        <a class="btn${z.mail ? '' : ' btn-primaer'}" href="${esc(mailto)}">E-Mail vorbereiten</a>
         <button type="button" class="btn" data-z="text">Text kopieren</button>
         <button type="button" class="btn" data-z="fertig">Erledigt</button>
       </div>
@@ -309,6 +310,79 @@ async function einstellungen(inhalt, { store, neuLaden }) {
   });
 }
 
+/** E-Mail-Versand (SMTP, z. B. World4You): wer bekommt welche Benachrichtigung, Test-E-Mail */
+async function mail(inhalt, { store, nutzer: ich, neuLaden, istDemo }) {
+  const e = await store.mailEinstellungen();
+  const w = e.warteschlange ?? {};
+  const feld = (name, label, { typ = 'text', tipp = '', wert = e[name] ?? '', platzhalter = '' } = {}) => `
+      <label for="m-${name}">${esc(label)}</label>
+      <input id="m-${name}" name="${name}" type="${typ}" autocomplete="off" value="${esc(wert)}"${platzhalter ? ` placeholder="${esc(platzhalter)}"` : ''}>
+      ${tipp ? `<p class="tipp">${esc(tipp)}</p>` : ''}`;
+  inhalt.innerHTML = `
+    ${istDemo ? '<p class="hinweisbox">In der Demo werden keine E-Mails verschickt. Auf dem eigenen Server (z. B. World4You) gehen die Benachrichtigungen automatisch hinaus.</p>' : ''}
+    <div class="spalten">
+      <form class="karte" id="m-form" novalidate>
+        <h2>E-Mail-Benachrichtigungen</h2>
+        <label class="check"><input type="checkbox" name="aktiv" ${e.aktiv ? 'checked' : ''}> E-Mails automatisch verschicken</label>
+        <p class="tipp">Neue Honorarnoten an die Redaktion, Bestätigung, Annahme, Rückgabe und Zahlung an die Autor:innen,
+          angenommene Honorarnoten an die Buchhaltung, Zugangsanfragen an den Admin.</p>
+        <h3>Wer bekommt was?</h3>
+        ${feld('redaktion', 'Postfach der Redaktion', { typ: 'email', tipp: 'Bekommt jede neu eingereichte Honorarnote.' })}
+        ${feld('buchhaltung', 'Postfach der Buchhaltung (optional)', { typ: 'email', tipp: 'Bekommt angenommene Honorarnoten zur Zahlung.' })}
+        ${feld('admin', 'Postfach für Zugangsanfragen (optional)', { typ: 'email', tipp: 'Leer = Postfach der Redaktion.' })}
+        <label class="check"><input type="checkbox" name="zugangsdaten" ${e.zugangsdaten ? 'checked' : ''}> Startpasswörter neuer Konten automatisch per E-Mail schicken</label>
+        <h3 class="abstand-oben">Absender (SMTP)</h3>
+        <p class="tipp">Bei World4You: Server <strong>smtp.world4you.com</strong>, Port <strong>587</strong>, als Benutzer die
+          E-Mail-Adresse des Postfachs und dessen Passwort.</p>
+        ${feld('absender', 'Absender-Adresse', { typ: 'email', platzhalter: 'honorare@deine-domain.at' })}
+        ${feld('absender_name', 'Absendername')}
+        <div class="zeile">
+          <div class="feld">${feld('host', 'SMTP-Server')}</div>
+          <div class="feld">${feld('port', 'Port', { wert: String(e.port ?? 587) })}</div>
+        </div>
+        <label for="m-verschluesselung">Verschlüsselung</label>
+        <select id="m-verschluesselung" name="verschluesselung">
+          ${[['starttls', 'STARTTLS (Port 587)'], ['ssl', 'SSL/TLS (Port 465)'], ['keine', 'keine (nicht empfohlen)']]
+            .map(([v, l]) => `<option value="${v}"${e.verschluesselung === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}
+        </select>
+        ${feld('benutzer', 'Benutzername', { tipp: 'Meist die Absender-Adresse.' })}
+        ${feld('passwort', 'Passwort des Postfachs', { typ: 'password', wert: '', platzhalter: e.passwort_gesetzt ? '•••••••• (gespeichert – leer lassen = unverändert)' : '' })}
+        ${feld('adresse', 'Adresse der App (für Links in den E-Mails)', { platzhalter: e.adresse_vorschlag ?? 'https://deine-domain.at/' })}
+        <p class="feldfehler" role="alert"></p>
+        <button type="submit" class="btn btn-primaer">Speichern</button>
+      </form>
+      <section class="karte">
+        <h2>Testen</h2>
+        <p>Schickt sofort eine Test-E-Mail mit den gespeicherten Einstellungen.</p>
+        <label for="m-test">An</label>
+        <input id="m-test" type="email" value="${esc(ich.email)}">
+        <button type="button" class="btn abstand-oben" id="m-test-knopf">Test-E-Mail senden</button>
+        ${istDemo ? '' : `
+        <h3 class="abstand-oben">Versand</h3>
+        <p>${w.gesendet ?? 0} verschickt · ${w.offen ?? 0} warten${w.fehlgeschlagen ? ` · <strong>${w.fehlgeschlagen} fehlgeschlagen</strong>` : ''}</p>
+        ${w.letzter_fehler ? `<p class="fehlerbox">Letzter Fehler: ${esc(w.letzter_fehler)}</p>` : ''}`}
+      </section>
+    </div>`;
+  const form = inhalt.querySelector('#m-form');
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const daten = Object.fromEntries(['redaktion', 'buchhaltung', 'admin', 'absender', 'absender_name', 'host', 'port', 'verschluesselung',
+      'benutzer', 'passwort', 'adresse'].map((k) => [k, form.elements[k].value]));
+    daten.aktiv = form.elements.aktiv.checked;
+    daten.zugangsdaten = form.elements.zugangsdaten.checked;
+    if (!daten.benutzer) daten.benutzer = daten.absender;
+    mitSperre(form.querySelector('button[type=submit]'), () => versuche(() => store.mailEinstellungenSpeichern(daten), 'E-Mail-Einstellungen gespeichert.', neuLaden));
+  });
+  inhalt.querySelector('#m-test-knopf').addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    try {
+      const r = await store.testMail(inhalt.querySelector('#m-test').value);
+      meldung(`Test-E-Mail an ${r.an} verschickt.`, 'erfolg');
+    } catch (f) {
+      meldung(fehlerText(f), 'fehler');
+    }
+  }));
+}
+
 function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
   inhalt.innerHTML = istDemo ? `
     <div class="spalten">
@@ -384,5 +458,5 @@ export async function render(el, ctx) {
     <div id="a-inhalt"></div>`;
   zugangsdatenBinden(el.querySelector('#a-zugang'), ctx.neuLaden);
   const inhalt = el.querySelector('#a-inhalt');
-  await ({ anfragen, benutzer, noten, einstellungen, daten })[tab](inhalt, ctx);
+  await ({ anfragen, benutzer, noten, einstellungen, mail, daten })[tab](inhalt, ctx);
 }

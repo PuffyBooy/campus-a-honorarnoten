@@ -842,6 +842,31 @@ export function statistik() {
   };
 }
 
+// E-Mail-Versand gibt es nur auf dem Server; die Demo merkt sich die Einstellungen nur zum Ausprobieren
+const MAIL_DEMO = {
+  aktiv: false, host: 'smtp.world4you.com', port: 587, verschluesselung: 'starttls', benutzer: '', absender: '',
+  absender_name: 'campus a Honorarnoten', redaktion: '', buchhaltung: '', admin: '', zugangsdaten: true, adresse: '',
+};
+
+export function mailEinstellungen() {
+  brauche('admin');
+  const { passwort, ...e } = { ...MAIL_DEMO, ...kopie(db.mail ?? {}) };
+  return { ...e, passwort_gesetzt: Boolean(passwort), demo: true, warteschlange: { offen: 0, fehlgeschlagen: 0, gesendet: 0, letzter_fehler: '' } };
+}
+
+export function mailEinstellungenSpeichern(d = {}) {
+  brauche('admin');
+  const alt = db.mail ?? {};
+  db.mail = { ...MAIL_DEMO, ...alt, ...Object.fromEntries(Object.keys(MAIL_DEMO).filter((k) => k in d).map((k) => [k, d[k]])) };
+  if (d.passwort) db.mail.passwort = String(d.passwort);
+  speichern();
+}
+
+export function testMail() {
+  brauche('admin');
+  throw new Fehler('In der Demo werden keine E-Mails verschickt – das geht nur auf dem eigenen Server.');
+}
+
 /** Sicherung aller Daten als JSON (enthält IBANs – vertraulich behandeln!) */
 export function exportieren() {
   brauche('admin');

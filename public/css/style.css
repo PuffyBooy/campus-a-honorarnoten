@@ -395,6 +395,14 @@ tr.inaktiv { opacity: .6; }
 label.btn { margin: 0; font-weight: 600; }
 
 /* ---------- Fußzeile ---------- */
+/* Einrichtungsseite (einrichten.php auf dem Server) */
+.einrichtung-seite { max-width: 720px; }
+.pruefliste { list-style: none; padding: 0; margin: 0; }
+.pruefliste li { padding: .45rem 0; border-bottom: 1px solid var(--rand); }
+.pruefliste li:last-child { border-bottom: 0; }
+.pruefliste .ok strong { color: var(--erfolg); }
+.pruefliste .fehlt strong { color: var(--gefahr); }
+
 .fuss { display: none; }
 body.modus-demo .fuss { display: block; }
 .fuss { max-width: 1100px; margin: 2rem auto 5rem; padding: 0 1rem; color: var(--text-leise); font-size: .8rem; }

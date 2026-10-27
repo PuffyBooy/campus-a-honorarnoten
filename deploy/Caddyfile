@@ -1,9 +1,0 @@
-# Caddy: HTTPS (kostenloses Zertifikat von Let's Encrypt, automatisch erneuert)
-# und Weiterleitung an den Honorarnoten-Server.
-__DOMAIN__ {
-	encode gzip
-	header Strict-Transport-Security "max-age=31536000"
-	reverse_proxy 127.0.0.1:__PORT__ {
-		header_up X-Real-IP {remote_host}
-	}
-}
