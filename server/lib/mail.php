@@ -101,11 +101,11 @@ function mails_verschicken(PDO $db, int $max = 20): int
     return $gesendet;
 }
 
-/** Sofort senden (Test-E-Mail); wirft bei Fehlern mit verständlicher Meldung */
-function mail_sofort(array $e, string $an, array $mail): void
+/** Sofort senden (Test-E-Mail, PDF an sich selbst); wirft bei Fehlern mit verständlicher Meldung. Anhänge: [[name, typ, inhalt]] */
+function mail_sofort(array $e, string $an, array $mail, array $anhaenge = []): void
 {
     $smtp = new Smtp($e);
-    $smtp->senden($an, $mail['betreff'], $mail['html'], $mail['text']);
+    $smtp->senden($an, $mail['betreff'], $mail['html'], $mail['text'], $anhaenge);
     $smtp->beenden();
 }
 
@@ -172,7 +172,7 @@ final class Smtp
         return $this->antwort($erwartet);
     }
 
-    public function senden(string $an, string $betreff, string $html, string $text): void
+    public function senden(string $an, string $betreff, string $html, string $text, array $anhaenge = []): void
     {
         $von = $this->e['absender'];
         $this->befehl("MAIL FROM:<$von>", 250);
@@ -189,13 +189,26 @@ final class Smtp
             'Message-ID: <' . bin2hex(random_bytes(16)) . '@' . $domain . '>',
             'MIME-Version: 1.0',
             'Auto-Submitted: auto-generated',
-            'Content-Type: multipart/alternative; boundary="' . $grenze . '"',
         ];
         $koerper = "--$grenze\r\nContent-Type: text/plain; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
             . chunk_split(base64_encode($text))
             . "--$grenze\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Transfer-Encoding: base64\r\n\r\n"
             . chunk_split(base64_encode($html))
             . "--$grenze--\r\n";
+        if ($anhaenge) {
+            // Text und HTML als ein Teil, dahinter die Anhänge
+            $aussen = 'hn-' . bin2hex(random_bytes(12));
+            $teile = "--$aussen\r\nContent-Type: multipart/alternative; boundary=\"$grenze\"\r\n\r\n" . $koerper;
+            foreach ($anhaenge as [$name, $typ, $inhalt]) {
+                $name = str_replace(['"', "\r", "\n"], '', $name);
+                $teile .= "--$aussen\r\nContent-Type: $typ; name=\"$name\"\r\nContent-Transfer-Encoding: base64\r\n"
+                    . "Content-Disposition: attachment; filename=\"$name\"\r\n\r\n" . chunk_split(base64_encode($inhalt));
+            }
+            $kopf[] = 'Content-Type: multipart/mixed; boundary="' . $aussen . '"';
+            $koerper = $teile . "--$aussen--\r\n";
+        } else {
+            $kopf[] = 'Content-Type: multipart/alternative; boundary="' . $grenze . '"';
+        }
         // Zeilen, die mit einem Punkt beginnen, verdoppeln (SMTP-Regel); base64 enthält keine
         $nachricht = implode("\r\n", $kopf) . "\r\n\r\n" . $koerper;
         $nachricht = preg_replace('/^\./m', '..', $nachricht);

@@ -7,6 +7,7 @@ require_once __DIR__ . '/lib/app.php';
 
 const COOKIE = 'hn_sitzung';
 const MAX_BODY = 100 * 1024;
+const MAX_BODY_PDF = 9 * 1024 * 1024; // pdfMailen: PDF als base64 (bis 6 MB)
 
 const SICHERHEITS_HEADER = [
     'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
@@ -73,8 +74,9 @@ function api(): array
     $name = (string) ($_GET['f'] ?? '');
     if (!in_array($name, Honorare::FUNKTIONEN, true)) return [404, ['fehler' => 'Unbekannte Funktion.']];
 
-    $roh = file_get_contents('php://input', false, null, 0, MAX_BODY + 1);
-    if (strlen((string) $roh) > MAX_BODY) return [413, ['fehler' => 'Anfrage zu groß.']];
+    $max = $name === 'pdfMailen' ? MAX_BODY_PDF : MAX_BODY;
+    $roh = file_get_contents('php://input', false, null, 0, $max + 1);
+    if (strlen((string) $roh) > $max) return [413, ['fehler' => $name === 'pdfMailen' ? 'Das PDF ist zu groß zum Verschicken. Bitte herunterladen.' : 'Anfrage zu groß.']];
     $body = $roh === '' || $roh === false ? [] : json_decode($roh, true);
     if (!is_array($body)) return [400, ['fehler' => 'Ungültige Anfrage.']];
     $args = is_array($body['args'] ?? null) ? array_values($body['args']) : [];
@@ -108,6 +110,9 @@ function api(): array
     }
     if (in_array($name, ['passwortAendern', 'erstesPasswortSetzen'], true) && !versuch_erlaubt($db, 'passwort:' . ($nutzer['id'] ?? $ip), 10, 900)) {
         return [429, ['fehler' => 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.']];
+    }
+    if ($name === 'pdfMailen' && !versuch_erlaubt($db, 'pdfmail:' . ($nutzer['id'] ?? $ip), 20, 900)) {
+        return [429, ['fehler' => 'Zu viele E-Mails. Bitte in 15 Minuten erneut versuchen.']];
     }
     if ($name === 'testMail' && !versuch_erlaubt($db, 'testmail:' . ($nutzer['id'] ?? $ip), 10, 900)) {
         return [429, ['fehler' => 'Zu viele Test-E-Mails. Bitte in 15 Minuten erneut versuchen.']];

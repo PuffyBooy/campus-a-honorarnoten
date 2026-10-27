@@ -301,6 +301,31 @@ test('Admin: Rollen, letzter Admin, Deaktivieren beendet Sitzungen', async () =>
   await k.admin.ok('nutzerAktivSetzen', bert.id, true);
 });
 
+test('Zahlungskonto (SEPA): nur Admin speichert, Buchhaltung liest, sonst niemand', async () => {
+  assert.deepEqual(await k.kasse.ok('zahlungskonto'), { name: '', iban: '', bic: '' });
+  assert.equal((await k.rita.aufruf('zahlungskonto')).status, 403);
+  assert.equal((await k.kasse.aufruf('zahlungskontoSpeichern', { name: 'x', iban: 'AT022050302101023600' })).status, 403);
+  assert.match((await k.admin.aufruf('zahlungskontoSpeichern', { name: 'Firma', iban: 'AT00 1234' })).fehler, /IBAN/);
+  assert.match((await k.admin.aufruf('zahlungskontoSpeichern', { iban: 'AT022050302101023600' })).fehler, /Namen/);
+  const konto = await k.admin.ok('zahlungskontoSpeichern', { name: ' campus a Medien GmbH ', iban: 'at02 2050 3021 0102 3600', bic: 'spihat22xxx' });
+  assert.deepEqual(konto, { name: 'campus a Medien GmbH', iban: 'AT022050302101023600', bic: 'SPIHAT22XXX' });
+  assert.deepEqual(await k.kasse.ok('zahlungskonto'), konto);
+  assert.equal((await k.rita.ok('einstellungen')).zahlungskonto, undefined, 'nicht in den allgemeinen Einstellungen');
+});
+
+test('Buchhaltung: PDF an sich selbst mailen (als Anhang)', async () => {
+  const pdf = Buffer.from('%PDF-1.7\nTest\n%%EOF').toString('base64');
+  assert.equal((await k.rita.aufruf('pdfMailen', 'a.pdf', pdf)).status, 403);
+  assert.match((await k.kasse.aufruf('pdfMailen', '../a.pdf', pdf)).fehler, /Dateiname/);
+  assert.match((await k.kasse.aufruf('pdfMailen', 'a.pdf', Buffer.from('<html>').toString('base64'))).fehler, /kein PDF/);
+  assert.deepEqual(await k.kasse.ok('pdfMailen', 'Praemienabrechnungen_2026_KW43.pdf', pdf, 'Prämienabrechnungen KW 43'), { an: 'kasse@example.org' });
+  const m = await mailAbwarten(php.smtp, (x) => x.an === 'kasse@example.org' && x.betreff === 'Prämienabrechnungen KW 43');
+  assert.match(m.roh, /Content-Type: multipart\/mixed/);
+  assert.match(m.roh, /Content-Disposition: attachment; filename="Praemienabrechnungen_2026_KW43\.pdf"/);
+  assert.ok(m.roh.replace(/\r\n/g, '').includes(pdf), 'PDF unverändert im Anhang');
+  assert.match(m.text, /im Anhang/);
+});
+
 test('Admin: E-Mail-Adresse ändern, alte und neue Adresse bekommen eine Info', async () => {
   const bert = (await k.admin.ok('nutzerListe')).find((n) => n.email === 'bert@example.org');
   assert.equal((await k.rita.aufruf('emailAendern', bert.id, 'b@example.org')).status, 403);

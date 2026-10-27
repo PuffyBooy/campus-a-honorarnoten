@@ -612,3 +612,4 @@ body.modus-demo .fuss-demo { display: block; }
   /* Handy: in der Prüfansicht nur die Abrechnung, ohne Reiter und Filter */
   .inhalt:has(.arbeitsplatz.mit-auswahl) :is(.reiter, .redaktion-filter) { display: none; }
 }
+.kennzahl-text { font-size: 1rem !important; }

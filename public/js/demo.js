@@ -178,6 +178,8 @@ export async function demoDaten(db, { passwortHash }) {
   );
 
   db.einstellungen.datenschutzKontakt = 'office@campus-a-college.at';
+  // Beispielkonto für die SEPA-Datei der Buchhaltung
+  db.einstellungen.zahlungskonto = { name: 'campus a Medien GmbH', iban: 'AT022050302101023600', bic: 'SPIHAT22XXX' };
   db.einstellungen.betreiber = BEISPIEL_BETREIBER();
 }
 

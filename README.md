@@ -104,16 +104,22 @@ Lokal starten: `npm run dev` → http://localhost:5173
    pro Text (Standard **2 €**, im Admin unter „Prämiensätze“ einstellbar); der Server rechnet selbst
    nach. Auf der Prämienabrechnung (Word und PDF) steht es unter **„2. Außerordentliche Anerkennungsprämien“**, z. B.
    „Redigieren (7 Texte): September“.
-6. **Buchhaltung:** Das Bezahl-Terminal zeigt die angenommenen Prämienabrechnungen **nach Kalenderwoche**
-   (der Woche, in der die Redaktion sie angenommen hat), mit Summe pro Woche. Pro Woche gibt es zwei
-   Knöpfe:
+6. **Buchhaltung:** Oben stehen die offene Summe, was dieses Jahr ausgezahlt wurde, und das Zahlungskonto.
+   Darunter die angenommenen Prämienabrechnungen **nach Kalenderwoche** (der Woche, in der die Redaktion
+   sie angenommen hat), mit Summe pro Woche. Pro Woche:
    - **„PDF herunterladen“:** alle Prämienabrechnungen der Woche in einer PDF-Datei, jede Note ab einer
      neuen Seite, im Aufbau der offiziellen Vorlage (mit Adresse und IBAN zum Überweisen).
+   - **„PDF an mich mailen“:** dasselbe PDF als Anhang an die eigene E-Mail-Adresse (braucht den
+     E-Mail-Versand; bis 6 MB, größere bitte herunterladen).
+   - **„SEPA-Datei“:** Sammelüberweisung als Datei (pain.001.001.09, geprüft gegen das offizielle Schema)
+     zum Hochladen ins Online-Banking (z. B. George, ELBA). Fragt nach dem Ausführungsdatum. Abgebucht
+     wird vom **Zahlungskonto**, das der Admin unter **Admin → Einstellungen** einträgt (sehen nur
+     Buchhaltung und Admin). Verwendungszweck: Nummer, Medium und Monat der Prämienabrechnung.
    - **„Woche als bezahlt markieren“:** markiert alle Prämienabrechnungen der Woche mit heutigem Datum als
      bezahlt (alle oder keine).
 
-   Im Reiter „Bezahlt“ stehen die bezahlten Wochen der letzten 12 Wochen, das PDF lässt sich dort
-   erneut herunterladen.
+   Bei mehreren Wochen gibt es zusätzlich „Alle als ein PDF“. Im Reiter „Bezahlt“ stehen die bezahlten
+   Wochen der letzten 12 Wochen, das PDF lässt sich dort erneut herunterladen oder mailen.
 7. **Admin-Terminal:** Zugangsanfragen freischalten oder ablehnen (offene Anfragen werden in der
    Navigation gezählt), Personen direkt anlegen, Rollen vergeben (Checkboxen), Konten
    deaktivieren oder löschen, Passwort zurücksetzen (neues Startpasswort), **E-Mail-Adresse ändern**

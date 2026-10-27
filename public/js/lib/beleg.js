@@ -8,11 +8,22 @@ export async function honorarnoteHerunterladen(note) {
   downloadBlob(docxDateiname(note), blob);
 }
 
-/** Mehrere Prämienabrechnungen als ein PDF herunterladen (jede Note ab einer neuen Seite) */
-export async function honorarnotenPdfHerunterladen(noten, dateiname) {
+/** Mehrere Prämienabrechnungen als ein PDF (jede Note ab einer neuen Seite), als Bytes */
+export async function honorarnotenPdfBytes(noten) {
   const [PDFLib, { honorarnotenPdf }] = await Promise.all([
     import('../../vendor/pdf-lib.mjs'), import('./honorarnote-pdf.js'),
   ]);
-  const bytes = await honorarnotenPdf(noten, PDFLib);
-  downloadBlob(dateiname, new Blob([bytes], { type: 'application/pdf' }));
+  return honorarnotenPdf(noten, PDFLib);
+}
+
+/** Mehrere Prämienabrechnungen als ein PDF herunterladen */
+export async function honorarnotenPdfHerunterladen(noten, dateiname) {
+  downloadBlob(dateiname, new Blob([await honorarnotenPdfBytes(noten)], { type: 'application/pdf' }));
+}
+
+/** Bytes als base64 (in Stücken, damit große PDFs den Stapel nicht sprengen) */
+export function base64(bytes) {
+  let s = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(s);
 }
