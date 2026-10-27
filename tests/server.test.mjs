@@ -496,7 +496,7 @@ test('E-Mails: Anfrage, Zugang, Einreichen, Annehmen, Ablehnen, Bezahlen', async
   assert.match(abgelehnt.text, /Begründung der Redaktion:\nNicht erschienen/);
   assert.match(abgelehnt.html, /#\/leistungen/);
   // Gestaltung: Kopf in Markenfarbe, Knopf, Textfassung
-  assert.match(redaktion.html, /background:#8a5370/);
+  assert.match(redaktion.html, /background:#0f6b66/);
   assert.match(redaktion.html, /Prämienabrechnung prüfen/);
   assert.ok(php.smtp.mails.every((m) => m.text && m.html), 'jede Mail mit Text- und HTML-Fassung');
 });

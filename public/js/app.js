@@ -28,7 +28,7 @@ let flash = null;
 
 const ROUTEN = [
   { pfad: 'leistungen', view: leistungen, rolle: ['autor'], titel: 'Meine Leistungen' },
-  { pfad: 'noten', view: noten, rolle: ['autor'], titel: 'Meine Prämienabrechnungen' },
+  { pfad: 'noten', view: noten, rolle: ['autor'], titel: 'Meine Abrechnungen' },
   { pfad: 'extern', view: generator, rolle: ['autor'], titel: 'Externe Honorarnote' },
   { pfad: 'redaktion', view: redaktion, rolle: ['redaktion', 'admin'], titel: 'Redaktion' },
   { pfad: 'redaktion/:id', view: redaktionDetail, rolle: ['redaktion', 'admin'] },
@@ -38,6 +38,9 @@ const ROUTEN = [
   { pfad: 'admin/:tab', view: admin, rolle: ['admin'] },
   { pfad: 'profil', view: profil, rolle: ['autor', 'redaktion', 'buchhaltung', 'admin'] },
 ];
+
+/** „Maria Muster“ -> „MM“ für den runden Knopf zum Profil */
+const initialen = (n) => (`${n.vorname?.[0] ?? ''}${n.nachname?.[0] ?? ''}`.toUpperCase() || (n.email?.[0] ?? '?').toUpperCase());
 
 const darf = (nutzer, route) => route.rolle.some((r) => nutzer.rollen.includes(r));
 const kontoEinrichten = (nutzer) => nutzer.muss_passwort_aendern || !store.profilVollstaendig(nutzer);
@@ -111,7 +114,7 @@ async function renderNav(nutzer, pfad) {
   nav.innerHTML = `<div class="nav-links">${links}</div>
     <div class="nav-konto">
       <a href="#/profil" class="nav-user"${pfad === 'profil' ? ' aria-current="page"' : ''}
-         title="${esc(nutzer.email)}">${esc(nutzer.vorname)} ${esc(nutzer.nachname)}</a>
+         title="Mein Profil · ${esc(nutzer.email)}"><span class="avatar" aria-hidden="true">${esc(initialen(nutzer))}</span>${esc(nutzer.vorname)} ${esc(nutzer.nachname)}</a>
       <button type="button" class="btn-link" id="abmelden">Abmelden</button>
     </div>`;
   nav.querySelector('#abmelden').addEventListener('click', async () => {

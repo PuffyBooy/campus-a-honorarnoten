@@ -8,8 +8,15 @@ import { hinweisHtml } from '../lib/rechtliches.js';
 export function render(el, { store, istDemo, recht, nachAnmeldung }) {
   el.innerHTML = `
     <div class="login-raster">
+      <section class="login-intro">
+        <div class="login-logos">
+          <img src="img/logo-campus-a.svg" alt="campus a – Das Studierendenmagazin">
+          <img src="img/logo-campus-a-college.png" alt="campus a college – Die Schülerzeitung für alle Schüler*innen">
+        </div>
+        <p>Hier erfasst ihr eure Beiträge für campus a und campus a college und reicht sie einmal im Monat als Prämienabrechnung ein.</p>
+      </section>
       <section class="karte">
-        <h1>Anerkennungsprämien</h1>
+        <h1>Anmelden</h1>
         <div class="reiter" role="tablist">
           <button type="button" role="tab" id="t-anmelden" aria-selected="true" aria-controls="p-anmelden">Anmelden</button>
           <button type="button" role="tab" id="t-registrieren" aria-selected="false" aria-controls="p-registrieren">Zugang anfragen</button>

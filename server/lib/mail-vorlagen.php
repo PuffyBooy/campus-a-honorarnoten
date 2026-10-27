@@ -4,8 +4,8 @@
 // und Apple Mail gleich aus. Jede Mail hat auch eine reine Textfassung.
 declare(strict_types=1);
 
-const FARBE = '#8a5370';
-const FARBE_HELL = '#f5edf1';
+const FARBE = '#0f6b66';      // Petrol, wie die App
+const FARBE_HELL = '#e3f1ef';
 
 /**
  * Baut eine Mail.
@@ -30,14 +30,14 @@ function mail_bauen(array $t): array
 
     $html = '';
     foreach ($t['absaetze'] ?? [] as $a) {
-        $html .= '<p style="margin:0 0 14px;font-size:16px;line-height:1.55;color:#1a1a1a;">' . nl2br(h($a)) . '</p>';
+        $html .= '<p style="margin:0 0 14px;font-size:16px;line-height:1.55;color:#1c2321;">' . nl2br(h($a)) . '</p>';
     }
     if (!empty($t['hinweis'])) {
         [$text, $art] = $t['hinweis'] + [1 => 'info'];
         [$hg, $rand] = $hinweisFarben[$art] ?? $hinweisFarben['info'];
         $html .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 18px;"><tr>'
             . '<td style="background:' . $hg . ';border-left:4px solid ' . $rand . ';border-radius:6px;padding:12px 16px;'
-            . 'font-size:15px;line-height:1.5;color:#1a1a1a;">' . nl2br(h($text)) . '</td></tr></table>';
+            . 'font-size:15px;line-height:1.5;color:#1c2321;">' . nl2br(h($text)) . '</td></tr></table>';
     }
     if (!empty($t['tabelle'])) {
         $html .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px;border-collapse:collapse;">';
@@ -45,23 +45,23 @@ function mail_bauen(array $t): array
             [$l, $r] = $zeile;
             // dritter Wert true: Festbreitenschrift (z. B. Startpasswort – l und I nicht verwechseln)
             $schrift = !empty($zeile[2]) ? 'font-family:Menlo,Consolas,\'Courier New\',monospace;font-size:17px;letter-spacing:.05em;' : 'font-size:15px;';
-            $html .= '<tr><td style="padding:7px 0;border-bottom:1px solid #eee7ea;font-size:14px;color:#5f5a5d;width:42%;">' . h($l) . '</td>'
-                . '<td style="padding:7px 0;border-bottom:1px solid #eee7ea;' . $schrift . 'color:#1a1a1a;font-weight:600;">' . h($r) . '</td></tr>';
+            $html .= '<tr><td style="padding:7px 0;border-bottom:1px solid #e3ebe8;font-size:14px;color:#59645f;width:42%;">' . h($l) . '</td>'
+                . '<td style="padding:7px 0;border-bottom:1px solid #e3ebe8;' . $schrift . 'color:#1c2321;font-weight:600;">' . h($r) . '</td></tr>';
         }
         $html .= '</table>';
     }
     if (!empty($t['positionen'])) {
         $html .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px;border-collapse:collapse;">'
-            . '<tr><td style="padding:6px 8px 6px 0;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#5f5a5d;border-bottom:2px solid ' . FARBE . ';">Leistung</td>'
-            . '<td style="padding:6px 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#5f5a5d;border-bottom:2px solid ' . FARBE . ';white-space:nowrap;">Datum</td>'
-            . '<td align="right" style="padding:6px 0 6px 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#5f5a5d;border-bottom:2px solid ' . FARBE . ';white-space:nowrap;">Betrag</td></tr>';
+            . '<tr><td style="padding:6px 8px 6px 0;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#59645f;border-bottom:2px solid ' . FARBE . ';">Leistung</td>'
+            . '<td style="padding:6px 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#59645f;border-bottom:2px solid ' . FARBE . ';white-space:nowrap;">Datum</td>'
+            . '<td align="right" style="padding:6px 0 6px 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#59645f;border-bottom:2px solid ' . FARBE . ';white-space:nowrap;">Betrag</td></tr>';
         foreach ($t['positionen'] as [$titel, $datum, $betrag]) {
-            $html .= '<tr><td style="padding:8px 8px 8px 0;border-bottom:1px solid #eee7ea;font-size:15px;color:#1a1a1a;">' . h($titel) . '</td>'
-                . '<td style="padding:8px;border-bottom:1px solid #eee7ea;font-size:14px;color:#5f5a5d;white-space:nowrap;">' . h($datum) . '</td>'
-                . '<td align="right" style="padding:8px 0 8px 8px;border-bottom:1px solid #eee7ea;font-size:15px;color:#1a1a1a;white-space:nowrap;">' . h($betrag) . '</td></tr>';
+            $html .= '<tr><td style="padding:8px 8px 8px 0;border-bottom:1px solid #e3ebe8;font-size:15px;color:#1c2321;">' . h($titel) . '</td>'
+                . '<td style="padding:8px;border-bottom:1px solid #e3ebe8;font-size:14px;color:#59645f;white-space:nowrap;">' . h($datum) . '</td>'
+                . '<td align="right" style="padding:8px 0 8px 8px;border-bottom:1px solid #e3ebe8;font-size:15px;color:#1c2321;white-space:nowrap;">' . h($betrag) . '</td></tr>';
         }
         if (!empty($t['summe'])) {
-            $html .= '<tr><td colspan="2" style="padding:10px 8px 0 0;font-size:15px;font-weight:700;color:#1a1a1a;">Gesamt</td>'
+            $html .= '<tr><td colspan="2" style="padding:10px 8px 0 0;font-size:15px;font-weight:700;color:#1c2321;">Gesamt</td>'
                 . '<td align="right" style="padding:10px 0 0 8px;font-size:17px;font-weight:700;color:' . FARBE . ';white-space:nowrap;">' . h($t['summe']) . '</td></tr>';
         }
         $html .= '</table>';
@@ -77,22 +77,22 @@ function mail_bauen(array $t): array
     $seite = '<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">'
         . '<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">'
         . '<title>' . h($t['betreff']) . '</title></head>'
-        . '<body style="margin:0;padding:0;background:#f5f4f2;-webkit-text-size-adjust:100%;">'
+        . '<body style="margin:0;padding:0;background:#f3f6f5;-webkit-text-size-adjust:100%;">'
         . '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">' . h($t['vorschau'] ?? '') . '</div>'
-        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f5f4f2;"><tr><td align="center" style="padding:28px 12px;">'
+        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f6f5;"><tr><td align="center" style="padding:28px 12px;">'
         . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;font-family:-apple-system,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">'
         // Kopf
         . '<tr><td style="background:' . FARBE . ';border-radius:16px 16px 0 0;padding:22px 28px;">'
         . '<span style="font-family:Georgia,\'Times New Roman\',serif;font-size:24px;color:#ffffff;letter-spacing:.01em;">' . h($marke) . '</span>'
-        . '<span style="font-size:13px;color:#f5edf1;letter-spacing:.06em;text-transform:uppercase;padding-left:10px;">Anerkennungsprämien</span>'
+        . '<span style="font-size:13px;color:#e3f1ef;letter-spacing:.06em;text-transform:uppercase;padding-left:10px;">Anerkennungsprämien</span>'
         . '</td></tr>'
         // Inhalt
         . '<tr><td style="background:#ffffff;border-radius:0 0 16px 16px;padding:30px 28px 26px;">'
-        . '<h1 style="margin:0 0 18px;font-size:22px;line-height:1.3;color:#1a1a1a;font-weight:700;">' . h($t['titel']) . '</h1>'
+        . '<h1 style="margin:0 0 18px;font-size:22px;line-height:1.3;color:#1c2321;font-weight:700;">' . h($t['titel']) . '</h1>'
         . $html
         . '</td></tr>'
         // Fuß
-        . '<tr><td style="padding:18px 28px 0;font-size:12px;line-height:1.5;color:#8d878a;text-align:center;">'
+        . '<tr><td style="padding:18px 28px 0;font-size:12px;line-height:1.5;color:#7f8a86;text-align:center;">'
         . 'Automatische Nachricht der Anerkennungsprämien-App von campus a college und campus a.<br>Bitte nicht auf diese E-Mail antworten.'
         . '</td></tr></table></td></tr></table></body></html>';
 
