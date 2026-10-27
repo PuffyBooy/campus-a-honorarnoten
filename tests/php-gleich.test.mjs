@@ -35,7 +35,7 @@ test('IBAN und BIC', () => {
   ]);
 });
 
-test('Nummer der Honorarnote', () => {
+test('Nummer der Prämienabrechnung', () => {
   const namen = ['Müller', 'Weiß', 'Österreicher-Übel', 'García Lorca', "O'Brien", '', '  ', 'Zoë', 'Łukasz', 'Ärzte', 'van der Berg', 'Çelik', 'Ångström', 'Dvořák', 'Šimić', 'Øre', 'ÉLISE'];
   vergleiche([
     ...namen.map((n) => ['namensteil', namensteil, n]),
@@ -75,7 +75,7 @@ test('Konto und Rollen', () => {
   ]);
 });
 
-test('Honorarsätze', () => {
+test('Prämiensätze', () => {
   vergleiche([
     ...[{}, { kolumne: 16, ausserordentlich: null }, { college: { kolumne: 17.5, ausserordentlich: '' }, 'campus-a': { kolumne: 25, ausserordentlich: 80 } },
       { college: { kolumne: 15, redigieren: 2.5 } }, { 'campus-a': { kolumne: -5 } }, { college: { kolumne: '15,5' } }, { college: { kolumne: 10.005 } },

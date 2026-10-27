@@ -13,7 +13,7 @@ function satzPruefen(roh) {
   const b = Number(roh);
   const c = Math.round(b * 100);
   if (!Number.isFinite(b) || c <= 0 || c > 10000000 || Math.abs(b * 100 - c) > 1e-6) {
-    throw new Error('Bitte gültige Honorarsätze angeben (z. B. 15 oder 15,50) oder das Feld leer lassen.');
+    throw new Error('Bitte gültige Prämiensätze angeben (z. B. 15 oder 15,50) oder das Feld leer lassen.');
   }
   return c / 100;
 }

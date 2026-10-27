@@ -43,6 +43,7 @@ export const profilSpeichern = f('profilSpeichern');
 export const einstellungen = f('einstellungen');
 export const rechtliches = f('rechtliches');
 export const hinweisBestaetigen = f('hinweisBestaetigen');
+export const benachrichtigungenSpeichern = f('benachrichtigungenSpeichern');
 /** Konto fertig eingerichtet? (Autor:innen: Adresse, Bankverbindung, mindestens ein Profil-Link) */
 export const profilVollstaendig = kontoFertig;
 

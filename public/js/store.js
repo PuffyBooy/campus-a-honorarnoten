@@ -16,6 +16,7 @@ import {
 import { KONTO_FEHLT, darfRedigieren, kontoFertig, rollenNormalisieren } from './lib/konto.js';
 import { DEMO_PASSWORT } from './demo-konten.js';
 import { BETREIBER_STANDARD, betreiberOder } from './lib/rechtliches.js';
+import { benachrichtigungenNormalisieren } from './lib/benachrichtigungen.js';
 
 const SPEICHER_KEY = 'campus-a-honorare:v1';
 const SITZUNG_KEY = 'campus-a-honorare:sitzung';
@@ -45,7 +46,7 @@ function leereDb() {
     version: VERSION,
     nutzer: [],
     positionen: [],   // gespeicherte, noch nicht abgerechnete Leistungen
-    noten: [],        // abgeschickte Honorarnoten (Monatsabrechnungen)
+    noten: [],        // abgeschickte Prämienabrechnungen (Monatsabrechnungen)
     kommentare: [],
     verlauf: [],
     loeschprotokoll: [],
@@ -361,11 +362,11 @@ export async function passwortAendern(alt, neu) {
 // ------------------------------------------------------------------ Leistungen (Entwürfe)
 
 function positionPruefen(p) {
-  pruefe(['kolumne', 'ausserordentlich', 'redigieren'].includes(p.kategorie), 'Bitte wählen, ob Kolumne oder außerordentliches Honorar.');
+  pruefe(['kolumne', 'ausserordentlich', 'redigieren'].includes(p.kategorie), 'Bitte wählen, ob Kolumne oder außerordentliche Anerkennungsprämie.');
   pruefe(!leer(p.titel), 'Bitte den Titel des Beitrags angeben.');
   pruefe(/^\d{4}-\d{2}-\d{2}$/.test(p.veroeffentlichung ?? ''), 'Bitte das Datum der Veröffentlichung angeben.');
   if (p.kategorie === 'ausserordentlich') {
-    pruefe(!leer(p.vereinbart_mit), 'Bitte angeben, mit wem aus der Redaktion das Honorar vereinbart wurde.');
+    pruefe(!leer(p.vereinbart_mit), 'Bitte angeben, mit wem aus der Redaktion die Anerkennungsprämie vereinbart wurde.');
   }
   const b = Number(p.betrag);
   pruefe(Number.isFinite(b) && b > 0 && b <= 100000 && Math.round(b * 100) === b * 100, 'Bitte einen gültigen Betrag angeben.');
@@ -389,7 +390,7 @@ export function leistungSpeichern(daten) {
   }
   const p = {
     kategorie: daten.kategorie,
-    // Kolumnen haben eine Art der Kolumne (freier Text, optional), außerordentliche Honorare eine Art des Honorars
+    // Kolumnen haben eine Art der Kolumne (freier Text, optional), außerordentliche Anerkennungsprämien eine Art der Anerkennungsprämie
     art: daten.kategorie === 'ausserordentlich' ? artNormalisieren(daten.art) : '',
     kolumnenart: istKolumne ? artNormalisieren(daten.kolumnenart) : '',
     titel: trim(daten.titel) || (istRedigieren ? `Redigieren (${textAnzahl(anzahl)})` : ''),
@@ -405,7 +406,7 @@ export function leistungSpeichern(daten) {
     notiz: trim(daten.notiz),
   };
   positionPruefen(p);
-  if (p.kategorie === 'ausserordentlich') pruefe(p.art, 'Bitte die Art des Honorars angeben.');
+  if (p.kategorie === 'ausserordentlich') pruefe(p.art, 'Bitte die Art der Anerkennungsprämie angeben.');
   pruefe(istMedium(p.medium), 'Bitte wählen, ob für campus a college oder campus a.');
   // nur Medien mit Profil-Link (Redigieren: Rolle vom Admin, immer campus a college); eine ältere Leistung darf ihr Medium behalten
   const bisher = daten.id ? db.positionen.find((x) => x.id === daten.id && x.autor_id === n.id) : null;
@@ -434,7 +435,7 @@ export function leistungLoeschen(pid) {
   speichern();
 }
 
-// ------------------------------------------------------------------ Honorarnoten: Sichtbarkeit
+// ------------------------------------------------------------------ Prämienabrechnungen: Sichtbarkeit
 
 function darfSehen(n, note) {
   if (hat(n, 'redaktion')) return true;
@@ -460,7 +461,7 @@ function sicht(n, note) {
 
 function noteHolen(noteId) {
   const note = db.noten.find((x) => x.id === noteId);
-  pruefe(note, 'Diese Honorarnote gibt es nicht (mehr).');
+  pruefe(note, 'Diese Prämienabrechnung gibt es nicht (mehr).');
   return note;
 }
 
@@ -468,7 +469,7 @@ function verlauf(noteId, n, aktion, details = {}) {
   db.verlauf.push({ id: id(), note_id: noteId, akteur_id: n.id, akteur_name: anzeigename(n), aktion, details, am: jetzt() });
 }
 
-// ------------------------------------------------------------------ Honorarnoten: Autor:in
+// ------------------------------------------------------------------ Prämienabrechnungen: Autor:in
 
 // ------------------------------------------------------------------ Artikel auf campus-a-college.at
 
@@ -537,13 +538,13 @@ export function notenDiesenMonat() {
   return kopie(db.noten.filter((x) => x.autor_id === n.id && x.monat === monat));
 }
 
-/** Monatsabrechnung abschicken: gewählte gespeicherte Leistungen -> eine Honorarnote */
+/** Monatsabrechnung abschicken: gewählte gespeicherte Leistungen -> eine Prämienabrechnung */
 export function abrechnungAbschicken(positionIds) {
   const n = brauche('autor');
   const positionen = db.positionen.filter((p) => p.autor_id === n.id && positionIds.includes(p.id));
   pruefe(positionen.length, 'Bitte mindestens eine Leistung auswählen.');
   positionen.forEach(positionPruefen);
-  // campus a und campus a college bekommen getrennte Honorarnoten
+  // campus a und campus a college bekommen getrennte Prämienabrechnungen
   const medium = mediumOder(positionen[0].medium);
   pruefe(positionen.every((p) => mediumOder(p.medium) === medium), 'Leistungen für campus a und campus a college bitte getrennt abschicken.');
 
@@ -607,13 +608,13 @@ export function leistungenZurueckholen(noteId) {
   const n = brauche('autor');
   const note = noteHolen(noteId);
   pruefe(note.autor_id === n.id, 'Dafür fehlt dir die Berechtigung.');
-  pruefe(note.status === 'abgelehnt', 'Nur abgelehnte Honorarnoten können überarbeitet werden.');
+  pruefe(note.status === 'abgelehnt', 'Nur abgelehnte Prämienabrechnungen können überarbeitet werden.');
   pruefe(!note.zurueckgeholt_am, 'Die Leistungen wurden bereits zurückgeholt.');
   zurueckAnAutor(note, n);
   speichern();
 }
 
-// ------------------------------------------------------------------ Honorarnoten: Redaktion
+// ------------------------------------------------------------------ Prämienabrechnungen: Redaktion
 
 export function alleNoten() {
   const n = brauche('redaktion');
@@ -630,8 +631,8 @@ export function note(noteId) {
 export function annehmen(noteId) {
   const n = brauche('redaktion');
   const x = noteHolen(noteId);
-  pruefe(['eingereicht', 'abgelehnt'].includes(x.status), 'Diese Honorarnote kann nicht angenommen werden.');
-  pruefe(!x.zurueckgeholt_am, 'Die Autor:in überarbeitet diese Leistungen bereits in einer neuen Honorarnote.');
+  pruefe(['eingereicht', 'abgelehnt'].includes(x.status), 'Diese Prämienabrechnung kann nicht angenommen werden.');
+  pruefe(!x.zurueckgeholt_am, 'Die Autor:in überarbeitet diese Leistungen bereits in einer neuen Prämienabrechnung.');
   const vorher = x.status;
   Object.assign(x, { status: 'angenommen', ablehnungsgrund: '', entschieden_am: jetzt() });
   verlauf(x.id, n, 'angenommen', { vorher });
@@ -642,7 +643,7 @@ export function ablehnen(noteId, grund) {
   const n = brauche('redaktion');
   pruefe(!leer(grund), 'Bitte eine Begründung für die Ablehnung angeben.');
   const x = noteHolen(noteId);
-  pruefe(['eingereicht', 'angenommen'].includes(x.status), 'Diese Honorarnote kann nicht abgelehnt werden.');
+  pruefe(['eingereicht', 'angenommen'].includes(x.status), 'Diese Prämienabrechnung kann nicht abgelehnt werden.');
   const vorher = x.status;
   Object.assign(x, { status: 'abgelehnt', ablehnungsgrund: trim(grund), entschieden_am: jetzt() });
   verlauf(x.id, n, 'abgelehnt', { vorher, grund: trim(grund) });
@@ -657,7 +658,7 @@ export function betragKorrigieren(noteId, positionId, betrag, vermerk) {
   const b = Number(betrag);
   pruefe(Number.isFinite(b) && b > 0 && b <= 100000 && Math.round(b * 100) === b * 100, 'Bitte einen gültigen Betrag angeben.');
   const x = noteHolen(noteId);
-  pruefe(x.status !== 'bezahlt', 'Bezahlte Honorarnoten können nicht mehr geändert werden.');
+  pruefe(x.status !== 'bezahlt', 'Bezahlte Prämienabrechnungen können nicht mehr geändert werden.');
   const p = x.positionen.find((y) => y.id === positionId);
   pruefe(p, 'Diese Position gibt es nicht.');
   pruefe(p.betrag !== b, 'Der Betrag ist unverändert.');
@@ -710,9 +711,9 @@ export function alsBezahltMarkieren(noteId, datum) {
 export function alleAlsBezahltMarkieren(noteIds, datum) {
   const n = brauche('buchhaltung');
   pruefe(/^\d{4}-\d{2}-\d{2}$/.test(datum ?? '') && datum <= heuteIso(), 'Bitte ein gültiges Zahlungsdatum angeben (nicht in der Zukunft).');
-  pruefe(Array.isArray(noteIds) && noteIds.length, 'Bitte mindestens eine Honorarnote auswählen.');
+  pruefe(Array.isArray(noteIds) && noteIds.length, 'Bitte mindestens eine Prämienabrechnung auswählen.');
   const noten = noteIds.map(noteHolen);
-  for (const x of noten) pruefe(x.status === 'angenommen', `${x.nummer}: Nur angenommene Honorarnoten können als bezahlt markiert werden.`);
+  for (const x of noten) pruefe(x.status === 'angenommen', `${x.nummer}: Nur angenommene Prämienabrechnungen können als bezahlt markiert werden.`);
   for (const x of noten) {
     Object.assign(x, { status: 'bezahlt', bezahlt_am: datum });
     verlauf(x.id, n, 'bezahlt', { datum });
@@ -772,7 +773,7 @@ export async function passwortZuruecksetzen(uid) {
   return { email: n.email, vorname: n.vorname, passwort };
 }
 
-/** Konto löschen (Datenschutz). Abgeschickte Honorarnoten bleiben für die Buchhaltung erhalten. */
+/** Konto löschen (Datenschutz). Abgeschickte Prämienabrechnungen bleiben für die Buchhaltung erhalten. */
 export function nutzerLoeschen(uid) {
   const { admin, n } = adminNutzer(uid);
   pruefe(uid !== admin.id, 'Du kannst dein eigenes Konto nicht löschen.');
@@ -814,6 +815,14 @@ export function einstellungen() {
 export function rechtliches() {
   const e = { ...leereDb().einstellungen, ...kopie(db.einstellungen) };
   return { betreiber: betreiberOder(e.betreiber), empfaenger: e.empfaenger, datenschutzKontakt: e.datenschutzKontakt };
+}
+
+/** Welche E-Mails dieses Konto bekommen will (in der Demo nur gespeichert, nicht verschickt) */
+export function benachrichtigungenSpeichern(wahl) {
+  const n = ich();
+  n.benachrichtigungen = benachrichtigungenNormalisieren(n, wahl);
+  speichern();
+  return nutzerSicht(n);
 }
 
 /** Hinweis zum Betreiber zur Kenntnis genommen */
@@ -863,7 +872,7 @@ export function statistik() {
 // E-Mail-Versand gibt es nur auf dem Server; die Demo merkt sich die Einstellungen nur zum Ausprobieren
 const MAIL_DEMO = {
   aktiv: false, host: 'smtp.world4you.com', port: 587, verschluesselung: 'starttls', benutzer: '', absender: '',
-  absender_name: 'campus a Honorarnoten', redaktion: '', buchhaltung: '', admin: '', zugangsdaten: true, adresse: '',
+  absender_name: 'campus a Office', antwort_an: '', zugangsdaten: true, adresse: '',
 };
 
 export function mailEinstellungen() {

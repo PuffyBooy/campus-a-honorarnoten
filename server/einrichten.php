@@ -67,10 +67,8 @@ if ($db && $anzahl === 0 && ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             'benutzer' => $f('absender'),
             'passwort' => (string) ($_POST['passwort'] ?? ''),
             'absender' => $f('absender'),
-            'absender_name' => $f('absender_name') ?: 'campus a Honorarnoten',
-            'redaktion' => $f('redaktion') ?: $f('absender'),
-            'buchhaltung' => $f('buchhaltung'),
-            'admin' => strtolower($f('email')),
+            'absender_name' => $f('absender_name') ?: 'campus a Office',
+            'antwort_an' => $f('antwort_an'),
             'zugangsdaten' => true,
             'adresse' => aktuelle_adresse(),
         ];
@@ -102,13 +100,13 @@ $wert = fn ($k, $standard = '') => h($_POST[$k] ?? $standard);
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex, nofollow">
-  <title>Einrichtung – Honorarnoten</title>
+  <title>Einrichtung – Anerkennungsprämien</title>
   <link rel="icon" href="img/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/style.css">
 </head>
 <body>
   <header class="kopf"><div class="kopf-innen">
-    <a class="marke" href="./"><span class="marke-name">campus a <em>college</em></span><span class="marke-zusatz">Honorarnoten</span></a>
+    <a class="marke" href="./"><span class="marke-name">campus a <em>college</em></span><span class="marke-zusatz">Anerkennungsprämien</span></a>
   </div></header>
   <main class="inhalt einrichtung-seite">
     <h1>Einrichtung</h1>
@@ -165,18 +163,17 @@ $wert = fn ($k, $standard = '') => h($_POST[$k] ?? $standard);
         <p class="tipp">Damit meldest du dich an. Hierhin gehen auch neue Zugangsanfragen.</p>
 
         <h2 class="abstand-oben">2. E-Mail-Versand</h2>
-        <p class="tipp">Die App schickt automatisch E-Mails: neue Honorarnoten an die Redaktion, Bestätigungen an die
-          Autor:innen, Zugangsdaten an neue Konten. Dafür braucht sie ein Postfach bei World4You
-          (z. B. <em>honorare@deine-domain.at</em>). Leer lassen = später einrichten.</p>
-        <label for="absender">Absender-Adresse (World4You-Postfach)</label>
+        <p class="tipp">Die App schickt automatisch E-Mails an die Konten (neue Prämienabrechnungen an die Redaktion,
+          Bestätigungen an die Autor:innen, Zugangsdaten an neue Konten …) – jede:r wählt im Profil, was sie bekommen will.
+          Dafür braucht sie ein Postfach bei World4You, z. B. <em>office@deine-domain.at</em>. Leer lassen = später einrichten.</p>
+        <label for="absender">Absender-Adresse (World4You-Postfach, z. B. office@…)</label>
         <input id="absender" name="absender" type="email" autocomplete="off" value="<?= $wert('absender') ?>">
         <label for="passwort">Passwort dieses Postfachs</label>
         <input id="passwort" name="passwort" type="password" autocomplete="new-password">
-        <label for="redaktion">Postfach der Redaktion (bekommt neue Honorarnoten)</label>
-        <input id="redaktion" name="redaktion" type="email" autocomplete="off" value="<?= $wert('redaktion') ?>">
-        <p class="tipp">Z. B. deine zweite Adresse. Leer = dieselbe wie der Absender.</p>
-        <label for="buchhaltung">Postfach der Buchhaltung (optional, bekommt angenommene Honorarnoten)</label>
-        <input id="buchhaltung" name="buchhaltung" type="email" autocomplete="off" value="<?= $wert('buchhaltung') ?>">
+        <label for="antwort_an">Antworten gehen an (optional)</label>
+        <input id="antwort_an" name="antwort_an" type="email" autocomplete="off" value="<?= $wert('antwort_an') ?>">
+        <p class="tipp">Wer auf eine automatische E-Mail antwortet, schreibt an diese Adresse – z. B. deine zweite Adresse.
+          Leer = an die Absender-Adresse.</p>
         <details class="abstand-oben">
           <summary>Erweitert: SMTP-Server</summary>
           <div class="zeile">
@@ -184,7 +181,7 @@ $wert = fn ($k, $standard = '') => h($_POST[$k] ?? $standard);
             <div class="feld"><label for="port">Port</label><input id="port" name="port" inputmode="numeric" value="<?= $wert('port', '587') ?>"></div>
           </div>
           <label for="absender_name">Absendername</label>
-          <input id="absender_name" name="absender_name" value="<?= $wert('absender_name', 'campus a Honorarnoten') ?>">
+          <input id="absender_name" name="absender_name" value="<?= $wert('absender_name', 'campus a Office') ?>">
         </details>
         <p class="abstand-oben"><button type="submit" class="btn btn-primaer">Einrichten</button></p>
       </form>

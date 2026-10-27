@@ -1,4 +1,4 @@
-/* campus a college – Honorarnoten
+/* campus a college – Prämienabrechnungen
    Farben: nur diese Variablen anpassen, um das Design an das CI anzupassen. */
 :root {
   --marke: #8a5370;          /* Beere/Mauve wie campus-a-college.at: Buttons, aktive Navigation */
@@ -431,7 +431,7 @@ body.modus-demo .fuss-demo { display: block; }
   .kopfzeile { display: none; }
 }
 
-/* ---------- Honorarnoten-Generator ---------- */
+/* ---------- Prämienabrechnungen-Generator ---------- */
 @media (min-width: 1000px) {
   .gen-spalten { grid-template-columns: 1fr 1fr; }
   .gen-vorschau-bereich { position: sticky; top: 1rem; }
@@ -486,7 +486,7 @@ body.modus-demo .fuss-demo { display: block; }
 #neu-anlegen form { margin-top: .75rem; }
 #neu-anlegen summary { font-size: 1rem; }
 
-/* ---------- Honorarsätze ---------- */
+/* ---------- Prämiensätze ---------- */
 .abweichung { display: inline-block; margin-top: .15rem; font-size: .8rem; font-weight: 600; color: var(--warnung); }
 .medium-fest-hinweis { margin: -.25rem 0 1rem; }
 .medium-fest { margin: 0 0 .5rem; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }

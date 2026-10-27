@@ -54,12 +54,12 @@ export function impressumHtml(r, { istDemo = false } = {}) {
       ${b.email ? `<br>E-Mail: <a href="mailto:${esc(b.email)}">${esc(b.email)}</a>` : ''}
       ${b.telefon ? `<br>Telefon: ${esc(b.telefon)}` : ''}</p>
     <h2>Zweck</h2>
-    <p>Diese Web-App ist ein internes Werkzeug zur Erfassung und Abrechnung von Honoraren für
+    <p>Diese Web-App ist ein internes Werkzeug zur Erfassung und Abrechnung von Anerkennungsprämien für
       <strong>campus a college</strong> und <strong>campus a</strong>. Sie ist nicht öffentlich zugänglich;
       ein Zugang wird nur auf Anfrage vergeben.</p>
     ${b.extern ? `<p>Die App wird nicht von der ${esc(unternehmen(r))} betrieben, sondern von ${esc(name)}, der/die
       nicht bei der ${esc(unternehmen(r))} angestellt ist.</p>` : ''}
-    <h2>Rechnungsempfänger der Honorarnoten</h2>
+    <h2>Rechnungsempfänger der Prämienabrechnungen</h2>
     <p>${esc(unternehmen(r))}${r.empfaenger?.strasse ? `<br>${esc(r.empfaenger.strasse)}` : ''}${r.empfaenger?.plz_ort ? `<br>${esc(r.empfaenger.plz_ort)}` : ''}</p>
     <h2>Hosting</h2>
     <p>${esc(b.hoster || STANDARD_HOSTER)}</p>
@@ -79,7 +79,7 @@ export function datenschutzHtml(r, { istDemo = false } = {}) {
     ${hinweisAktiv(b) ? `<aside class="hinweis-betreiber">${hinweisHtml(r).replace(/ Mehr in der <a[^>]*>Datenschutzerklärung<\/a>\./, '')}</aside>` : ''}
 
     <h2>1. Wer ist verantwortlich?</h2>
-    <p>Die App dient der Abrechnung von Honoraren gegenüber der <strong>${esc(firma)}</strong>
+    <p>Die App dient der Abrechnung von Anerkennungsprämien gegenüber der <strong>${esc(firma)}</strong>
       ${r.empfaenger?.strasse ? `(${esc(r.empfaenger.strasse)}, ${esc(r.empfaenger.plz_ort ?? '')})` : ''}.
       Betrieben und technisch verwaltet wird sie von <strong>${esc(name)}</strong>${b.anschrift ? `, ${esc(b.anschrift.replace(/\n/g, ', '))}` : ''}${b.extern ? `
       – ${esc(name)} ist <strong>nicht bei der ${esc(firma)} angestellt</strong>` : ''}.</p>
@@ -93,7 +93,7 @@ export function datenschutzHtml(r, { istDemo = false } = {}) {
       <li><strong>Für die Auszahlung</strong> (nur Autor:innen): Adresse, Kontoinhaber:in, IBAN, BIC.</li>
       <li><strong>Profil-Links</strong> auf campus-a-college.at bzw. campus-a.at. Damit liest die App die dort
         <em>öffentlich</em> veröffentlichten Artikel (Titel, Datum, Ressort) aus, damit du sie als Leistung übernehmen kannst.</li>
-      <li><strong>Leistungen und Honorarnoten:</strong> Titel, Datum, Beträge, Notizen, Status, Begründungen,
+      <li><strong>Leistungen und Prämienabrechnungen:</strong> Titel, Datum, Beträge, Notizen, Status, Begründungen,
         interne Kommentare der Redaktion und ein Verlauf, wer was wann geändert hat.</li>
       <li><strong>Zugangsanfragen:</strong> Name, E-Mail-Adresse und die Nachricht.</li>
       <li><strong>Technisch:</strong> ein Sitzungs-Cookie für die Anmeldung; IP-Adressen kurzzeitig (höchstens
@@ -102,9 +102,9 @@ export function datenschutzHtml(r, { istDemo = false } = {}) {
 
     <h2>3. Wofür und auf welcher Grundlage?</h2>
     <ul>
-      <li>Erfassen, Prüfen, Abrechnen und Auszahlen der Honorare – Vertrag bzw. vorvertragliche Maßnahmen
+      <li>Erfassen, Prüfen, Abrechnen und Auszahlen der Anerkennungsprämien – Vertrag bzw. vorvertragliche Maßnahmen
         (Art. 6 Abs. 1 lit. b DSGVO).</li>
-      <li>Aufbewahrung der Honorarnoten als Buchhaltungsbelege – gesetzliche Pflicht (Art. 6 Abs. 1 lit. c DSGVO,
+      <li>Aufbewahrung der Prämienabrechnungen als Buchhaltungsbelege – gesetzliche Pflicht (Art. 6 Abs. 1 lit. c DSGVO,
         § 132 BAO).</li>
       <li>Sicherheit der App (Anmeldung, Schutz vor Missbrauch, Sicherungskopien) – berechtigtes Interesse
         (Art. 6 Abs. 1 lit. f DSGVO).</li>
@@ -112,26 +112,26 @@ export function datenschutzHtml(r, { istDemo = false } = {}) {
 
     <h2>4. Wer sieht die Daten?</h2>
     <ul>
-      <li><strong>Redaktion:</strong> Leistungen und Honorarnoten mit Namen – <em>ohne</em> Adresse und Bankverbindung.</li>
-      <li><strong>Buchhaltung:</strong> angenommene Honorarnoten mit Adresse und Bankverbindung, für die Überweisung.</li>
+      <li><strong>Redaktion:</strong> Leistungen und Prämienabrechnungen mit Namen – <em>ohne</em> Adresse und Bankverbindung.</li>
+      <li><strong>Buchhaltung:</strong> angenommene Prämienabrechnungen mit Adresse und Bankverbindung, für die Überweisung.</li>
       <li><strong>Admin und Betreiber:in (${esc(name)}):</strong> alle Daten, weil sie die App verwalten
         (Konten, Sicherungen, Fehlerbehebung)${b.extern ? ` – <strong>auch wenn sie nicht bei der ${esc(firma)} angestellt sind</strong>` : ''}.</li>
       <li><strong>Hosting und E-Mail-Versand:</strong> ${esc(b.hoster || STANDARD_HOSTER)}. Die Daten liegen
         auf deren Servern in Österreich; der Hoster verarbeitet sie nur als Auftragsverarbeiter.</li>
-      <li><strong>${esc(firma)}:</strong> bekommt die Honorarnoten als Rechnungsempfänger.</li>
+      <li><strong>${esc(firma)}:</strong> bekommt die Prämienabrechnungen als Rechnungsempfänger.</li>
     </ul>
     <p>Es gibt keine Werbung, kein Tracking, keine Analyse-Dienste und keine eingebundenen fremden Inhalte
       (Schriften und Programmteile liegen auf demselben Server). Daten werden nicht in Länder außerhalb der EU übermittelt.</p>
 
     <h2>5. E-Mails</h2>
     <p>Die App verschickt automatische E-Mails (Zugangsdaten, Eingangsbestätigung, Annahme, Rückgabe, Zahlung;
-      an die Redaktion bzw. Buchhaltung bei neuen Honorarnoten). Dafür werden Name, E-Mail-Adresse, Nummer,
-      Leistungen und Beträge der Honorarnote verwendet – nie die Bankverbindung.</p>
+      an die Redaktion bzw. Buchhaltung bei neuen Prämienabrechnungen). Dafür werden Name, E-Mail-Adresse, Nummer,
+      Leistungen und Beträge der Prämienabrechnung verwendet – nie die Bankverbindung.</p>
 
     <h2>6. Wie lange?</h2>
     <ul>
       <li>Konto und Profil: bis zur Löschung des Kontos (auf Wunsch jederzeit).</li>
-      <li>Abgeschickte Honorarnoten: 7 Jahre (steuerliche Aufbewahrungspflicht), auch wenn das Konto gelöscht wird.</li>
+      <li>Abgeschickte Prämienabrechnungen: 7 Jahre (steuerliche Aufbewahrungspflicht), auch wenn das Konto gelöscht wird.</li>
       <li>Abgelehnte Zugangsanfragen und gespeicherte, nicht abgeschickte Leistungen: bis zur Löschung.</li>
       <li>Sicherungskopien: 30 Tage. Anmelde-Sitzungen: 14 Tage. Versandprotokoll der E-Mails: 90 Tage.</li>
     </ul>

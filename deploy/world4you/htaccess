@@ -1,4 +1,4 @@
-# Honorarnoten auf World4You (Apache) – liegt im Hauptordner der Domain als .htaccess
+# Prämienabrechnungen auf World4You (Apache) – liegt im Hauptordner der Domain als .htaccess
 Options -Indexes
 DirectoryIndex index.html
 AddDefaultCharset utf-8

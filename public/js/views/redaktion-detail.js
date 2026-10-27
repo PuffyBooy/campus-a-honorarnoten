@@ -1,4 +1,4 @@
-// Detailansicht einer Honorarnote für die Redaktion (ohne IBAN und Adresse)
+// Detailansicht einer Prämienabrechnung für die Redaktion (ohne IBAN und Adresse)
 import { AKTION_LABEL, esc, formatDatum, formatEuro, formatMonat, formatZeitpunkt, parseBetrag, vollerName } from '../lib/format.js';
 import { fehlerText, meldung, statusBadge } from '../lib/ui.js';
 import { positionenTabelle } from './noten.js';
@@ -21,7 +21,7 @@ export async function render(el, { store, nutzer, params, neuLaden, istAktuell }
     n = await store.note(params.id);
   } catch {
     el.innerHTML = `<section class="karte"><h1>Nicht gefunden</h1>
-      <p>Diese Honorarnote gibt es nicht (mehr).</p><p><a href="#/redaktion">Zurück zur Liste</a></p></section>`;
+      <p>Diese Prämienabrechnung gibt es nicht (mehr).</p><p><a href="#/redaktion">Zurück zur Liste</a></p></section>`;
     return;
   }
   const [kommentare, verlauf, einstellungen] = await Promise.all([store.kommentare(n.id), store.verlaufVon(n.id), store.einstellungen()]);
@@ -63,7 +63,7 @@ export async function render(el, { store, nutzer, params, neuLaden, istAktuell }
         </div>
       </form>
       ${n.status === 'abgelehnt' ? `<p class="fehlerbox"><strong>Ablehnungsgrund:</strong> ${esc(n.ablehnungsgrund)}</p>` : ''}
-      ${n.zurueckgeholt_am ? '<p class="hinweisbox">Die Leistungen sind zur Überarbeitung zurück bei der Autor:in. Sie kommen als neue Honorarnote wieder.</p>' : ''}
+      ${n.zurueckgeholt_am ? '<p class="hinweisbox">Die Leistungen sind zur Überarbeitung zurück bei der Autor:in. Sie kommen als neue Prämienabrechnung wieder.</p>' : ''}
     </section>
 
     <div class="spalten">
@@ -77,7 +77,7 @@ export async function render(el, { store, nutzer, params, neuLaden, istAktuell }
           </div>
           <form id="d-ablehnen-form" hidden novalidate>
             <p class="klein">Die Leistungen gehen damit sofort zurück an die Autor:in zum Überarbeiten und Neu-Abschicken
-              (als neue Honorarnote). Diese Honorarnote bleibt als „Abgelehnt“ stehen.</p>
+              (als neue Prämienabrechnung). Diese Prämienabrechnung bleibt als „Abgelehnt“ stehen.</p>
             <label for="d-grund">Begründung (Pflicht, die Autor:in sieht diesen Text)</label>
             <textarea id="d-grund" rows="3" required maxlength="1000"></textarea>
             <p class="feldfehler" id="d-grund-fehler" role="alert"></p>

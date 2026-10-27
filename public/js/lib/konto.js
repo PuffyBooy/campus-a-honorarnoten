@@ -21,7 +21,7 @@ export const kontoFertig = (n) => kontoFehlt(n).length === 0;
 export const KONTO_FEHLT = 'Bitte zuerst dein Konto einrichten (Adresse, Bankverbindung und Profil-Link).';
 
 // Rollen, die der Admin vergeben kann. „Redigieren“ ist eine Zusatzberechtigung für campus a college und
-// setzt „Autor:in“ voraus (abgerechnet wird über die eigenen Honorarnoten, dafür braucht es Adresse und IBAN).
+// setzt „Autor:in“ voraus (abgerechnet wird über die eigenen Prämienabrechnungen, dafür braucht es Adresse und IBAN).
 export const ROLLEN = ['autor', 'redaktion', 'buchhaltung', 'admin', 'redigieren'];
 
 export function rollenNormalisieren(rollen) {

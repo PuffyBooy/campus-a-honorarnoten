@@ -28,7 +28,7 @@ export function render(el, { store, nutzer, recht, weiter, abmelden }) {
     <section class="karte einrichtung">
       <h1>Willkommen, ${esc(nutzer.vorname)}!</h1>
       <p>${istAutor
-        ? 'Bevor du loslegst, richte bitte dein Konto ein. Diese Angaben kommen automatisch auf jede Honorarnote.'
+        ? 'Bevor du loslegst, richte bitte dein Konto ein. Diese Angaben kommen automatisch auf jede Prämienabrechnung.'
         : 'Bevor du loslegst, lege bitte dein eigenes Passwort fest.'}</p>
       <form id="einrichtung-form" novalidate>
         <fieldset id="e-passwort" ${passwortNoetig ? '' : 'hidden'}>

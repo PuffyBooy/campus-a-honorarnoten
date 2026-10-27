@@ -1,4 +1,4 @@
-// Bearbeiter-Terminal – alle Honorarnoten mit Filter, Suche und Sortierung
+// Bearbeiter-Terminal – alle Prämienabrechnungen mit Filter, Suche und Sortierung
 import { STATUS_LABEL, esc, formatDatum, formatEuro, formatMonat, vollerName } from '../lib/format.js';
 import { statusBadge } from '../lib/ui.js';
 import { MEDIEN, hatArtikel, mediumBadge, mediumOder } from '../lib/campus.js';
@@ -76,7 +76,7 @@ export async function render(el, { store, istAktuell }) {
 
     const summe = liste.reduce((s, n) => s + n.betrag, 0);
     el.querySelector('#r-treffer').textContent =
-      `${liste.length} ${liste.length === 1 ? 'Honorarnote' : 'Honorarnoten'} · Summe ${formatEuro(summe)}`;
+      `${liste.length} ${liste.length === 1 ? 'Prämienabrechnung' : 'Prämienabrechnungen'} · Summe ${formatEuro(summe)}`;
 
     el.querySelector('#r-tabelle').innerHTML = liste.length
       ? `<table class="tabelle klickbar">
@@ -93,7 +93,7 @@ export async function render(el, { store, istAktuell }) {
               <td data-label="Status">${statusBadge(n.status)}</td>
             </tr>`).join('')}</tbody>
         </table>`
-      : '<section class="karte"><p>Keine Honorarnoten gefunden.</p></section>';
+      : '<section class="karte"><p>Keine Prämienabrechnungen gefunden.</p></section>';
   }
 
   statusSel.addEventListener('change', () => { filter.status = statusSel.value; zeichnen(); });

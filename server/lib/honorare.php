@@ -61,6 +61,7 @@ function nutzer_aus_zeile(?array $z): ?array
         'erstellt_am' => $z['erstellt_am'],
         'letzter_login' => $z['letzter_login'],
         'hinweis_bestaetigt_am' => $z['hinweis_bestaetigt_am'] ?? null,
+        'benachrichtigungen' => (object) (json_decode($z['benachrichtigungen'] ?? '{}', true) ?: []),
     ];
 }
 
@@ -104,7 +105,7 @@ function einstellungen_laden(PDO $db): array
     return $e;
 }
 
-// ------------------------------------------------------------------ Honorarnoten laden
+// ------------------------------------------------------------------ Prämienabrechnungen laden
 
 function position_aus_zeile(array $p): array
 {
@@ -135,7 +136,7 @@ function note_aus_zeile(PDO $db, array $z): array
 function note_holen(PDO $db, mixed $noteId): array
 {
     $z = zeile($db, 'select * from noten where id = ?', [s($noteId)]);
-    pruefe($z, 'Diese Honorarnote gibt es nicht (mehr).', 404);
+    pruefe($z, 'Diese Prämienabrechnung gibt es nicht (mehr).', 404);
     return note_aus_zeile($db, $z);
 }
 
@@ -175,11 +176,23 @@ function verlauf_eintragen(PDO $db, string $noteId, array $n, string $aktion, ar
         [neue_id(), $noteId, $n['id'], anzeigename($n), $aktion, json_text((object) $details), jetzt()]);
 }
 
-/** Aktuelle E-Mail-Adresse der Autor:in einer Note (oder die beim Abschicken gespeicherte) */
-function autor_email(PDO $db, array $note): string
+/** E-Mail an alle aktiven Konten, die diese Benachrichtigung eingeschaltet haben (z. B. die Redaktion) */
+function benachrichtigen(PDO $db, string $typ, array $mail, ?string $ohne = null): void
 {
-    $aktuell = $note['autor_id'] ? wert($db, 'select email from nutzer where id = ?', [$note['autor_id']]) : false;
-    return $aktuell ?: s($note['autor']['email'] ?? '');
+    foreach (zeilen($db, 'select * from nutzer where aktiv = 1') as $z) {
+        $n = nutzer_aus_zeile($z);
+        $n['benachrichtigungen'] = (array) $n['benachrichtigungen'];
+        if ($n['id'] !== $ohne && bekommt($n, $typ)) mail_einreihen($db, $n['email'], $mail);
+    }
+}
+
+/** E-Mail an die Autor:in einer Abrechnung – wenn sie diese Benachrichtigung nicht ausgeschaltet hat */
+function autor_benachrichtigen(PDO $db, array $note, string $typ, array $mail): void
+{
+    $n = $note['autor_id'] ? nutzer_laden($db, $note['autor_id']) : null;
+    if (!$n) return; // Konto gelöscht
+    $n['benachrichtigungen'] = (array) $n['benachrichtigungen'];
+    if ($n['aktiv'] && bekommt($n, $typ)) mail_einreihen($db, $n['email'], $mail);
 }
 
 // ================================================================== API-Funktionen
@@ -197,7 +210,7 @@ final class Honorare
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'nutzerLoeschen', 'alleNotenAdmin', 'noteLoeschen',
         'loeschprotokoll', 'einstellungenSpeichern', 'statistik', 'exportieren',
-        'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail', 'rechtliches', 'hinweisBestaetigen',
+        'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail', 'rechtliches', 'hinweisBestaetigen', 'benachrichtigungenSpeichern',
     ];
 
     /** ohne Anmeldung erlaubt (Impressum und Datenschutz müssen für alle lesbar sein) */
@@ -259,8 +272,7 @@ final class Honorare
             ];
             q($db, 'insert into anfragen (id, vorname, nachname, email, nachricht, am) values (?, ?, ?, ?, ?, ?)',
                 [neue_id(), $a['vorname'], $a['nachname'], $email, $a['nachricht'], jetzt()]);
-            $e = mail_einstellungen($db);
-            mail_einreihen($db, $e['admin'] ?: $e['redaktion'], mail_anfrage_admin($db, $a));
+            benachrichtigen($db, 'anfrage', mail_anfrage_admin($db, $a));
         }
         return true;
     }
@@ -334,6 +346,15 @@ final class Honorare
         return nutzer_laden($this->db(), $n['id']);
     }
 
+    /** Welche E-Mails dieses Konto bekommen will (nur die für die eigenen Rollen) */
+    public function benachrichtigungenSpeichern(mixed $wahl = []): array
+    {
+        $n = ich($this->ctx);
+        $neu = benachrichtigungen_normalisieren(['benachrichtigungen' => (array) $n['benachrichtigungen']] + $n, $wahl);
+        q($this->db(), 'update nutzer set benachrichtigungen = ? where id = ?', [json_text((object) $neu), $n['id']]);
+        return nutzer_laden($this->db(), $n['id']);
+    }
+
     public function einstellungen(): array
     {
         ich($this->ctx);
@@ -373,14 +394,14 @@ final class Honorare
             'vereinbart_mit' => $kat === 'ausserordentlich' ? kuerze(tr($d['vereinbart_mit'] ?? ''), 100) : '',
             'notiz' => kuerze(tr($d['notiz'] ?? ''), 1000),
         ];
-        pruefe(in_array($kat, ['kolumne', 'ausserordentlich', 'redigieren'], true), 'Bitte wählen, ob Kolumne oder außerordentliches Honorar.');
+        pruefe(in_array($kat, ['kolumne', 'ausserordentlich', 'redigieren'], true), 'Bitte wählen, ob Kolumne oder außerordentliche Anerkennungsprämie.');
         if ($istRedigieren) {
             pruefe(darf_redigieren($n), 'Redigieren ist für dein Konto nicht freigeschaltet. Bitte wende dich an den Admin.', 403);
             pruefe($anzahl !== null && floor($anzahl) === $anzahl && $anzahl >= 1 && $anzahl <= 1000, 'Bitte die Anzahl der redigierten Texte angeben (1 bis 1000).');
         }
         $anzahl = (int) $anzahl;
         pruefe(!leer($p['titel']), 'Bitte den Titel des Beitrags angeben.');
-        if ($kat === 'ausserordentlich') pruefe(!leer($p['art']), 'Bitte die Art des Honorars angeben.');
+        if ($kat === 'ausserordentlich') pruefe(!leer($p['art']), 'Bitte die Art der Anerkennungsprämie angeben.');
         pruefe(ist_medium($p['medium']), 'Bitte wählen, ob für campus a college oder campus a.');
         // nur Medien mit Profil-Link (Redigieren: Rolle vom Admin, immer campus a college); eine ältere Leistung darf ihr Medium behalten
         $id = isset($d['id']) && $d['id'] !== '' && $d['id'] !== null ? s($d['id']) : null;
@@ -392,7 +413,7 @@ final class Honorare
             pruefe(!isset(verwendete_artikel($db, $n['id'], $id)[$p['artikel_url']]), ARTIKEL_DOPPELT);
         }
         pruefe(ist_datum($p['veroeffentlichung']), 'Bitte das Datum der Veröffentlichung angeben.');
-        if ($kat === 'ausserordentlich') pruefe(!leer($p['vereinbart_mit']), 'Bitte angeben, mit wem aus der Redaktion das Honorar vereinbart wurde.');
+        if ($kat === 'ausserordentlich') pruefe(!leer($p['vereinbart_mit']), 'Bitte angeben, mit wem aus der Redaktion die Anerkennungsprämie vereinbart wurde.');
         // Redigieren: Betrag rechnet der Server aus (Anzahl × eingestellter Satz pro Text)
         $betragCent = $istRedigieren ? $anzahl * cent(einstellungen_laden($db)['honorarsaetze']['college']['redigieren']) : cent($d['betrag'] ?? null);
         $werte = [$kat, $p['art'], $p['kolumnenart'], $p['titel'], $p['veroeffentlichung'], $p['ausgabe'], $p['vereinbart_mit'], $p['notiz'],
@@ -469,7 +490,7 @@ final class Honorare
             $platz = implode(',', array_fill(0, count($ids), '?'));
             $positionen = zeilen($db, "select * from positionen where autor_id = ? and id in ($platz) order by veroeffentlichung, erstellt_am", [$n['id'], ...$ids]);
             pruefe(count($positionen) === count(array_unique($ids)) && count($ids) === count(array_unique($ids)), 'Einige Leistungen gibt es nicht mehr. Bitte Seite neu laden.');
-            // campus a und campus a college bekommen getrennte Honorarnoten
+            // campus a und campus a college bekommen getrennte Prämienabrechnungen
             $medium = medium_oder($positionen[0]['medium']);
             foreach ($positionen as $p) pruefe(medium_oder($p['medium']) === $medium, 'Leistungen für campus a und campus a college bitte getrennt abschicken.');
             $nr = naechste_nummer($db, $n);
@@ -493,8 +514,8 @@ final class Honorare
             $summe = array_sum(array_column($positionen, 'betrag_cent'));
             verlauf_eintragen($db, $noteId, $n, 'eingereicht', ['betrag' => euro((int) $summe), 'positionen' => count($positionen), 'medium' => medium_name($medium)]);
             $note = note_holen($db, $noteId);
-            mail_einreihen($db, mail_einstellungen($db)['redaktion'], mail_eingereicht_redaktion($db, $note));
-            mail_einreihen($db, $n['email'], mail_eingereicht_autor($db, $note));
+            benachrichtigen($db, 'neue_note', mail_eingereicht_redaktion($db, $note), $n['id']);
+            autor_benachrichtigen($db, $note, 'eingang', mail_eingereicht_autor($db, $note));
             return sicht($n, $note);
         });
     }
@@ -513,7 +534,7 @@ final class Honorare
         return transaktion($db, function () use ($db, $n, $noteId) {
             $note = note_holen($db, $noteId);
             pruefe($note['autor_id'] === $n['id'], 'Dafür fehlt dir die Berechtigung.', 403);
-            pruefe($note['status'] === 'abgelehnt', 'Nur abgelehnte Honorarnoten können überarbeitet werden.');
+            pruefe($note['status'] === 'abgelehnt', 'Nur abgelehnte Prämienabrechnungen können überarbeitet werden.');
             pruefe(!$note['zurueckgeholt_am'], 'Die Leistungen wurden bereits zurückgeholt.');
             zurueck_an_autor($db, $note, $n);
             return true;
@@ -540,13 +561,13 @@ final class Honorare
         $n = brauche($this->ctx, 'redaktion');
         return transaktion($db, function () use ($db, $n, $noteId) {
             $x = note_holen($db, $noteId);
-            pruefe(in_array($x['status'], ['eingereicht', 'abgelehnt'], true), 'Diese Honorarnote kann nicht angenommen werden.');
-            pruefe(!$x['zurueckgeholt_am'], 'Die Autor:in überarbeitet diese Leistungen bereits in einer neuen Honorarnote.');
+            pruefe(in_array($x['status'], ['eingereicht', 'abgelehnt'], true), 'Diese Prämienabrechnung kann nicht angenommen werden.');
+            pruefe(!$x['zurueckgeholt_am'], 'Die Autor:in überarbeitet diese Leistungen bereits in einer neuen Prämienabrechnung.');
             q($db, "update noten set status = 'angenommen', ablehnungsgrund = '', entschieden_am = ? where id = ?", [jetzt(), $x['id']]);
             verlauf_eintragen($db, $x['id'], $n, 'angenommen', ['vorher' => $x['status']]);
             $note = note_holen($db, $x['id']);
-            mail_einreihen($db, autor_email($db, $note), mail_angenommen_autor($db, $note));
-            mail_einreihen($db, mail_einstellungen($db)['buchhaltung'], mail_angenommen_buchhaltung($db, $note));
+            autor_benachrichtigen($db, $note, 'angenommen', mail_angenommen_autor($db, $note));
+            benachrichtigen($db, 'zur_zahlung', mail_angenommen_buchhaltung($db, $note));
             return true;
         });
     }
@@ -559,12 +580,12 @@ final class Honorare
         $g = kuerze(tr($grund), 1000);
         return transaktion($db, function () use ($db, $n, $noteId, $g) {
             $x = note_holen($db, $noteId);
-            pruefe(in_array($x['status'], ['eingereicht', 'angenommen'], true), 'Diese Honorarnote kann nicht abgelehnt werden.');
+            pruefe(in_array($x['status'], ['eingereicht', 'angenommen'], true), 'Diese Prämienabrechnung kann nicht abgelehnt werden.');
             q($db, "update noten set status = 'abgelehnt', ablehnungsgrund = ?, entschieden_am = ? where id = ?", [$g, jetzt(), $x['id']]);
             verlauf_eintragen($db, $x['id'], $n, 'abgelehnt', ['vorher' => $x['status'], 'grund' => $g]);
             // die Leistungen gehen sofort zurück an die Autor:in zum Überarbeiten
             zurueck_an_autor($db, ['ablehnungsgrund' => $g] + $x, $n);
-            mail_einreihen($db, autor_email($db, $x), mail_abgelehnt_autor($db, $x, $g));
+            autor_benachrichtigen($db, $x, 'abgelehnt', mail_abgelehnt_autor($db, $x, $g));
             return true;
         });
     }
@@ -578,7 +599,7 @@ final class Honorare
         $v = kuerze(tr($vermerk), 500);
         return transaktion($db, function () use ($db, $n, $noteId, $positionId, $neuCent, $v) {
             $x = note_holen($db, $noteId);
-            pruefe($x['status'] !== 'bezahlt', 'Bezahlte Honorarnoten können nicht mehr geändert werden.');
+            pruefe($x['status'] !== 'bezahlt', 'Bezahlte Prämienabrechnungen können nicht mehr geändert werden.');
             $p = null;
             foreach ($x['positionen'] as $y) if ($y['id'] === $positionId) $p = $y;
             pruefe($p, 'Diese Position gibt es nicht.', 404);
@@ -649,14 +670,14 @@ final class Honorare
         $n = brauche($this->ctx, 'buchhaltung');
         $d = s($datum);
         pruefe(ist_datum($d) && $d <= heute_iso(), 'Bitte ein gültiges Zahlungsdatum angeben (nicht in der Zukunft).');
-        pruefe(is_array($noteIds) && $noteIds && count($noteIds) <= 500, 'Bitte mindestens eine Honorarnote auswählen.');
+        pruefe(is_array($noteIds) && $noteIds && count($noteIds) <= 500, 'Bitte mindestens eine Prämienabrechnung auswählen.');
         return transaktion($db, fn () => array_map(function ($noteId) use ($db, $n, $d) {
             $x = note_holen($db, $noteId);
-            pruefe($x['status'] === 'angenommen', $x['nummer'] . ': Nur angenommene Honorarnoten können als bezahlt markiert werden.');
+            pruefe($x['status'] === 'angenommen', $x['nummer'] . ': Nur angenommene Prämienabrechnungen können als bezahlt markiert werden.');
             q($db, "update noten set status = 'bezahlt', bezahlt_am = ? where id = ?", [$d, $x['id']]);
             verlauf_eintragen($db, $x['id'], $n, 'bezahlt', ['datum' => $d]);
             $note = note_holen($db, $x['id']);
-            mail_einreihen($db, autor_email($db, $note), mail_bezahlt_autor($db, $note, $d));
+            autor_benachrichtigen($db, $note, 'bezahlt', mail_bezahlt_autor($db, $note, $d));
             return sicht($n, $note);
         }, array_values($noteIds)));
     }
@@ -779,13 +800,13 @@ final class Honorare
             pruefe($n, 'Dieses Konto gibt es nicht (mehr).', 404);
             pruefe($n['id'] !== $admin['id'], 'Du kannst dein eigenes Konto nicht löschen.');
             if (in_array('admin', $n['rollen'], true)) pruefe(noch_ein_admin($db, $n['id']), 'Es muss mindestens ein aktives Admin-Konto geben.');
-            // abgeschickte Honorarnoten bleiben als Buchhaltungsbelege erhalten (autor_id wird leer)
+            // abgeschickte Prämienabrechnungen bleiben als Buchhaltungsbelege erhalten (autor_id wird leer)
             q($db, 'delete from nutzer where id = ?', [$n['id']]);
             return true;
         });
     }
 
-    // ---------------------------------------------------------------- Admin: Honorarnoten & Einstellungen
+    // ---------------------------------------------------------------- Admin: Prämienabrechnungen & Einstellungen
     public function alleNotenAdmin(): array
     {
         return noten_liste($this->db(), brauche($this->ctx, 'admin'));
@@ -966,7 +987,7 @@ function zurueck_an_autor(PDO $db, array $note, array $akteur): void
 }
 
 /**
- * Artikel-Adressen, die schon erfasst sind: gespeicherte Leistungen und abgeschickte Honorarnoten.
+ * Artikel-Adressen, die schon erfasst sind: gespeicherte Leistungen und abgeschickte Prämienabrechnungen.
  * Ausgenommen sind abgelehnte Noten, deren Leistungen zurückgeholt wurden (die stehen wieder in den Leistungen).
  */
 function verwendete_artikel(PDO $db, string $autorId, ?string $ohnePosition = null): array

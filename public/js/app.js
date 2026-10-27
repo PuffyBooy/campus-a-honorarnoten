@@ -28,7 +28,7 @@ let flash = null;
 
 const ROUTEN = [
   { pfad: 'leistungen', view: leistungen, rolle: ['autor'], titel: 'Meine Leistungen' },
-  { pfad: 'noten', view: noten, rolle: ['autor'], titel: 'Meine Honorarnoten' },
+  { pfad: 'noten', view: noten, rolle: ['autor'], titel: 'Meine Prämienabrechnungen' },
   { pfad: 'extern', view: generator, rolle: ['autor'], titel: 'Externe Honorarnote' },
   { pfad: 'redaktion', view: redaktion, rolle: ['redaktion', 'admin'], titel: 'Redaktion' },
   { pfad: 'redaktion/:id', view: redaktionDetail, rolle: ['redaktion', 'admin'] },

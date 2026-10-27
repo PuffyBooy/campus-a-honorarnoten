@@ -114,6 +114,39 @@ function darf_redigieren(?array $n): bool
     return in_array('redigieren', $n['rollen'] ?? [], true);
 }
 
+// ------------------------------------------------------------------ Benachrichtigungen (benachrichtigungen.js)
+
+/** Art => Rollen, die sie bekommen können (Admins können zusätzlich neue_note und zur_zahlung einschalten) */
+const BENACHRICHTIGUNGEN = [
+    'neue_note' => ['redaktion'], 'zur_zahlung' => ['buchhaltung'], 'anfrage' => ['admin'],
+    'eingang' => ['autor'], 'angenommen' => ['autor'], 'abgelehnt' => ['autor'], 'bezahlt' => ['autor'],
+];
+const BENACHRICHTIGUNGEN_FUER_ADMIN = ['neue_note', 'zur_zahlung'];
+
+function benachrichtigung_verfuegbar(array $n, string $typ): bool
+{
+    $r = $n['rollen'] ?? [];
+    return (bool) array_intersect(BENACHRICHTIGUNGEN[$typ] ?? [], $r)
+        || (in_array('admin', $r, true) && in_array($typ, BENACHRICHTIGUNGEN_FUER_ADMIN, true));
+}
+
+/** Bekommt dieses Konto diese E-Mail? Ohne eigene Wahl: an (für reine Admins Redaktion/Buchhaltung aus) */
+function bekommt(array $n, string $typ): bool
+{
+    if (!benachrichtigung_verfuegbar($n, $typ)) return false;
+    $wahl = $n['benachrichtigungen'][$typ] ?? null;
+    return is_bool($wahl) ? $wahl : (bool) array_intersect(BENACHRICHTIGUNGEN[$typ], $n['rollen'] ?? []);
+}
+
+function benachrichtigungen_normalisieren(array $n, mixed $wahl): array
+{
+    $neu = is_array($n['benachrichtigungen'] ?? null) ? $n['benachrichtigungen'] : [];
+    foreach (array_keys(BENACHRICHTIGUNGEN) as $typ) {
+        if (benachrichtigung_verfuegbar($n, $typ) && is_array($wahl) && is_bool($wahl[$typ] ?? null)) $neu[$typ] = $wahl[$typ];
+    }
+    return $neu;
+}
+
 // ------------------------------------------------------------------ IBAN/BIC (iban.js)
 
 const IBAN_LAENGEN = [
@@ -164,7 +197,7 @@ function bic_gueltig(mixed $v): bool
     return $s === '' || (bool) preg_match('/^[A-Z]{6}[A-Z0-9]{2}([A-Z0-9]{3})?$/', $s);
 }
 
-// ------------------------------------------------------------------ Nummer der Honorarnote (nummer.js)
+// ------------------------------------------------------------------ Nummer der Prämienabrechnung (nummer.js)
 
 // Buchstaben mit Akzent -> Grundbuchstabe (wie normalize('NFD') im Browser; ohne PHP-Erweiterung intl)
 const OHNE_AKZENT = [
@@ -200,7 +233,7 @@ function honorarnote_nummer(string $vorname, string $nachname, int $jahr, int $l
     return (namensteil($nachname) ?: 'NACHNAME') . '-' . initialen($vorname) . '-' . $jahr . '-' . str_pad((string) $laufendeNummer, 2, '0', STR_PAD_LEFT);
 }
 
-// ------------------------------------------------------------------ Honorarsätze (honorarsaetze.js)
+// ------------------------------------------------------------------ Prämiensätze (honorarsaetze.js)
 
 const SATZ_KATEGORIEN = ['college' => ['kolumne', 'ausserordentlich', 'redigieren'], 'campus-a' => ['kolumne', 'ausserordentlich']];
 const SATZ_STANDARD = ['kolumne' => 15, 'ausserordentlich' => null, 'redigieren' => 2];
@@ -218,7 +251,7 @@ function satz_pruefen(mixed $roh): int|float|null
     $b = zahl($roh);
     $c = $b === null ? 0 : (int) round($b * 100);
     if ($b === null || $c <= 0 || $c > 10000000 || abs($b * 100 - $c) > 1e-6) {
-        throw new Fehler('Bitte gültige Honorarsätze angeben (z. B. 15 oder 15,50) oder das Feld leer lassen.');
+        throw new Fehler('Bitte gültige Prämiensätze angeben (z. B. 15 oder 15,50) oder das Feld leer lassen.');
     }
     return euro($c);
 }
@@ -243,7 +276,7 @@ function saetze_normalisieren(mixed $saetze = []): array
 // ------------------------------------------------------------------ Formatierung (format.js)
 
 const STATUS_LABEL = ['eingereicht' => 'Eingereicht', 'angenommen' => 'Angenommen', 'abgelehnt' => 'Abgelehnt', 'bezahlt' => 'Bezahlt'];
-const KATEGORIE_LABEL = ['kolumne' => 'Kolumne', 'ausserordentlich' => 'Außerordentliches Honorar', 'redigieren' => 'Redigieren'];
+const KATEGORIE_LABEL = ['kolumne' => 'Kolumne', 'ausserordentlich' => 'Außerordentliche Anerkennungsprämie', 'redigieren' => 'Redigieren'];
 const ROLLEN_LABEL = [
     'autor' => 'Autor:in', 'redaktion' => 'Redaktion', 'buchhaltung' => 'Buchhaltung', 'admin' => 'Admin',
     'redigieren' => 'Redigieren (campus a college)',

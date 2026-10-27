@@ -120,12 +120,12 @@ try {
 } catch (Fehler $e) {
     [$status, $daten] = [$e->status, ['fehler' => $e->getMessage()]];
 } catch (Throwable $e) {
-    error_log('Honorarnoten: ' . $e);
+    error_log('Prämienabrechnungen: ' . $e);
     [$status, $daten] = [500, ['fehler' => 'Interner Fehler. Bitte später erneut versuchen.']];
 }
 antworten($status, $daten);
 try {
     hintergrundarbeit(datenbank());
 } catch (Throwable $e) {
-    error_log('Honorarnoten: ' . $e->getMessage());
+    error_log('Prämienabrechnungen: ' . $e->getMessage());
 }

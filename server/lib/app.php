@@ -61,12 +61,12 @@ function hintergrundarbeit(PDO $db): void
     try {
         mails_verschicken($db);
     } catch (Throwable $e) {
-        error_log('Honorarnoten: Mailversand: ' . $e->getMessage());
+        error_log('Prämienabrechnungen: Mailversand: ' . $e->getMessage());
     }
     try {
         if (random_int(1, 50) === 1) aufraeumen($db);
         taegliche_sicherung($db);
     } catch (Throwable $e) {
-        error_log('Honorarnoten: Sicherung: ' . $e->getMessage());
+        error_log('Prämienabrechnungen: Sicherung: ' . $e->getMessage());
     }
 }

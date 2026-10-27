@@ -1,10 +1,11 @@
-Honorarnoten – Paket für World4You
+Anerkennungsprämien – Paket für World4You
 ==================================
 
 1. Im World4You-Kundenbereich (my.world4you.com):
    - SSL-Zertifikat für die Domain aktivieren (kostenlos).
    - PHP-Version 8.1 oder neuer wählen (Webspace -> Einstellungen).
-   - Ein E-Mail-Postfach für den Versand anlegen, z. B. honorare@deine-domain.at.
+   - Ein E-Mail-Postfach für den Versand anlegen: office@deine-domain.at
+     (eine zweite Adresse, z. B. kontakt@…, kann Antworten bekommen).
 
 2. ALLE Dateien und Ordner aus diesem Paket per FTP (z. B. FileZilla) in den Hauptordner
    der Domain hochladen – auch die versteckten Dateien ".htaccess" (in FileZilla:

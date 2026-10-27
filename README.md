@@ -1,10 +1,10 @@
-# campus a college – Honorarnoten
+# campus a college – Anerkennungsprämien
 
-Web-App für die Honorarnoten von **campus a college** (Schüler*innenzeitung) und **campus a**
+Web-App für die Prämienabrechnungen von **campus a college** (Schüler*innenzeitung) und **campus a**
 (Studentenmagazin). Beide Medien werden getrennt abgerechnet:
 Autor:innen speichern ihre Beiträge laufend und schicken sie **einmal im Monat gesammelt
-als Honorarnote** ab. Die Redaktion prüft, die Buchhaltung lädt jede Woche alle angenommenen
-Honorarnoten als **ein PDF** herunter, überweist und markiert die Woche als bezahlt.
+als Prämienabrechnung** ab. Die Redaktion prüft, die Buchhaltung lädt jede Woche alle angenommenen
+Prämienabrechnungen als **ein PDF** herunter, überweist und markiert die Woche als bezahlt.
 
 Die App läuft in zwei Betriebsarten – derselbe Code, nur die Datenhaltung ist anders:
 
@@ -13,7 +13,7 @@ Die App läuft in zwei Betriebsarten – derselbe Code, nur die Datenhaltung ist
 | Wofür | Herzeigen, Ausprobieren | echter Betrieb |
 | Daten | nur im jeweiligen Browser | gemeinsame Datenbank (SQLite) auf dem Webspace |
 | Rechte | nur im Browser geprüft | auf dem Server geprüft, nicht umgehbar |
-| E-Mails | keine | automatisch (neue Honorarnoten, Bestätigungen, Zugangsdaten …) |
+| E-Mails | keine | automatisch (neue Prämienabrechnungen, Bestätigungen, Zugangsdaten …) |
 | Anleitung | [Ausprobieren](#ausprobieren-demo) | [Auf World4You installieren](#auf-world4you-installieren-echter-betrieb) |
 
 Welche Betriebsart aktiv ist, steht in `public/js/modus.js`. Das Paket für World4You stellt diese
@@ -26,7 +26,7 @@ Auf der Startseite gibt es **Demo-Zugänge** für jede Rolle (Passwort jeweils `
 | Rolle | Konto | Was man sieht |
 |---|---|---|
 | Erstes Anmelden | `neu@demo.at` | „Konto einrichten“ wie mit einem Startpasswort – startet bei jedem Klick frisch |
-| Autor:in | `maria@demo.at` | Meine Leistungen (mit Rolle Redigieren), Meine Honorarnoten, Profil |
+| Autor:in | `maria@demo.at` | Meine Leistungen (mit Rolle Redigieren), Meine Prämienabrechnungen, Profil |
 | Redaktion | `redaktion@demo.at` | Bearbeiter-Terminal |
 | Buchhaltung | `buchhaltung@demo.at` | Bezahl-Terminal |
 | Admin | `admin@demo.at` | Admin-Terminal + alles andere |
@@ -55,61 +55,61 @@ Lokal starten: `npm run dev` → http://localhost:5173
    anderes, auch nicht über die API (der Server prüft es). Redaktion, Buchhaltung und Admin ohne
    Autor:innen-Rolle legen nur das Passwort fest. Fehlt einer bestehenden Autor:in etwas (z. B. nach
    dem Update der Profil-Link), erscheint die Seite beim nächsten Anmelden ebenfalls, mit den
-   vorhandenen Daten vorausgefüllt. Die Daten werden für jede Honorarnote automatisch übernommen.
+   vorhandenen Daten vorausgefüllt. Die Daten werden für jede Prämienabrechnung automatisch übernommen.
 2. **Meine Leistungen:** Jeden Beitrag speichern, sobald er erschienen ist – **für campus a college
    oder campus a**. Wählen kann man nur, wenn beide Profil-Links hinterlegt sind; sonst gilt immer das
    verbundene Medium (das prüft auch der Server). Als *Kolumne* oder
-   *außerordentliches Honorar* (mit „Vereinbart mit“), jeweils mit Titel, Veröffentlichungsdatum
+   *außerordentliche Anerkennungsprämie* (mit „Vereinbart mit“), jeweils mit Titel, Veröffentlichungsdatum
    und Betrag. Bei Kolumnen kann man die **Art der Kolumne** als freien Text dazuschreiben (optional),
-   bei außerordentlichen Honoraren die **Art des Honorars** (freier Text, Pflicht). Der Betrag ist mit dem **Honorarsatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin
+   bei außerordentlichen Anerkennungsprämien die **Art der Anerkennungsprämie** (freier Text, Pflicht). Der Betrag ist mit dem **Prämiensatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin
    **pro Medium** einstellbar). Gespeicherte Leistungen kann man bearbeiten oder löschen.
    **Artikel übernehmen:** Unter „Meine Leistungen“ stehen **alle eigenen Artikel** von
    campus-a-college.at und campus-a.at (je nach hinterlegten Profil-Links) mit Medium, Datum, Ressort
    und Kategorie (z. B. „Meinung“). „Übernehmen“ füllt Medium, Titel und Veröffentlichungsdatum aus
    und verknüpft die Leistung mit dem Artikel.
    Jeder Artikel lässt sich nur einmal abrechnen, schon erfasste sind markiert. Die Redaktion sieht in
-   der Honorarnote bei jeder Leistung den Link zum Artikel.
+   der Prämienabrechnung bei jeder Leistung den Link zum Artikel.
 3. **Monatsabrechnung:** Einmal im Monat die gesammelten Leistungen auswählen und als
-   Honorarnote abschicken – **getrennt pro Medium**: Es gibt eine Karte für campus a college und eine
-   für campus a, jede mit eigenem Knopf. Die Honorarnote heißt dann „Honorarnote campus a college“
-   bzw. „Honorarnote campus a“ (Word und PDF). Die Nummer folgt der Vorlage: `NACHNAME-VO-JAHR-NN`
+   Prämienabrechnung abschicken – **getrennt pro Medium**: Es gibt eine Karte für campus a college und eine
+   für campus a, jede mit eigenem Knopf. Die Prämienabrechnung heißt dann „Prämienabrechnung campus a college“
+   bzw. „Prämienabrechnung campus a“ (Word und PDF). Die Nummer folgt der Vorlage: `NACHNAME-VO-JAHR-NN`
    (z. B. `MUSTERFRAU-MA-2026-01`). Wurde im Monat schon eine abgeschickt, kommt ein Hinweis.
 4. **Redaktion:** Filter nach Status und Medium, Suche nach Name oder Nummer, Sortierung nach Datum und
    Betrag. Annehmen, Ablehnen (Begründung Pflicht), Betrag pro Leistung korrigieren (Vermerk
    Pflicht), interne Kommentare, Verlauf. **IBAN und Adresse sind ausgeblendet.**
 5. **Abgelehnt?** Beim Ablehnen (Begründung Pflicht) gehen die Leistungen **sofort zurück an die
    Autor:in**: Sie stehen wieder unter „Meine Leistungen“, mit dem Hinweis „Zurück aus <Nummer> zum
-   Überarbeiten“ und der Begründung. Die Autor:in korrigiert sie und schickt sie als neue Honorarnote
+   Überarbeiten“ und der Begründung. Die Autor:in korrigiert sie und schickt sie als neue Prämienabrechnung
    ab; die abgelehnte Note bleibt mit ihrer Nummer als „Abgelehnt“ stehen und kann nicht mehr
    angenommen werden (damit nichts doppelt abgerechnet wird).
-   **Redigieren (campus a college):** Neben *Kolumne* und *außerordentlichem Honorar* gibt es die
+   **Redigieren (campus a college):** Neben *Kolumne* und *außerordentlicher Anerkennungsprämie* gibt es die
    Kategorie *Redigieren* – auswählbar nur für Konten, denen der Admin die Rolle **„Redigieren“**
    gegeben hat (Admin → Nutzer:innen; die Rolle bringt „Autor:in“ automatisch mit). Redigieren
    erscheint nicht auf der Webseite, es wird nur verrechnet und zählt immer zu campus a college: Man
    gibt die **Anzahl der Texte** ein (Beschreibung optional), der Betrag wird berechnet: Anzahl × Satz
-   pro Text (Standard **2 €**, im Admin unter „Honorarsätze“ einstellbar); der Server rechnet selbst
-   nach. Auf der Honorarnote (Word und PDF) steht es unter **„2. Außerordentliche Honorare“**, z. B.
+   pro Text (Standard **2 €**, im Admin unter „Prämiensätze“ einstellbar); der Server rechnet selbst
+   nach. Auf der Prämienabrechnung (Word und PDF) steht es unter **„2. Außerordentliche Anerkennungsprämien“**, z. B.
    „Redigieren (7 Texte): September“.
-6. **Buchhaltung:** Das Bezahl-Terminal zeigt die angenommenen Honorarnoten **nach Kalenderwoche**
+6. **Buchhaltung:** Das Bezahl-Terminal zeigt die angenommenen Prämienabrechnungen **nach Kalenderwoche**
    (der Woche, in der die Redaktion sie angenommen hat), mit Summe pro Woche. Pro Woche gibt es zwei
    Knöpfe:
-   - **„PDF herunterladen“:** alle Honorarnoten der Woche in einer PDF-Datei, jede Note ab einer
+   - **„PDF herunterladen“:** alle Prämienabrechnungen der Woche in einer PDF-Datei, jede Note ab einer
      neuen Seite, im Aufbau der offiziellen Vorlage (mit Adresse und IBAN zum Überweisen).
-   - **„Woche als bezahlt markieren“:** markiert alle Honorarnoten der Woche mit heutigem Datum als
+   - **„Woche als bezahlt markieren“:** markiert alle Prämienabrechnungen der Woche mit heutigem Datum als
      bezahlt (alle oder keine).
 
    Im Reiter „Bezahlt“ stehen die bezahlten Wochen der letzten 12 Wochen, das PDF lässt sich dort
    erneut herunterladen.
 7. **Admin-Terminal:** Zugangsanfragen freischalten oder ablehnen (offene Anfragen werden in der
    Navigation gezählt), Personen direkt anlegen, Rollen vergeben (Checkboxen), Konten
-   deaktivieren oder löschen, Passwort zurücksetzen (neues Startpasswort). Honorarnoten löschen
-   (mit Löschprotokoll), Rechnungsempfänger, **Honorarsätze** und Datenschutzkontakt einstellen,
+   deaktivieren oder löschen, Passwort zurücksetzen (neues Startpasswort). Prämienabrechnungen löschen
+   (mit Löschprotokoll), Rechnungsempfänger, **Prämiensätze** und Datenschutzkontakt einstellen,
    Sicherung herunterladen/einspielen, Demo zurücksetzen. Weicht ein eingereichter Betrag vom
    Standardsatz ab, sieht die Redaktion in der Detailansicht einen Hinweis.
 
-8. **Externe Honorarnote (Generator):** Für Aufträge von **anderen Firmen** erstellt man unter
+8. **Externe Honorarnote (Generator):** Für bezahlte Aufträge von **anderen Firmen** (dort ist es weiterhin ein Honorar) erstellt man unter
    „Externe Honorarnote“ eine allgemeine Honorarnote: Empfänger und Leistungen eingeben, die
-   eigenen Daten kommen aus dem Profil. Die Honorarnote ist immer umsatzsteuerfrei
+   eigenen Daten kommen aus dem Profil. Sie ist immer umsatzsteuerfrei
    (Kleinunternehmerregelung, § 6 Abs 1 Z 27 UStG). Ergebnis als Word-Datei oder über
    „Drucken / als PDF speichern“. Die Nummer wird als eigene Serie vorgeschlagen
    (z. B. `MUSTERFRAU-MA-2026-E01`). Der Entwurf bleibt nur im eigenen Browser gespeichert und wird
@@ -117,11 +117,11 @@ Lokal starten: `npm run dev` → http://localhost:5173
 
 Status: **Eingereicht → Angenommen / Abgelehnt → Bezahlt**
 
-## Honorarnote aus der Vorlage
+## Prämienabrechnung aus der Vorlage
 
 [`public/js/lib/honorarnote-docx.js`](public/js/lib/honorarnote-docx.js) öffnet die Vorlage im
 Browser (JSZip), ersetzt die Beispielwerte (Maria Musterfrau, Musterstraße …, Nummer, Ort und
-Datum), befüllt die Tabellen *Kolumnen* und *Außerordentliche Honorare* mit beliebig vielen
+Datum), befüllt die Tabellen *Kolumnen* und *Außerordentliche Anerkennungsprämien* mit beliebig vielen
 Zeilen, rechnet Zwischensummen und Gesamtbetrag und entfernt die grauen Ausfüllhinweise.
 Layout und Formatierung der Vorlage bleiben erhalten.
 
@@ -166,8 +166,9 @@ Datenbank ist eine einzelne SQLite-Datei), keine Zusatzpakete und keinen Cronjob
 
 - **SSL-Zertifikat** für die Domain aktivieren (kostenlos) – die App läuft nur über `https://`.
 - **PHP-Version** auf 8.1 oder neuer stellen (*Webspace → Einstellungen*; am besten die neueste).
-- Ein **E-Mail-Postfach** für den Versand anlegen, z. B. `honorare@deine-domain.at`. Die zweite
-  Adresse kann das Postfach der Redaktion sein, das neue Honorarnoten bekommt.
+- Ein **E-Mail-Postfach** für den Versand anlegen: `office@deine-domain.at`. Eine zweite Adresse
+  (z. B. `kontakt@deine-domain.at`) bekommt die Antworten auf die automatischen E-Mails und steht im
+  Impressum und in der Datenschutzerklärung.
 
 ### 2. Paket hochladen
 
@@ -195,11 +196,13 @@ HTTPS, Schreibrechte) und fragt dann nach:
 
 - **deinem Admin-Konto** (Name, E-Mail) – danach wird das **Startpasswort** angezeigt,
 - den **Zugangsdaten des E-Mail-Postfachs** (Adresse und Passwort; Server `smtp.world4you.com`,
-  Port 587, STARTTLS sind schon eingetragen) und dem **Postfach der Redaktion**.
+  Port 587, STARTTLS sind schon eingetragen) und der **Antwortadresse** (optional).
 
-Welche Adressen? Zwei Postfächer reichen: **`honorare@deine-domain.at`** als Absender (die App
-verschickt damit) und **`redaktion@deine-domain.at`** als Postfach der Redaktion (hier kommen neue
-Honorarnoten an).
+Welche Adressen? **`office@deine-domain.at`** ist der Absender – die App verschickt damit alle
+E-Mails. Ein eigenes Postfach für die Redaktion braucht es nicht: Die Mails gehen direkt an die Konten
+(an die E-Mail-Adresse, mit der sich jemand anmeldet). Die **zweite Adresse** (z. B.
+`kontakt@deine-domain.at`) als Antwortadresse eintragen – wer auf eine automatische Mail antwortet,
+landet dort – und unter Admin → Einstellungen als Kontakt für Datenschutz und im Impressum.
 
 Zum Schluss geht eine **Test-E-Mail** hinaus. Die Einrichtung funktioniert nur, solange es noch kein
 Konto gibt – deshalb direkt nach dem Hochladen erledigen. Danach unter `https://deine-domain.at`
@@ -224,17 +227,22 @@ Admin Zugriff auf alle Daten (auch Adressen und IBANs), und die Daten liegen bei
 
 ### Automatische E-Mails
 
-Alle Mails haben das campus-a-Design (Kopf in der Markenfarbe, Übersicht, Knopf zur App) und eine
-reine Textfassung. Einstellen und testen unter **Admin → E-Mail**.
+Alle Mails kommen von `office@…`, haben das campus-a-Design (Kopf in der Markenfarbe, Übersicht,
+Knopf zur App) und eine reine Textfassung. Versand einstellen und testen unter **Admin → E-Mail**.
+
+Die Mails gehen an die **Konten selbst**. Jede:r wählt im **Profil → E-Mail-Benachrichtigungen**, was
+sie bekommen will (ohne eigene Wahl ist alles für die eigenen Rollen an):
 
 | Wann | an wen |
 |---|---|
-| Honorarnote eingereicht | Redaktion (mit allen Leistungen und Summe) + Eingangsbestätigung an die Autor:in |
-| angenommen | Autor:in (inkl. geänderter Beträge mit Vermerk) + Buchhaltung, falls eingetragen |
+| Prämienabrechnung eingereicht | alle mit der Rolle Redaktion (mit Leistungen und Summe) + Eingangsbestätigung an die Autor:in |
+| angenommen | Autor:in (inkl. geänderter Beträge mit Vermerk) + alle mit der Rolle Buchhaltung |
 | abgelehnt | Autor:in mit Begründung („Leistungen überarbeiten“) |
 | als bezahlt markiert | Autor:in mit Betrag und Zahlungsdatum |
-| neue Zugangsanfrage | Admin (bzw. Redaktion) |
-| Konto angelegt / Passwort zurückgesetzt | die Person, mit Startpasswort (abschaltbar) |
+| neue Zugangsanfrage | alle Admins |
+| Konto angelegt / Passwort zurückgesetzt | die Person, mit Startpasswort (unter Admin → E-Mail abschaltbar) |
+
+Admins können sich zusätzlich die Mails von Redaktion und Buchhaltung einschalten.
 
 Die Mails gehen über das World4You-Postfach (SMTP) hinaus, nachdem die App dem Browser schon
 geantwortet hat – niemand wartet darauf. Klappt der Versand nicht (Passwort falsch, Server kurz
@@ -340,6 +348,6 @@ PHP (`api.php` Schnittstelle und Schutz, `lib/honorare.php` Geschäftslogik, `li
 `lib/auth.php` Passwörter und Sitzungen, `lib/artikel.php` Artikel von campus-a-college.at,
 `lib/mail.php` und `lib/mail-vorlagen.php` E-Mails, `einrichten.php` Einrichtung, `cli.php`
 Verwaltung, `router.php` nur für die Entwicklung), `deploy/world4you/` die Dateien fürs Paket.
-Die Regeln, die Browser und Server beide kennen (IBAN, Nummer, Medien, Honorarsätze …), gibt es in
+Die Regeln, die Browser und Server beide kennen (IBAN, Nummer, Medien, Prämiensätze …), gibt es in
 JavaScript (`public/js/lib/`) und PHP (`server/lib/regeln.php`); `tests/php-gleich.test.mjs` prüft,
 dass beide gleich rechnen.

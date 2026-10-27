@@ -1,5 +1,5 @@
-// Bezahl-Terminal (Buchhaltung): angenommene Honorarnoten nach Kalenderwoche.
-// Pro Woche alle Honorarnoten als ein PDF herunterladen und die Woche als bezahlt markieren.
+// Bezahl-Terminal (Buchhaltung): angenommene Prämienabrechnungen nach Kalenderwoche.
+// Pro Woche alle Prämienabrechnungen als ein PDF herunterladen und die Woche als bezahlt markieren.
 import { esc, formatDatum, formatEuro, heuteIso, vollerName } from '../lib/format.js';
 import { kalenderwoche, nachWoche, wocheText } from '../lib/woche.js';
 import { honorarnotenPdfHerunterladen } from '../lib/beleg.js';
@@ -8,11 +8,11 @@ import { mediumBadge } from '../lib/campus.js';
 
 const WOCHEN_ZURUECK = 12; // so viele Wochen zeigt der Reiter „Bezahlt“
 
-// Gruppiert wird nach der Woche, in der die Redaktion die Honorarnote angenommen hat
+// Gruppiert wird nach der Woche, in der die Redaktion die Prämienabrechnung angenommen hat
 const angenommenAm = (n) => n.entschieden_am ?? n.eingereicht_am;
 const summe = (noten) => noten.reduce((s, n) => s + Math.round(n.betrag * 100), 0) / 100;
-const anzahl = (noten) => `${noten.length} ${noten.length === 1 ? 'Honorarnote' : 'Honorarnoten'}`;
-const pdfName = (w) => `Honorarnoten_${w.jahr}_KW${String(w.kw).padStart(2, '0')}.pdf`;
+const anzahl = (noten) => `${noten.length} ${noten.length === 1 ? 'Prämienabrechnung' : 'Prämienabrechnungen'}`;
+const pdfName = (w) => `Praemienabrechnungen_${w.jahr}_KW${String(w.kw).padStart(2, '0')}.pdf`;
 
 function wochenKarte({ woche, noten }, bezahlt) {
   return `
@@ -54,10 +54,10 @@ async function anzeigen(inhalt, { store, neuLaden, istAktuell }, bezahlt) {
 
   inhalt.innerHTML = wochen.length
     ? `<p class="tipp">${bezahlt
-      ? `Bezahlte Honorarnoten der letzten ${WOCHEN_ZURUECK} Wochen, nach der Woche, in der sie angenommen wurden.`
-      : 'Angenommene Honorarnoten nach der Woche, in der sie angenommen wurden. PDF herunterladen, überweisen, Woche als bezahlt markieren.'}</p>
+      ? `Bezahlte Prämienabrechnungen der letzten ${WOCHEN_ZURUECK} Wochen, nach der Woche, in der sie angenommen wurden.`
+      : 'Angenommene Prämienabrechnungen nach der Woche, in der sie angenommen wurden. PDF herunterladen, überweisen, Woche als bezahlt markieren.'}</p>
        ${wochen.map((g) => wochenKarte(g, bezahlt)).join('')}`
-    : `<section class="karte"><p>${bezahlt ? `In den letzten ${WOCHEN_ZURUECK} Wochen wurde nichts bezahlt.` : 'Keine offenen Honorarnoten. 🎉'}</p></section>`;
+    : `<section class="karte"><p>${bezahlt ? `In den letzten ${WOCHEN_ZURUECK} Wochen wurde nichts bezahlt.` : 'Keine offenen Prämienabrechnungen. 🎉'}</p></section>`;
 
   const nachSchluessel = new Map(wochen.map((g) => [g.woche.schluessel, g]));
   inhalt.addEventListener('click', (ev) => {

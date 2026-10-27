@@ -1,4 +1,4 @@
-// Honorarnoten als PDF – gleicher Inhalt und Aufbau wie die offizielle Word-Vorlage
+// Prämienabrechnungen als PDF – gleicher Inhalt und Aufbau wie die offizielle Word-Vorlage
 // (public/vorlage/honorarnote-vorlage.docx). Mehrere Noten landen in einer Datei,
 // jede Note beginnt auf einer neuen Seite.
 import { ausserordentlichePositionen, formatBetragDokument, formatDatum, summe } from './format.js';
@@ -172,14 +172,14 @@ function noteSchreiben(d, note) {
   const name = `${a.vorname} ${a.nachname}`.trim();
   d.seitenDerNote = [];
   d.neueSeite();
-  d.absatz(`Honorarnote ${mediumName(note.medium)}`, { fett: true, groesse: 18, nach: 10 });
+  d.absatz(`Prämienabrechnung ${mediumName(note.medium)}`, { fett: true, groesse: 18, nach: 10 });
   d.angaben(
     [['Vor- und Nachname', name], ['Straße und Hausnummer', a.strasse], ['PLZ und Ort', a.plz_ort], ['IBAN', formatIban(note.zahlung?.iban)]],
     [e.name, e.strasse, e.plz_ort, e.uid].filter(Boolean),
     'Meine Daten', 'Rechnungsempfänger',
   );
   d.tabelle(
-    [{ titel: 'Ort und Datum', anteil: 0.5 }, { titel: 'Honorarnote Nr.', anteil: 0.5 }],
+    [{ titel: 'Ort und Datum', anteil: 0.5 }, { titel: 'Prämienabrechnung Nr.', anteil: 0.5 }],
     [[`${ortAusPlzOrt(a.plz_ort)}, ${formatDatum(note.eingereicht_am)}`, note.nummer]],
   );
   d.absatz('Sehr geehrte Damen und Herren, für folgende Leistungen berechne ich wie vereinbart:', { vor: 14, nach: 8 });
@@ -192,12 +192,12 @@ function noteSchreiben(d, note) {
     kolumnen.map((p) => [p.titel, formatDatum(p.veroeffentlichung), formatBetragDokument(p.betrag)]),
     ['Zwischensumme Kolumnen', '', formatBetragDokument(summe(kolumnen))],
   );
-  d.absatz('2. Außerordentliche Honorare', { fett: true, groesse: 11, vor: 12, nach: 4 });
+  d.absatz('2. Außerordentliche Anerkennungsprämien', { fett: true, groesse: 11, vor: 12, nach: 4 });
   d.tabelle(
     [{ titel: 'Titel des Beitrags', anteil: 0.4 }, { titel: 'Veröffentlichung', anteil: 0.18 },
       { titel: 'Vereinbart mit', anteil: 0.24 }, { titel: 'Betrag in Euro', anteil: 0.18, rechts: true }],
     ausserord.map((p) => [p.titel, formatDatum(p.veroeffentlichung), p.vereinbart_mit ?? '', formatBetragDokument(p.betrag)]),
-    ['Zwischensumme außerordentliche Honorare', '', '', formatBetragDokument(summe(ausserord))],
+    ['Zwischensumme außerordentliche Anerkennungsprämien', '', '', formatBetragDokument(summe(ausserord))],
   );
   d.y -= 12;
   d.tabelle(
@@ -216,9 +216,9 @@ function noteSchreiben(d, note) {
  */
 export async function honorarnotenPdf(noten, PDFLib) {
   const pdf = await PDFLib.PDFDocument.create();
-  pdf.setTitle(noten.length === 1 ? `Honorarnote ${mediumName(noten[0].medium)} ${noten[0].nummer}` : `Honorarnoten (${noten.length})`);
-  pdf.setCreator('campus a college – Honorarnoten');
-  pdf.setProducer('campus a college – Honorarnoten');
+  pdf.setTitle(noten.length === 1 ? `Prämienabrechnung ${mediumName(noten[0].medium)} ${noten[0].nummer}` : `Prämienabrechnungen (${noten.length})`);
+  pdf.setCreator('campus a college – Anerkennungsprämien');
+  pdf.setProducer('campus a college – Anerkennungsprämien');
   const d = new Dokument(
     pdf, PDFLib,
     await pdf.embedFont(PDFLib.StandardFonts.Helvetica),

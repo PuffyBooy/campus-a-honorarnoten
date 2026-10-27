@@ -212,6 +212,10 @@ const MIGRATIONEN = [
     <<<'SQL'
     alter table nutzer add column hinweis_bestaetigt_am text;
     SQL,
+    // Version 8: welche E-Mail-Benachrichtigungen ein Konto bekommen will (JSON, ohne Eintrag = Standard)
+    <<<'SQL'
+    alter table nutzer add column benachrichtigungen text not null default '{}';
+    SQL,
 ];
 
 function oeffne_datenbank(string $pfad): PDO

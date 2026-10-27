@@ -1,4 +1,4 @@
-// Admin-Terminal: Benutzer & Rollen, Honorarnoten löschen, Einstellungen, Datensicherung
+// Admin-Terminal: Benutzer & Rollen, Prämienabrechnungen löschen, Einstellungen, Datensicherung
 import {
   ROLLEN_LABEL, STATUS_LABEL, esc, formatBetragPlain, formatEuro, formatMonat, formatZeitpunkt, parseBetrag, vollerName,
 } from '../lib/format.js';
@@ -8,7 +8,7 @@ import { fehlerText, kopierenMitFeedback, meldung, mitSperre, statusBadge } from
 import { STANDARD_HOSTER, betreiberOder } from '../lib/rechtliches.js';
 
 const REITER = {
-  anfragen: 'Anfragen', benutzer: 'Benutzer', noten: 'Honorarnoten', einstellungen: 'Einstellungen', mail: 'E-Mail', daten: 'Daten',
+  anfragen: 'Anfragen', benutzer: 'Benutzer', noten: 'Prämienabrechnungen', einstellungen: 'Einstellungen', mail: 'E-Mail', daten: 'Daten',
 };
 
 // Zuletzt erzeugte Zugangsdaten – bleiben sichtbar, bis der Admin sie wegklickt
@@ -16,13 +16,13 @@ let zugangsdaten = null;
 
 function zugangsText(z) {
   const adresse = location.origin + location.pathname;
-  return `Hallo ${z.vorname},\n\ndein Zugang zu den Honorarnoten von campus a college ist bereit.\n\n`
+  return `Hallo ${z.vorname},\n\ndein Zugang zu den Anerkennungsprämien von campus a college ist bereit.\n\n`
     + `Adresse: ${adresse}\nE-Mail: ${z.email}\nStartpasswort: ${z.passwort}\n\n`
     + 'Beim ersten Anmelden legst du dein eigenes Passwort fest.\n\nLiebe Grüße\ndeine Redaktion';
 }
 
 function zugangsdatenHtml(z) {
-  const mailto = `mailto:${encodeURIComponent(z.email)}?subject=${encodeURIComponent('Dein Zugang zu den Honorarnoten')}`
+  const mailto = `mailto:${encodeURIComponent(z.email)}?subject=${encodeURIComponent('Dein Zugang zu den Anerkennungsprämien')}`
     + `&body=${encodeURIComponent(zugangsText(z))}`;
   return `
     <section class="karte zugangsdaten" role="status">
@@ -199,7 +199,7 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
       versuche(() => store.nutzerAktivSetzen(n.id, !n.aktiv), n.aktiv ? 'Konto deaktiviert.' : 'Konto aktiviert.', neuLaden);
     } else if (knopf.dataset.aktion === 'loeschen') {
       if (!confirm(`Konto von ${vollerName(n)} löschen?\n\nGespeicherte, nicht abgeschickte Leistungen werden mitgelöscht. `
-        + 'Abgeschickte Honorarnoten bleiben für die Buchhaltung erhalten.')) return;
+        + 'Abgeschickte Prämienabrechnungen bleiben für die Buchhaltung erhalten.')) return;
       versuche(() => store.nutzerLoeschen(n.id), 'Konto gelöscht.', neuLaden);
     } else if (knopf.dataset.aktion === 'pw') {
       if (!confirm(`Passwort von ${vollerName(n)} zurücksetzen? Es wird ein neues Startpasswort erzeugt.`)) return;
@@ -226,8 +226,8 @@ async function noten(inhalt, { store, neuLaden }) {
           <td data-label="Betrag" class="rechts">${esc(formatEuro(n.betrag))}</td>
           <td data-label="Status">${statusBadge(n.status)}</td>
           <td data-label=""><button type="button" class="btn btn-klein btn-gefahr" data-loeschen>Löschen</button></td>
-        </tr>`).join('')}</tbody></table>` : '<section class="karte"><p>Keine Honorarnoten vorhanden.</p></section>'}
-    <p class="tipp">Löschen ist endgültig – bezahlte Honorarnoten vorher sichern.</p>
+        </tr>`).join('')}</tbody></table>` : '<section class="karte"><p>Keine Prämienabrechnungen vorhanden.</p></section>'}
+    <p class="tipp">Löschen ist endgültig – bezahlte Prämienabrechnungen vorher sichern.</p>
     <section class="karte">
       <h2>Löschprotokoll</h2>
       ${protokoll.length ? `<ul class="verlauf">${protokoll.map((p) => `<li><strong class="nummer">${esc(p.nummer)}</strong>
@@ -254,7 +254,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <label for="e-strasse">Straße und Hausnummer</label><input id="e-strasse" name="strasse" value="${esc(e.empfaenger.strasse)}">
       <label for="e-plz">PLZ und Ort</label><input id="e-plz" name="plz_ort" value="${esc(e.empfaenger.plz_ort)}">
       <label for="e-uid">UID-Nummer</label><input id="e-uid" name="uid" value="${esc(e.empfaenger.uid)}">
-      <h2 class="abstand-oben">Honorarsätze</h2>
+      <h2 class="abstand-oben">Prämiensätze</h2>
       <p class="tipp">Wird als Betrag vorausgefüllt, getrennt für campus a college und campus a. Leer = kein Standardsatz.</p>
       ${MEDIUM_KEYS.map((m) => {
         const s = e.honorarsaetze?.[m] ?? {};
@@ -264,7 +264,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <div class="zeile">
         <div class="feld"><label for="e-satz-${m}-kolumne">Kolumne (EUR)</label>
           <input id="e-satz-${m}-kolumne" name="satz_${m}_kolumne" inputmode="decimal" autocomplete="off" value="${wert('kolumne')}"></div>
-        <div class="feld"><label for="e-satz-${m}-ausser">Außerordentliches Honorar (EUR)</label>
+        <div class="feld"><label for="e-satz-${m}-ausser">Außerordentliche Anerkennungsprämie (EUR)</label>
           <input id="e-satz-${m}-ausser" name="satz_${m}_ausserordentlich" inputmode="decimal" autocomplete="off" placeholder="individuell"
                  value="${wert('ausserordentlich')}"></div>
         ${Object.hasOwn(s, 'redigieren') ? `
@@ -311,7 +311,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       const roh = feld.value.trim();
       if (!roh) return null;
       const b = parseBetrag(roh);
-      if (!b) throw new Error(`Ungültiger Honorarsatz: „${roh}“ (z. B. 15 oder 15,50)`);
+      if (!b) throw new Error(`Ungültiger Prämiensatz: „${roh}“ (z. B. 15 oder 15,50)`);
       return b;
     };
     let honorarsaetze;
@@ -354,18 +354,17 @@ async function mail(inhalt, { store, nutzer: ich, neuLaden, istDemo }) {
       <form class="karte" id="m-form" novalidate>
         <h2>E-Mail-Benachrichtigungen</h2>
         <label class="check"><input type="checkbox" name="aktiv" ${e.aktiv ? 'checked' : ''}> E-Mails automatisch verschicken</label>
-        <p class="tipp">Neue Honorarnoten an die Redaktion, Bestätigung, Annahme, Rückgabe und Zahlung an die Autor:innen,
-          angenommene Honorarnoten an die Buchhaltung, Zugangsanfragen an den Admin.</p>
         <h3>Wer bekommt was?</h3>
-        ${feld('redaktion', 'Postfach der Redaktion', { typ: 'email', tipp: 'Bekommt jede neu eingereichte Honorarnote.' })}
-        ${feld('buchhaltung', 'Postfach der Buchhaltung (optional)', { typ: 'email', tipp: 'Bekommt angenommene Honorarnoten zur Zahlung.' })}
-        ${feld('admin', 'Postfach für Zugangsanfragen (optional)', { typ: 'email', tipp: 'Leer = Postfach der Redaktion.' })}
+        <p class="tipp">Benachrichtigungen gehen an die <strong>Konten selbst</strong>: neue Prämienabrechnungen an alle mit der
+          Rolle Redaktion, angenommene an die Buchhaltung, Zugangsanfragen an Admins, Bestätigungen an die Autor:innen.
+          Jede:r kann im <a href="#/profil">Profil</a> auswählen, welche E-Mails sie bekommen will.</p>
         <label class="check"><input type="checkbox" name="zugangsdaten" ${e.zugangsdaten ? 'checked' : ''}> Startpasswörter neuer Konten automatisch per E-Mail schicken</label>
         <h3 class="abstand-oben">Absender (SMTP)</h3>
         <p class="tipp">Bei World4You: Server <strong>smtp.world4you.com</strong>, Port <strong>587</strong>, als Benutzer die
           E-Mail-Adresse des Postfachs und dessen Passwort.</p>
-        ${feld('absender', 'Absender-Adresse', { typ: 'email', platzhalter: 'honorare@deine-domain.at' })}
+        ${feld('absender', 'Absender-Adresse', { typ: 'email', platzhalter: 'office@deine-domain.at' })}
         ${feld('absender_name', 'Absendername')}
+        ${feld('antwort_an', 'Antworten gehen an (optional)', { typ: 'email', tipp: 'Wer auf eine automatische E-Mail antwortet, schreibt an diese Adresse, z. B. deine zweite Adresse. Leer = an die Absender-Adresse.' })}
         <div class="zeile">
           <div class="feld">${feld('host', 'SMTP-Server')}</div>
           <div class="feld">${feld('port', 'Port', { wert: String(e.port ?? 587) })}</div>
@@ -396,7 +395,7 @@ async function mail(inhalt, { store, nutzer: ich, neuLaden, istDemo }) {
   const form = inhalt.querySelector('#m-form');
   form.addEventListener('submit', (ev) => {
     ev.preventDefault();
-    const daten = Object.fromEntries(['redaktion', 'buchhaltung', 'admin', 'absender', 'absender_name', 'host', 'port', 'verschluesselung',
+    const daten = Object.fromEntries(['absender', 'absender_name', 'antwort_an', 'host', 'port', 'verschluesselung',
       'benutzer', 'passwort', 'adresse'].map((k) => [k, form.elements[k].value]));
     daten.aktiv = form.elements.aktiv.checked;
     daten.zugangsdaten = form.elements.zugangsdaten.checked;
@@ -440,7 +439,7 @@ function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
   inhalt.querySelector('#d-export').addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
     try {
       const name = istDemo ? 'sicherung' : 'datenexport';
-      downloadText(`honorarnoten-${name}-${new Date().toISOString().slice(0, 10)}.json`, await store.exportieren(), 'application/json');
+      downloadText(`anerkennungspraemien-${name}-${new Date().toISOString().slice(0, 10)}.json`, await store.exportieren(), 'application/json');
     } catch (e) {
       meldung(fehlerText(e), 'fehler');
     }

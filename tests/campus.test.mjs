@@ -146,7 +146,7 @@ test('Konto einrichten: was Autor:innen noch fehlt', async () => {
   assert.ok(kontoFertig({ rollen: ['redaktion'], profil: {} }), 'nur Autor:innen brauchen Adresse, IBAN und Link');
 });
 
-test('Honorarsätze pro Medium', async () => {
+test('Prämiensätze pro Medium', async () => {
   const { saetzeNormalisieren, satzFuer, weichtAb } = await import('../public/js/lib/honorarsaetze.js');
   assert.deepEqual(saetzeNormalisieren({ kolumne: '16', ausserordentlich: '' }),
     { college: { kolumne: 16, ausserordentlich: null, redigieren: 2 }, 'campus-a': { kolumne: 16, ausserordentlich: null } },
@@ -157,14 +157,14 @@ test('Honorarsätze pro Medium', async () => {
   assert.equal(satzFuer(s, 'college', 'ausserordentlich'), null);
   assert.ok(weichtAb({ medium: 'campus-a', kategorie: 'kolumne', betrag: 15 }, s));
   assert.ok(!weichtAb({ medium: 'college', kategorie: 'kolumne', betrag: 15 }, s));
-  assert.throws(() => saetzeNormalisieren({ college: { kolumne: -1 } }), /Honorarsätze/);
+  assert.throws(() => saetzeNormalisieren({ college: { kolumne: -1 } }), /Prämiensätze/);
   // Redigieren: Satz pro Text × Anzahl
   const r = saetzeNormalisieren({ college: { kolumne: 15, redigieren: 2 } });
   assert.ok(!weichtAb({ medium: 'college', kategorie: 'redigieren', anzahl: 6, betrag: 12 }, r));
   assert.ok(weichtAb({ medium: 'college', kategorie: 'redigieren', anzahl: 6, betrag: 2 }, r));
 });
 
-test('Redigieren: Bezeichnung auf der Honorarnote', async () => {
+test('Redigieren: Bezeichnung auf der Prämienabrechnung', async () => {
   const { rollenNormalisieren } = await import('../public/js/lib/konto.js');
   const { redigierText, ausserordentlichePositionen, artText } = await import('../public/js/lib/format.js');
   assert.deepEqual(rollenNormalisieren(['redigieren']), ['autor', 'redigieren'], 'Redigieren bringt Autor:in mit');
@@ -178,6 +178,6 @@ test('Redigieren: Bezeichnung auf der Honorarnote', async () => {
     { kategorie: 'redigieren', titel: '', anzahl: 3 },
   ]);
   assert.deepEqual(liste.map((p) => [p.titel, p.vereinbart_mit]), [['Interview', 'Rita'], ['Redigieren (3 Texte)', '–']],
-    'Redigieren steht bei den außerordentlichen Honoraren');
+    'Redigieren steht bei den außerordentlichen Anerkennungsprämien');
   assert.equal(artText({ kategorie: 'redigieren', anzahl: 7 }), '7 Texte');
 });

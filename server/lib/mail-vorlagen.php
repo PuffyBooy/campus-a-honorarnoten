@@ -84,7 +84,7 @@ function mail_bauen(array $t): array
         // Kopf
         . '<tr><td style="background:' . FARBE . ';border-radius:16px 16px 0 0;padding:22px 28px;">'
         . '<span style="font-family:Georgia,\'Times New Roman\',serif;font-size:24px;color:#ffffff;letter-spacing:.01em;">' . h($marke) . '</span>'
-        . '<span style="font-size:13px;color:#f5edf1;letter-spacing:.06em;text-transform:uppercase;padding-left:10px;">Honorarnoten</span>'
+        . '<span style="font-size:13px;color:#f5edf1;letter-spacing:.06em;text-transform:uppercase;padding-left:10px;">Anerkennungsprämien</span>'
         . '</td></tr>'
         // Inhalt
         . '<tr><td style="background:#ffffff;border-radius:0 0 16px 16px;padding:30px 28px 26px;">'
@@ -93,7 +93,7 @@ function mail_bauen(array $t): array
         . '</td></tr>'
         // Fuß
         . '<tr><td style="padding:18px 28px 0;font-size:12px;line-height:1.5;color:#8d878a;text-align:center;">'
-        . 'Automatische Nachricht der Honorarnoten-App von campus a college und campus a.<br>Bitte nicht auf diese E-Mail antworten.'
+        . 'Automatische Nachricht der Anerkennungsprämien-App von campus a college und campus a.<br>Bitte nicht auf diese E-Mail antworten.'
         . '</td></tr></table></td></tr></table></body></html>';
 
     // Textfassung
@@ -106,7 +106,7 @@ function mail_bauen(array $t): array
     if (!empty($t['summe'])) $text .= "Gesamt: {$t['summe']}\n";
     if (!empty($t['positionen'])) $text .= "\n";
     if (!empty($t['knopf'][1])) $text .= $t['knopf'][0] . ': ' . $t['knopf'][1] . "\n\n";
-    $text .= "--\nAutomatische Nachricht der Honorarnoten-App von campus a college und campus a.\n";
+    $text .= "--\nAutomatische Nachricht der Anerkennungsprämien-App von campus a college und campus a.\n";
 
     return ['betreff' => $t['betreff'], 'html' => $seite, 'text' => $text];
 }
@@ -166,16 +166,16 @@ function mail_eingereicht_redaktion(PDO $db, array $note): array
 {
     $name = autor_name($note);
     return mail_bauen([
-        'betreff' => "Neue Honorarnote von $name ({$note['nummer']})",
-        'vorschau' => "$name hat eine Honorarnote über " . eur(note_summe($note)) . ' eingereicht.',
-        'titel' => 'Neue Honorarnote eingereicht',
+        'betreff' => "Neue Prämienabrechnung von $name ({$note['nummer']})",
+        'vorschau' => "$name hat eine Prämienabrechnung über " . eur(note_summe($note)) . ' eingereicht.',
+        'titel' => 'Neue Prämienabrechnung eingereicht',
         'medium' => $note['medium'],
-        'absaetze' => ["$name hat eine Honorarnote für " . medium_name($note['medium']) . ' eingereicht. Bitte prüfen und annehmen oder ablehnen.'],
-        'tabelle' => [['Honorarnote', $note['nummer']], ['Von', $name], ['Medium', medium_name($note['medium'])],
+        'absaetze' => ["$name hat eine Prämienabrechnung für " . medium_name($note['medium']) . ' eingereicht. Bitte prüfen und annehmen oder ablehnen.'],
+        'tabelle' => [['Prämienabrechnung', $note['nummer']], ['Von', $name], ['Medium', medium_name($note['medium'])],
             ['Eingereicht am', datum_text(substr(zeit_wien($note['eingereicht_am']), 0, 10))]],
         'positionen' => positionen_zeilen($note),
         'summe' => eur(note_summe($note)),
-        'knopf' => ['Honorarnote prüfen', app_link($db, 'redaktion/' . $note['id'])],
+        'knopf' => ['Prämienabrechnung prüfen', app_link($db, 'redaktion/' . $note['id'])],
     ]);
 }
 
@@ -183,15 +183,15 @@ function mail_eingereicht_autor(PDO $db, array $note): array
 {
     $vorname = $note['autor']['vorname'] ?? '';
     return mail_bauen([
-        'betreff' => "Deine Honorarnote {$note['nummer']} ist eingegangen",
-        'vorschau' => 'Danke! Die Redaktion prüft deine Honorarnote über ' . eur(note_summe($note)) . '.',
-        'titel' => 'Danke, deine Honorarnote ist da!',
+        'betreff' => "Deine Prämienabrechnung {$note['nummer']} ist eingegangen",
+        'vorschau' => 'Danke! Die Redaktion prüft deine Prämienabrechnung über ' . eur(note_summe($note)) . '.',
+        'titel' => 'Danke, deine Prämienabrechnung ist da!',
         'medium' => $note['medium'],
-        'absaetze' => ["Hallo $vorname,", 'deine Honorarnote ist bei der Redaktion eingegangen. Sobald sie geprüft ist, bekommst du wieder eine Nachricht.'],
-        'tabelle' => [['Honorarnote', $note['nummer']], ['Medium', medium_name($note['medium'])]],
+        'absaetze' => ["Hallo $vorname,", 'deine Prämienabrechnung ist bei der Redaktion eingegangen. Sobald sie geprüft ist, bekommst du wieder eine Nachricht.'],
+        'tabelle' => [['Prämienabrechnung', $note['nummer']], ['Medium', medium_name($note['medium'])]],
         'positionen' => positionen_zeilen($note),
         'summe' => eur(note_summe($note)),
-        'knopf' => ['Meine Honorarnoten ansehen', app_link($db, 'noten')],
+        'knopf' => ['Meine Prämienabrechnungen ansehen', app_link($db, 'noten')],
     ]);
 }
 
@@ -199,19 +199,19 @@ function mail_angenommen_autor(PDO $db, array $note): array
 {
     $vorname = $note['autor']['vorname'] ?? '';
     $korrigiert = array_filter($note['positionen'], fn ($p) => ($p['betrag_vermerk'] ?? '') !== '');
-    $absaetze = ["Hallo $vorname,", 'gute Nachrichten: Die Redaktion hat deine Honorarnote angenommen. Die Buchhaltung überweist den Betrag in den nächsten Tagen.'];
+    $absaetze = ["Hallo $vorname,", 'gute Nachrichten: Die Redaktion hat deine Prämienabrechnung angenommen. Die Buchhaltung überweist den Betrag in den nächsten Tagen.'];
     foreach ($korrigiert as $p) {
         $absaetze[] = "Betrag geändert bei „{$p['titel']}“: " . eur($p['betrag_eingereicht']) . ' → ' . eur($p['betrag']) . " ({$p['betrag_vermerk']})";
     }
     return mail_bauen([
-        'betreff' => "Honorarnote {$note['nummer']} angenommen",
-        'vorschau' => 'Deine Honorarnote über ' . eur(note_summe($note)) . ' wurde angenommen.',
-        'titel' => 'Deine Honorarnote wurde angenommen',
+        'betreff' => "Prämienabrechnung {$note['nummer']} angenommen",
+        'vorschau' => 'Deine Prämienabrechnung über ' . eur(note_summe($note)) . ' wurde angenommen.',
+        'titel' => 'Deine Prämienabrechnung wurde angenommen',
         'medium' => $note['medium'],
         'absaetze' => $absaetze,
         'hinweis' => ['Angenommen – ' . eur(note_summe($note)) . ' werden überwiesen.', 'erfolg'],
-        'tabelle' => [['Honorarnote', $note['nummer']], ['Betrag', eur(note_summe($note))]],
-        'knopf' => ['Honorarnote ansehen', app_link($db, 'noten')],
+        'tabelle' => [['Prämienabrechnung', $note['nummer']], ['Betrag', eur(note_summe($note))]],
+        'knopf' => ['Prämienabrechnung ansehen', app_link($db, 'noten')],
     ]);
 }
 
@@ -220,11 +220,11 @@ function mail_angenommen_buchhaltung(PDO $db, array $note): array
     $name = autor_name($note);
     return mail_bauen([
         'betreff' => "Zur Zahlung: {$note['nummer']} (" . eur(note_summe($note)) . ')',
-        'vorschau' => "Die Redaktion hat die Honorarnote von $name angenommen.",
-        'titel' => 'Honorarnote zur Zahlung freigegeben',
+        'vorschau' => "Die Redaktion hat die Prämienabrechnung von $name angenommen.",
+        'titel' => 'Prämienabrechnung zur Zahlung freigegeben',
         'medium' => $note['medium'],
-        'absaetze' => ["Die Redaktion hat die Honorarnote von $name angenommen. Sie steht jetzt in der Buchhaltung zur Zahlung bereit."],
-        'tabelle' => [['Honorarnote', $note['nummer']], ['Von', $name], ['Medium', medium_name($note['medium'])], ['Betrag', eur(note_summe($note))]],
+        'absaetze' => ["Die Redaktion hat die Prämienabrechnung von $name angenommen. Sie steht jetzt in der Buchhaltung zur Zahlung bereit."],
+        'tabelle' => [['Prämienabrechnung', $note['nummer']], ['Von', $name], ['Medium', medium_name($note['medium'])], ['Betrag', eur(note_summe($note))]],
         'knopf' => ['Zur Buchhaltung', app_link($db, 'zahlung')],
     ]);
 }
@@ -233,13 +233,13 @@ function mail_abgelehnt_autor(PDO $db, array $note, string $grund): array
 {
     $vorname = $note['autor']['vorname'] ?? '';
     return mail_bauen([
-        'betreff' => "Honorarnote {$note['nummer']}: bitte überarbeiten",
-        'vorschau' => 'Die Redaktion hat deine Honorarnote zurückgegeben: ' . kuerze($grund, 80),
-        'titel' => 'Bitte überarbeite deine Honorarnote',
+        'betreff' => "Prämienabrechnung {$note['nummer']}: bitte überarbeiten",
+        'vorschau' => 'Die Redaktion hat deine Prämienabrechnung zurückgegeben: ' . kuerze($grund, 80),
+        'titel' => 'Bitte überarbeite deine Prämienabrechnung',
         'medium' => $note['medium'],
-        'absaetze' => ["Hallo $vorname,", 'die Redaktion hat deine Honorarnote zurückgegeben. Die Leistungen stehen wieder unter „Meine Leistungen“ – dort kannst du sie korrigieren und neu abschicken.'],
+        'absaetze' => ["Hallo $vorname,", 'die Redaktion hat deine Prämienabrechnung zurückgegeben. Die Leistungen stehen wieder unter „Meine Leistungen“ – dort kannst du sie korrigieren und neu abschicken.'],
         'hinweis' => ["Begründung der Redaktion:\n$grund", 'gefahr'],
-        'tabelle' => [['Honorarnote', $note['nummer']]],
+        'tabelle' => [['Prämienabrechnung', $note['nummer']]],
         'knopf' => ['Leistungen überarbeiten', app_link($db, 'leistungen')],
     ]);
 }
@@ -248,21 +248,21 @@ function mail_bezahlt_autor(PDO $db, array $note, string $datum): array
 {
     $vorname = $note['autor']['vorname'] ?? '';
     return mail_bauen([
-        'betreff' => "Honorarnote {$note['nummer']} bezahlt",
+        'betreff' => "Prämienabrechnung {$note['nummer']} bezahlt",
         'vorschau' => eur(note_summe($note)) . ' wurden am ' . datum_text($datum) . ' überwiesen.',
-        'titel' => 'Dein Honorar ist unterwegs',
+        'titel' => 'Deine Anerkennungsprämie ist unterwegs',
         'medium' => $note['medium'],
-        'absaetze' => ["Hallo $vorname,", 'die Buchhaltung hat deine Honorarnote bezahlt. Je nach Bank ist das Geld in ein bis zwei Werktagen auf deinem Konto.'],
+        'absaetze' => ["Hallo $vorname,", 'die Buchhaltung hat deine Prämienabrechnung bezahlt. Je nach Bank ist das Geld in ein bis zwei Werktagen auf deinem Konto.'],
         'hinweis' => ['Überwiesen am ' . datum_text($datum) . ': ' . eur(note_summe($note)), 'erfolg'],
-        'tabelle' => [['Honorarnote', $note['nummer']], ['Betrag', eur(note_summe($note))], ['Bezahlt am', datum_text($datum)]],
-        'knopf' => ['Meine Honorarnoten', app_link($db, 'noten')],
+        'tabelle' => [['Prämienabrechnung', $note['nummer']], ['Betrag', eur(note_summe($note))], ['Bezahlt am', datum_text($datum)]],
+        'knopf' => ['Meine Prämienabrechnungen', app_link($db, 'noten')],
     ]);
 }
 
 function mail_anfrage_admin(PDO $db, array $a): array
 {
     $name = trim($a['vorname'] . ' ' . $a['nachname']);
-    $absaetze = ["$name möchte einen Zugang zu den Honorarnoten."];
+    $absaetze = ["$name möchte einen Zugang zu den Anerkennungsprämien."];
     if (($a['nachricht'] ?? '') !== '') $absaetze[] = "Nachricht: „{$a['nachricht']}“";
     return mail_bauen([
         'betreff' => "Neue Zugangsanfrage: $name",
@@ -277,12 +277,12 @@ function mail_anfrage_admin(PDO $db, array $a): array
 function mail_zugang(PDO $db, array $z, bool $neu = true): array
 {
     return mail_bauen([
-        'betreff' => $neu ? 'Dein Zugang zu den Honorarnoten' : 'Dein neues Startpasswort für die Honorarnoten',
+        'betreff' => $neu ? 'Dein Zugang zu den Anerkennungsprämien' : 'Dein neues Startpasswort für die Prämienabrechnungen',
         'vorschau' => $neu ? 'Dein Konto ist bereit – hier sind deine Zugangsdaten.' : 'Hier ist dein neues Startpasswort.',
-        'titel' => $neu ? 'Willkommen bei den Honorarnoten!' : 'Neues Startpasswort',
+        'titel' => $neu ? 'Willkommen bei den Anerkennungsprämien!' : 'Neues Startpasswort',
         'absaetze' => array_values(array_filter([
             "Hallo {$z['vorname']},",
-            $neu ? 'dein Zugang zu den Honorarnoten von campus a college und campus a ist bereit.' : 'für dein Konto wurde ein neues Startpasswort erstellt.',
+            $neu ? 'dein Zugang zu den Anerkennungsprämien von campus a college und campus a ist bereit.' : 'für dein Konto wurde ein neues Startpasswort erstellt.',
             'Beim ersten Anmelden legst du ein eigenes Passwort fest' . ($neu ? ' und richtest dein Konto ein (Adresse, IBAN und Link zu deinem Profil).' : '.'),
         ])),
         'tabelle' => [['E-Mail', $z['email']], ['Startpasswort', $z['passwort'], true]],
@@ -293,11 +293,12 @@ function mail_zugang(PDO $db, array $z, bool $neu = true): array
 function mail_test(PDO $db, string $an): array
 {
     return mail_bauen([
-        'betreff' => 'Test-E-Mail der Honorarnoten',
+        'betreff' => 'Test-E-Mail der Anerkennungsprämien',
         'vorschau' => 'Der E-Mail-Versand funktioniert.',
         'titel' => 'Der E-Mail-Versand funktioniert',
-        'absaetze' => ['Diese Test-E-Mail kommt von der Honorarnoten-App. Ab jetzt gehen Benachrichtigungen automatisch hinaus:',
-            "• neue Honorarnoten an die Redaktion\n• Eingangsbestätigung, Annahme, Rückgabe und Zahlung an die Autor:innen\n• angenommene Honorarnoten an die Buchhaltung\n• Zugangsanfragen an den Admin"],
+        'absaetze' => ['Diese Test-E-Mail kommt von der Anerkennungsprämien-App. Ab jetzt gehen Benachrichtigungen automatisch hinaus:',
+            "• neue Prämienabrechnungen an die Redaktion\n• Eingangsbestätigung, Annahme, Rückgabe und Zahlung an die Autor:innen\n• angenommene Prämienabrechnungen an die Buchhaltung\n• Zugangsanfragen an die Admins",
+            'Jede:r wählt im eigenen Profil aus, welche dieser E-Mails sie bekommen will.'],
         'hinweis' => ['Gesendet an ' . $an, 'erfolg'],
         'knopf' => ['Zur App', app_link($db)],
     ]);

@@ -12,10 +12,8 @@ const MAIL_STANDARD = [
     'benutzer' => '',                   // meist die Absender-Adresse
     'passwort' => '',
     'absender' => '',
-    'absender_name' => 'campus a Honorarnoten',
-    'redaktion' => '',                  // bekommt neu eingereichte Honorarnoten
-    'buchhaltung' => '',                // bekommt angenommene Honorarnoten (zur Zahlung)
-    'admin' => '',                      // bekommt Zugangsanfragen (leer = Redaktion)
+    'absender_name' => 'campus a Office',
+    'antwort_an' => '',                 // Antworten auf die automatischen E-Mails landen hier (z. B. die zweite Adresse)
     'zugangsdaten' => true,             // Startpasswörter automatisch per E-Mail an neue Konten
     'adresse' => '',                    // Adresse der App für Links, z. B. https://honorare.example.at/
 ];
@@ -40,7 +38,7 @@ function mail_einstellungen_speichern(PDO $db, array $d): void
 {
     $alt = mail_einstellungen($db);
     $e = $alt;
-    foreach (['host', 'benutzer', 'absender', 'absender_name', 'redaktion', 'buchhaltung', 'admin', 'adresse'] as $k) {
+    foreach (['host', 'benutzer', 'absender', 'absender_name', 'antwort_an', 'adresse'] as $k) {
         if (array_key_exists($k, $d)) $e[$k] = kuerze(tr($d[$k]), 200);
     }
     if (array_key_exists('port', $d)) $e['port'] = (int) (zahl($d['port']) ?? 587);
@@ -49,7 +47,7 @@ function mail_einstellungen_speichern(PDO $db, array $d): void
     if (array_key_exists('zugangsdaten', $d)) $e['zugangsdaten'] = (bool) $d['zugangsdaten'];
     // leeres Passwortfeld = unverändert
     if (s($d['passwort'] ?? '') !== '') $e['passwort'] = s($d['passwort']);
-    foreach (['absender', 'redaktion', 'buchhaltung', 'admin', 'benutzer'] as $k) {
+    foreach (['absender', 'antwort_an', 'benutzer'] as $k) {
         if ($k === 'benutzer' && $e[$k] !== '' && !str_contains($e[$k], '@')) continue; // SMTP-Benutzer muss keine Adresse sein
         pruefe($e[$k] === '' || ist_email($e[$k]), 'Bitte gültige E-Mail-Adressen angeben.');
     }
@@ -96,7 +94,7 @@ function mails_verschicken(PDO $db, int $max = 20): int
             q($db, 'update mails set versuche = versuche + 1, fehler = ?, gesperrt_bis = ? where id = ?',
                 [kuerze($f->getMessage(), 500), time() + $warten, $m['id']]);
             $smtp = null;
-            error_log('Honorarnoten: E-Mail an ' . $m['an'] . ' nicht verschickt: ' . $f->getMessage());
+            error_log('Prämienabrechnungen: E-Mail an ' . $m['an'] . ' nicht verschickt: ' . $f->getMessage());
         }
     }
     $smtp?->beenden();
@@ -188,6 +186,7 @@ final class Smtp
             'From: ' . self::adresse($this->e['absender_name'], $von),
             'To: <' . $an . '>',
             'Subject: ' . self::kodiert($betreff),
+            ...(($this->e['antwort_an'] ?? '') !== '' ? ['Reply-To: <' . $this->e['antwort_an'] . '>'] : []),
             'Message-ID: <' . bin2hex(random_bytes(16)) . '@' . $domain . '>',
             'MIME-Version: 1.0',
             'Auto-Submitted: auto-generated',

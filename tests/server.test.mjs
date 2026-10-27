@@ -68,12 +68,11 @@ test('erstes Admin-Konto und Startpasswort', async () => {
 
 test('E-Mail-Versand einrichten (Admin): Passwort bleibt geheim, Test-E-Mail', async () => {
   const mail = {
-    aktiv: true, host: '127.0.0.1', port: php.smtp.port, verschluesselung: 'keine', benutzer: 'honorare@example.org',
-    passwort: 'smtp-geheim', absender: 'honorare@example.org', absender_name: 'campus a Honorarnoten',
-    redaktion: 'redaktion@example.org', buchhaltung: 'kasse-postfach@example.org', admin: 'chef@example.org',
-    adresse: 'https://honorare.example.org',
+    aktiv: true, host: '127.0.0.1', port: php.smtp.port, verschluesselung: 'keine', benutzer: 'office@example.org',
+    passwort: 'smtp-geheim', absender: 'office@example.org', absender_name: 'campus a Office',
+    antwort_an: 'kontakt@example.org', adresse: 'https://honorare.example.org',
   };
-  assert.match((await k.admin.aufruf('mailEinstellungenSpeichern', { ...mail, redaktion: 'kein-mail' })).fehler, /gültige E-Mail/);
+  assert.match((await k.admin.aufruf('mailEinstellungenSpeichern', { ...mail, antwort_an: 'kein-mail' })).fehler, /gültige E-Mail/);
   await k.admin.ok('mailEinstellungenSpeichern', mail);
   const e = await k.admin.ok('mailEinstellungen');
   assert.equal(e.passwort, undefined, 'Passwort wird nie ausgeliefert');
@@ -83,11 +82,12 @@ test('E-Mail-Versand einrichten (Admin): Passwort bleibt geheim, Test-E-Mail', a
   await k.admin.ok('mailEinstellungenSpeichern', { ...mail, passwort: '' });
   const test = await k.admin.ok('testMail');
   assert.equal(test.an, 'admin@example.org');
-  const m = php.smtp.mails.find((x) => x.betreff === 'Test-E-Mail der Honorarnoten');
+  const m = php.smtp.mails.find((x) => x.betreff === 'Test-E-Mail der Anerkennungsprämien');
   assert.ok(m, 'Test-E-Mail angekommen');
   assert.equal(m.an, 'admin@example.org');
-  assert.deepEqual(php.smtp.anmeldungen.slice(-2), ['honorare@example.org', 'smtp-geheim'], 'Anmeldung mit gespeichertem Passwort');
-  assert.match(m.von, /"campus a Honorarnoten" <honorare@example\.org>/);
+  assert.deepEqual(php.smtp.anmeldungen.slice(-2), ['office@example.org', 'smtp-geheim'], 'Anmeldung mit gespeichertem Passwort');
+  assert.match(m.von, /"campus a Office" <office@example\.org>/);
+  assert.match(m.roh, /^Reply-To: <kontakt@example\.org>$/m, 'Antworten gehen an die zweite Adresse');
   assert.match(m.html, /Der E-Mail-Versand funktioniert/);
   assert.match(m.text, /Zur App: https:\/\/honorare\.example\.org\//);
   assert.equal((await k.admin.aufruf('mailEinstellungen')).status, 200);
@@ -158,7 +158,7 @@ test('Autor:in: Profil, Leistungen, Monatsabrechnung', async () => {
   assert.deepEqual(await a.ok('meineLeistungen'), []);
 
   assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'ausserordentlich', art: 'Interview', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10 })).fehler, /vereinbart/);
-  assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'ausserordentlich', art: ' ', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10, vereinbart_mit: 'Rita' })).fehler, /Art des Honorars/);
+  assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'ausserordentlich', art: ' ', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10, vereinbart_mit: 'Rita' })).fehler, /Art der Anerkennungsprämie/);
   assert.match((await a.aufruf('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: 'Schule', titel: 'X', veroeffentlichung: '2026-09-01', betrag: 10.005 })).fehler, /Betrag/);
   await a.ok('leistungSpeichern', { kategorie: 'kolumne', kolumnenart: 'Schule', titel: 'Kolumne 1', veroeffentlichung: '2026-09-01', betrag: 15 });
   await a.ok('leistungSpeichern', { kategorie: 'ausserordentlich', art: 'Interview', titel: 'Interview', veroeffentlichung: '2026-09-05', betrag: 60.5, vereinbart_mit: 'Rita' });
@@ -248,7 +248,7 @@ test('Abgelehnte Note überarbeiten', async () => {
   assert.match((await k.bert.aufruf('leistungenZurueckholen', note.id)).fehler, /bereits/);
   assert.match((await k.rita.aufruf('annehmen', note.id)).fehler, /überarbeitet/);
   assert.ok((await k.rita.ok('verlaufVon', note.id)).some((v) => v.aktion === 'zurueckgeholt' && v.akteur_name === 'Rita Redaktion'));
-  // überarbeiten und als neue Honorarnote abschicken
+  // überarbeiten und als neue Prämienabrechnung abschicken
   await k.bert.ok('leistungSpeichern', { ...zurueck[0], titel: 'Graz (korrigiert)' });
   const neu = await k.bert.ok('abrechnungAbschicken', [zurueck[0].id]);
   assert.notEqual(neu.nummer, note.nummer);
@@ -267,13 +267,13 @@ test('Admin: Rollen, letzter Admin, Deaktivieren beendet Sitzungen', async () =>
   await k.admin.ok('nutzerAktivSetzen', bert.id, true);
 });
 
-test('Honorarsätze: Admin legt fest, alle sehen sie, ungültige Werte abgelehnt', async () => {
+test('Prämiensätze: Admin legt fest, alle sehen sie, ungültige Werte abgelehnt', async () => {
   const basisDaten = { empfaenger: { name: 'campus a Medien GmbH' }, datenschutzKontakt: '' };
   assert.deepEqual((await k.anna.ok('einstellungen')).honorarsaetze, {
     college: { kolumne: 15, ausserordentlich: null, redigieren: 2 }, 'campus-a': { kolumne: 15, ausserordentlich: null },
   }, 'Standardsätze ab Werk, für beide Medien (Redigieren nur campus a college)');
   assert.equal((await k.rita.aufruf('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { college: { kolumne: 20 } } })).status, 403);
-  assert.match((await k.admin.aufruf('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { 'campus-a': { kolumne: -5 } } })).fehler, /Honorarsätze/);
+  assert.match((await k.admin.aufruf('einstellungenSpeichern', { ...basisDaten, honorarsaetze: { 'campus-a': { kolumne: -5 } } })).fehler, /Prämiensätze/);
   await k.admin.ok('einstellungenSpeichern', {
     ...basisDaten, honorarsaetze: { college: { kolumne: 17.5, ausserordentlich: '' }, 'campus-a': { kolumne: 25, ausserordentlich: 80 } },
   });
@@ -290,9 +290,9 @@ test('Art der Kolumne (freier Text): Speichern, bleibt beim Abschicken erhalten'
   await k.anna.ok('leistungSpeichern', { kategorie: 'ausserordentlich', art: '  Foto   und Text ', kolumnenart: 'Kultur', titel: 'Fotostrecke', veroeffentlichung: '2026-09-11', betrag: 40, vereinbart_mit: 'Rita' });
   const [kolumne, extra] = await k.anna.ok('meineLeistungen');
   assert.equal(kolumne.kolumnenart, 'Kultur');
-  assert.equal(kolumne.art, '', 'Kolumnen haben keine Art des Honorars');
+  assert.equal(kolumne.art, '', 'Kolumnen haben keine Art der Anerkennungsprämie');
   assert.equal(extra.kolumnenart, '', 'nur Kolumnen haben eine Kolumnenart');
-  assert.equal(extra.art, 'Foto und Text', 'Art des Honorars ist freier Text');
+  assert.equal(extra.art, 'Foto und Text', 'Art der Anerkennungsprämie ist freier Text');
   const note = await k.anna.ok('abrechnungAbschicken', [kolumne.id, extra.id]);
   assert.equal(note.positionen.find((p) => p.kategorie === 'kolumne').kolumnenart, 'Kultur');
   assert.equal((await k.rita.ok('note', note.id)).positionen[0].kolumnenart, 'Kultur');
@@ -351,7 +351,7 @@ test('Artikel von campus-a-college.at: Profil verknüpfen, alle Artikel sehen, �
   assert.equal(campusSeiten.abrufe - vorher, 1, 'nur die erste Listenseite (keine neuen Artikel)');
 });
 
-test('campus a und campus a college: Artikel beider Seiten, getrennte Honorarnoten', async () => {
+test('campus a und campus a college: Artikel beider Seiten, getrennte Prämienabrechnungen', async () => {
   const b = k.bert;
   await b.ok('anmelden', 'bert@example.org', 'geheim12345'); // Sitzung wurde beim Deaktivieren beendet
   // Bert hat nur ein Profil auf campus-a.at
@@ -474,35 +474,62 @@ test('Redigieren (campus a college): Kategorie wie Kolumne, Anzahl Texte × Satz
 
 test('E-Mails: Anfrage, Zugang, Einreichen, Annehmen, Ablehnen, Bezahlen', async () => {
   const mail = (an, betreff) => mailAbwarten(php.smtp, (m) => m.an === an && betreff.test(m.betreff));
-  const anfrage = await mail('chef@example.org', /^Neue Zugangsanfrage: Anna Autorin$/);
-  assert.ok(anfrage, 'Zugangsanfrage an den Admin');
+  const anfrage = await mail('admin@example.org', /^Neue Zugangsanfrage: Anna Autorin$/);
+  assert.ok(anfrage, 'Zugangsanfrage an das Admin-Konto');
   assert.match(anfrage.text, /Nachricht: „Hallo“/);
   assert.match(anfrage.html, /href="https:\/\/honorare\.example\.org\/#\/admin\/anfragen"/);
 
-  const zugang = await mail('anna@example.org', /^Dein Zugang zu den Honorarnoten$/);
+  const zugang = await mail('anna@example.org', /^Dein Zugang zu den Anerkennungsprämien$/);
   assert.ok(zugang?.text.includes(k.zugang['anna@example.org'].passwort), 'Startpasswort in der Willkommens-Mail');
 
   const nummer = k.note.nummer;
-  const redaktion = await mail('redaktion@example.org', new RegExp(`^Neue Honorarnote von Anna Müller \\(${nummer}\\)$`));
-  assert.ok(redaktion, 'neue Honorarnote an die Redaktion');
+  const redaktion = await mail('rita@example.org', new RegExp(`^Neue Prämienabrechnung von Anna Müller \\(${nummer}\\)$`));
+  assert.ok(redaktion, 'neue Prämienabrechnung an das Konto der Redaktion');
+  assert.ok(!php.smtp.mails.some((m) => m.an === 'admin@example.org' && m.betreff.startsWith('Neue Prämienabrechnung')), 'reine Admins: aus, solange nicht eingeschaltet');
   assert.match(redaktion.html, new RegExp(`#/redaktion/${k.note.id}`));
   assert.match(redaktion.text, /Kolumne 1 \(01\.09\.2026\): € 15,00/);
   assert.match(redaktion.text, /Gesamt: € 75,50/);
   assert.ok(!redaktion.text.includes('AT61'), 'keine IBAN in der Mail an die Redaktion');
-  assert.ok(await mail('anna@example.org', new RegExp(`^Deine Honorarnote ${nummer} ist eingegangen$`)), 'Eingangsbestätigung');
+  assert.ok(await mail('anna@example.org', new RegExp(`^Deine Prämienabrechnung ${nummer} ist eingegangen$`)), 'Eingangsbestätigung');
 
-  const angenommen = await mail('anna@example.org', new RegExp(`^Honorarnote ${nummer} angenommen$`));
+  const angenommen = await mail('anna@example.org', new RegExp(`^Prämienabrechnung ${nummer} angenommen$`));
   assert.match(angenommen.text, /Betrag geändert bei „Interview“: € 60,50 → € 50,00 \(Laut Vereinbarung\)/);
-  assert.ok(await mail('kasse-postfach@example.org', new RegExp(`^Zur Zahlung: ${nummer} \\(€ 65,00\\)$`)), 'an die Buchhaltung');
-  assert.ok(await mail('anna@example.org', new RegExp(`^Honorarnote ${nummer} bezahlt$`)), 'bezahlt');
+  assert.ok(await mail('kasse@example.org', new RegExp(`^Zur Zahlung: ${nummer} \\(€ 65,00\\)$`)), 'an die Buchhaltung');
+  assert.ok(await mail('anna@example.org', new RegExp(`^Prämienabrechnung ${nummer} bezahlt$`)), 'bezahlt');
 
   const abgelehnt = await mail('bert@example.org', /bitte überarbeiten$/);
   assert.match(abgelehnt.text, /Begründung der Redaktion:\nNicht erschienen/);
   assert.match(abgelehnt.html, /#\/leistungen/);
   // Gestaltung: Kopf in Markenfarbe, Knopf, Textfassung
   assert.match(redaktion.html, /background:#8a5370/);
-  assert.match(redaktion.html, /Honorarnote prüfen/);
+  assert.match(redaktion.html, /Prämienabrechnung prüfen/);
   assert.ok(php.smtp.mails.every((m) => m.text && m.html), 'jede Mail mit Text- und HTML-Fassung');
+});
+
+test('Benachrichtigungen: jedes Konto wählt selbst', async () => {
+  const rita = await k.rita.ok('aktuellerNutzer');
+  assert.deepEqual(rita.benachrichtigungen, {}, 'ohne eigene Wahl: Standard');
+  // nur Arten der eigenen Rollen werden gespeichert
+  const neu = await k.rita.ok('benachrichtigungenSpeichern', { neue_note: false, bezahlt: false, quatsch: true });
+  assert.deepEqual(neu.benachrichtigungen, { neue_note: false });
+  const anna = await k.anna.ok('benachrichtigungenSpeichern', { eingang: false });
+  assert.deepEqual(anna.benachrichtigungen, { eingang: false });
+  // Admin schaltet die Redaktions-Mails für sich ein
+  await k.admin.ok('benachrichtigungenSpeichern', { neue_note: true });
+
+  const vorher = php.smtp.mails.length;
+  await k.anna.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Wahl-Test', veroeffentlichung: '2026-09-21', betrag: 15 });
+  const p = (await k.anna.ok('meineLeistungen')).find((x) => x.titel === 'Wahl-Test');
+  const note = await k.anna.ok('abrechnungAbschicken', [p.id]);
+  const admin = await mailAbwarten(php.smtp, (m) => m.an === 'admin@example.org' && m.betreff.includes(note.nummer));
+  assert.ok(admin, 'Admin hat es eingeschaltet');
+  await k.anna.ok('aktuellerNutzer'); // nächste Anfrage: die Mails der vorigen sind sicher verschickt
+  const neueMails = php.smtp.mails.slice(vorher).filter((m) => m.betreff.includes(note.nummer));
+  assert.ok(!neueMails.some((m) => m.an === 'rita@example.org'), 'Rita hat neue Prämienabrechnungen ausgeschaltet');
+  assert.ok(!neueMails.some((m) => m.an === 'anna@example.org'), 'Anna will keine Eingangsbestätigung');
+  await k.rita.ok('ablehnen', note.id, 'Test');
+  await k.rita.ok('benachrichtigungenSpeichern', { neue_note: true });
+  await k.anna.ok('benachrichtigungenSpeichern', { eingang: true });
 });
 
 test('Admin: Note löschen mit Protokoll, Export ohne Passwörter', async () => {

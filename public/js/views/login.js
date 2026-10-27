@@ -9,7 +9,7 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
   el.innerHTML = `
     <div class="login-raster">
       <section class="karte">
-        <h1>Honorarnoten</h1>
+        <h1>Anerkennungsprämien</h1>
         <div class="reiter" role="tablist">
           <button type="button" role="tab" id="t-anmelden" aria-selected="true" aria-controls="p-anmelden">Anmelden</button>
           <button type="button" role="tab" id="t-registrieren" aria-selected="false" aria-controls="p-registrieren">Zugang anfragen</button>
