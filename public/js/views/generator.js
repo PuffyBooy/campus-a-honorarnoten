@@ -1,5 +1,5 @@
 // Honorarnoten-Generator: Honorarnoten für andere Firmen (externe Auftraggeber).
-// Eigene Daten kommen aus dem Profil; der Entwurf bleibt in diesem Browser gespeichert.
+// Eigene Daten kommen aus dem Profil; der Entwurf bleibt (mit Zustimmung) in diesem Browser gespeichert.
 import JSZip from '../../vendor/jszip.mjs';
 import { esc, formatBetragDokument, formatBetragPlain, formatDatum, heuteIso, parseBetrag } from '../lib/format.js';
 import { formatIban, normalizeIban } from '../lib/iban.js';
@@ -10,13 +10,17 @@ import {
   HINWEIS_KLEINUNTERNEHMER, gesamtCent, pruefen, externeHonorarnoteDocx, dateiname,
 } from '../lib/externe-honorarnote.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
+import { komfortErlaubt } from '../lib/cookies.js';
 
 // ------------------------------------------------------------------ Entwurf im Browser (pro Person)
+// Auf dem Gerät gemerkt nur mit Zustimmung („Komfort“ in den Cookie-Einstellungen), sonst nur bis zum Schließen.
+const imSpeicher = new Map();
 
 const entwurfKey = (uid) => `campus-a-honorare:generator:${uid}`;
 const zaehlerKey = (uid, jahr) => `campus-a-honorare:generator-zaehler:${uid}:${jahr}`;
 
 function lesen(key, standard) {
+  if (!komfortErlaubt()) return imSpeicher.has(key) ? structuredClone(imSpeicher.get(key)) : standard;
   try {
     const roh = localStorage.getItem(key);
     return roh ? JSON.parse(roh) : standard;
@@ -25,6 +29,11 @@ function lesen(key, standard) {
   }
 }
 function schreiben(key, wert) {
+  if (!komfortErlaubt()) {
+    if (wert === null) imSpeicher.delete(key);
+    else imSpeicher.set(key, structuredClone(wert));
+    return;
+  }
   try {
     if (wert === null) localStorage.removeItem(key);
     else localStorage.setItem(key, JSON.stringify(wert));
@@ -176,7 +185,8 @@ export function render(el, { nutzer }) {
     <div class="kopfzeile">
       <h1>Externe Honorarnote</h1>
     </div>
-    <p class="tipp">Für Honorarnoten an andere Firmen. Der Entwurf bleibt nur in diesem Browser.</p>
+    <p class="tipp">Für Honorarnoten an andere Firmen. Der Entwurf bleibt nur in diesem Browser${komfortErlaubt() ? ''
+      : ', bis du die Seite schließt. Damit er auf diesem Gerät gemerkt wird, in den <button type="button" class="link-knopf" data-cookie-einstellungen>Cookie-Einstellungen</button> „Komfort“ erlauben'}.</p>
     <div class="spalten gen-spalten">
       <form id="gen-form" class="gen-formular" novalidate>
         <section class="karte">

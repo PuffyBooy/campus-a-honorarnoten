@@ -57,6 +57,7 @@ export const notenDiesenMonat = f('notenDiesenMonat');
 export const abrechnungAbschicken = f('abrechnungAbschicken');
 export const meineNoten = f('meineNoten');
 export const leistungenZurueckholen = f('leistungenZurueckholen');
+export const abrechnungZurueckziehen = f('abrechnungZurueckziehen');
 
 // Redaktion
 export const alleNoten = f('alleNoten');

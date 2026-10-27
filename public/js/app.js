@@ -13,7 +13,8 @@ import * as zahlung from './views/zahlung.js';
 import * as admin from './views/admin.js';
 import * as generator from './views/generator.js';
 import * as rechtlichesSeite from './views/rechtliches.js';
-import { hinweisHtml, hinweisOffen } from './lib/rechtliches.js';
+import { hinweisOffen, zustimmungHtml } from './lib/rechtliches.js';
+import { cookieBanner, gewaehlt } from './lib/cookies.js';
 
 // Demo: Daten im Browser (store.js). Server: Daten über die API (api.js).
 const IST_DEMO = MODUS !== 'server';
@@ -27,8 +28,8 @@ const banner = document.getElementById('banner');
 let flash = null;
 
 const ROUTEN = [
-  { pfad: 'leistungen', view: leistungen, rolle: ['autor'], titel: 'Meine Leistungen' },
-  { pfad: 'noten', view: noten, rolle: ['autor'], titel: 'Meine Prämienabrechnungen' },
+  { pfad: 'leistungen', view: leistungen, rolle: ['autor'], titel: 'Mein Monat' },
+  { pfad: 'noten', view: noten, rolle: ['autor'], titel: 'Meine Abrechnungen' },
   { pfad: 'extern', view: generator, rolle: ['autor'], titel: 'Externe Honorarnote' },
   { pfad: 'redaktion', view: redaktion, rolle: ['redaktion', 'admin'], titel: 'Redaktion' },
   { pfad: 'redaktion/:id', view: redaktionDetail, rolle: ['redaktion', 'admin'] },
@@ -38,6 +39,9 @@ const ROUTEN = [
   { pfad: 'admin/:tab', view: admin, rolle: ['admin'] },
   { pfad: 'profil', view: profil, rolle: ['autor', 'redaktion', 'buchhaltung', 'admin'] },
 ];
+
+/** „Maria Muster“ -> „MM“ für den runden Knopf zum Profil */
+const initialen = (n) => (`${n.vorname?.[0] ?? ''}${n.nachname?.[0] ?? ''}`.toUpperCase() || (n.email?.[0] ?? '?').toUpperCase());
 
 const darf = (nutzer, route) => route.rolle.some((r) => nutzer.rollen.includes(r));
 const kontoEinrichten = (nutzer) => nutzer.muss_passwort_aendern || !store.profilVollstaendig(nutzer);
@@ -111,7 +115,7 @@ async function renderNav(nutzer, pfad) {
   nav.innerHTML = `<div class="nav-links">${links}</div>
     <div class="nav-konto">
       <a href="#/profil" class="nav-user"${pfad === 'profil' ? ' aria-current="page"' : ''}
-         title="${esc(nutzer.email)}">${esc(nutzer.vorname)} ${esc(nutzer.nachname)}</a>
+         title="Mein Profil · ${esc(nutzer.email)}"><span class="avatar" aria-hidden="true">${esc(initialen(nutzer))}</span>${esc(nutzer.vorname)} ${esc(nutzer.nachname)}</a>
       <button type="button" class="btn-link" id="abmelden">Abmelden</button>
     </div>`;
   nav.querySelector('#abmelden').addEventListener('click', async () => {
@@ -125,13 +129,13 @@ async function renderNav(nutzer, pfad) {
 let renderZaehler = 0;
 
 /**
- * Hinweis „Betreiber nicht bei campus a angestellt“: nach dem Anmelden oben, bis er zur Kenntnis genommen
- * wurde (beim Konto einrichten steht er im Formular). Ändern sich die Angaben, erscheint er erneut.
+ * Datenschutzerklärung und Hinweis „Betreiber nicht bei campus a angestellt“: nach dem Anmelden oben, bis sie
+ * zur Kenntnis genommen wurden (beim Konto einrichten stehen sie im Formular). Ändern sich die Angaben, erneut.
  */
 function hinweisBanner(nutzer, recht) {
   const zeigen = recht && nutzer && !kontoEinrichten(nutzer) && hinweisOffen(nutzer, recht.betreiber);
-  banner.innerHTML = zeigen ? `<aside class="hinweis-betreiber" role="note"><span>${hinweisHtml(recht)}</span>
-    <button type="button" class="btn btn-klein" id="hinweis-ok">Zur Kenntnis genommen</button></aside>` : '';
+  banner.innerHTML = zeigen ? `<aside class="hinweis-betreiber" role="note"><span>${zustimmungHtml(recht)}</span>
+    <button type="button" class="btn btn-klein" id="hinweis-ok">Gelesen und zur Kenntnis genommen</button></aside>` : '';
   banner.querySelector('#hinweis-ok')?.addEventListener('click', async (ev) => {
     ev.currentTarget.disabled = true;
     try {
@@ -255,6 +259,12 @@ async function start() {
   });
   // Server: Sitzung abgelaufen -> zurück zur Anmeldung
   window.addEventListener('honorare:abgemeldet', () => render());
+  // Cookies: beim ersten Besuch fragen, über die Fußzeile jederzeit änderbar
+  document.addEventListener('click', (ev) => {
+    if (ev.target.closest('#cookie-einstellungen, [data-cookie-einstellungen]')) cookieBanner({ details: true });
+  });
+  window.addEventListener('honorare:cookie-wahl', () => { if (location.hash.startsWith('#/extern')) render(); });
+  if (!gewaehlt()) cookieBanner();
   render();
 }
 

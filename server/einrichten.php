@@ -154,7 +154,7 @@ $wert = fn ($k, $standard = '') => h($_POST[$k] ?? $standard);
 </head>
 <body>
   <header class="kopf"><div class="kopf-innen">
-    <a class="marke" href="./"><span class="marke-name">campus a <em>college</em></span><span class="marke-zusatz">Anerkennungsprämien</span></a>
+    <a class="marke" href="./"><span class="marke-name">campus a</span><span class="marke-zusatz">Anerkennungsprämien</span></a>
   </div></header>
   <main class="inhalt einrichtung-seite">
     <h1>Einrichtung</h1>

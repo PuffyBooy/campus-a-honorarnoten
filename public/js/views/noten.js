@@ -1,11 +1,12 @@
-// Autor:in: abgeschickte Prämienabrechnungen mit Status, Download als Word
+// Autor:in: eingereichte Prämienabrechnungen eines Jahres mit Verlauf, Zurückziehen und Download als Word
 import {
   KATEGORIE_LABEL, artText, esc, formatDatum, formatEuro, formatMonat, formatZeitpunkt,
 } from '../lib/format.js';
 import { honorarnoteHerunterladen } from '../lib/beleg.js';
 import { standardBetrag, weichtAb } from '../lib/honorarsaetze.js';
-import { hatArtikel, mediumBadge, titelLink } from '../lib/campus.js';
-import { fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
+import { hatArtikel, mediumBadge, mediumName, titelLink } from '../lib/campus.js';
+import { bestaetigen, fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
+import { kannZurueckziehen, schritteHtml } from '../lib/schritte.js';
 
 /**
  * Tabelle der Leistungen einer Prämienabrechnung. Jeder Titel ist ein Link (neuer Tab): zum verknüpften
@@ -41,50 +42,73 @@ export function positionenTabelle(note, { mitKorrektur = false, saetze = null, p
     </table>`;
 }
 
-export async function render(el, { store, flash, neuLaden, istAktuell }) {
-  const noten = await store.meineNoten();
-  if (!istAktuell()) return;
+const cent = (b) => Math.round(b * 100);
+const euroSumme = (noten) => noten.reduce((s, n) => s + cent(n.betrag), 0) / 100;
+const jahrVon = (n) => Number(String(n.monat).slice(0, 4));
 
-  el.innerHTML = `
-    <div class="kopfzeile">
-      <h1>Meine Prämienabrechnungen</h1>
-      <a class="btn btn-primaer" href="#/leistungen">+ Leistung speichern</a>
-    </div>
-    ${flash?.neu ? `<p class="erfolgbox" role="status">Danke! Deine Prämienabrechnung <strong>${esc(flash.neu)}</strong>
-      wurde abgeschickt. Die Redaktion prüft sie.</p>` : ''}
-    ${noten.length ? `<ul class="liste">${noten.map((n) => `
-      <li class="karte note-karte${flash?.neu === n.nummer ? ' neu' : ''}" data-id="${esc(n.id)}">
+/**
+ * Abrechnung zurückziehen (nach Rückfrage). Die Leistungen kommen zurück in „Mein Monat“.
+ * Liefert true, wenn zurückgezogen wurde.
+ */
+export async function zurueckziehen(store, n) {
+  const ok = await bestaetigen({
+    titel: `${n.nummer} zurückziehen?`,
+    html: `<p>Die Prämienabrechnung ${esc(mediumName(n.medium))} über <strong>${esc(formatEuro(n.betrag))}</strong>
+      geht nicht mehr an die Redaktion. Die ${n.positionen.length === 1 ? 'Leistung kommt' : `${n.positionen.length} Leistungen kommen`}
+      zurück in <strong>Mein Monat</strong>. Dort kannst du sie ändern und neu einreichen.</p>`,
+    ja: 'Zurückziehen',
+    gefahr: true,
+  });
+  if (!ok) return false;
+  try {
+    await store.abrechnungZurueckziehen(n.id);
+    meldung(`${n.nummer} zurückgezogen. Die Leistungen sind wieder in „Mein Monat“.`, 'erfolg');
+    return true;
+  } catch (e) {
+    meldung(fehlerText(e), 'fehler');
+    return false;
+  }
+}
+
+/** Karte einer Abrechnung mit Verlauf (auch in „Mein Monat“ verwendet) */
+export function noteKarte(n, { neu = false, kompakt = false } = {}) {
+  return `
+      <li class="karte note-karte${neu ? ' neu' : ''}" data-id="${esc(n.id)}">
         <div class="note-kopf">
           <span class="nummer">${esc(n.nummer)}</span>
           <span>${mediumBadge(n.medium)} ${statusBadge(n.status)}</span>
         </div>
-        <p class="meta">Monatsabrechnung ${esc(formatMonat(n.monat))} · abgeschickt am ${esc(formatZeitpunkt(n.eingereicht_am))}
-          ${n.bezahlt_am ? ` · <strong>überwiesen am ${esc(formatDatum(n.bezahlt_am))}</strong>` : ''}</p>
+        <p class="meta">Monatsabrechnung ${esc(formatMonat(n.monat))} · abgeschickt am ${esc(formatZeitpunkt(n.eingereicht_am))}</p>
+        ${schritteHtml(n)}
         <p class="betrag">${esc(formatEuro(n.betrag))} <span class="klein">(${n.positionen.length}
           ${n.positionen.length === 1 ? 'Leistung' : 'Leistungen'})</span></p>
         ${n.status === 'abgelehnt' ? `<div class="fehlerbox"><strong>Begründung der Ablehnung:</strong> ${esc(n.ablehnungsgrund)}
           ${n.zurueckgeholt_am
-            ? '<p>Die Leistungen sind zurück unter <a href="#/leistungen">Meine Leistungen</a> – dort überarbeiten und neu abschicken.</p>'
+            ? '<p>Die Leistungen sind zurück in <a href="#/leistungen">Mein Monat</a>. Dort überarbeiten und neu einreichen.</p>'
             : '<p><button type="button" class="btn btn-klein" data-zurueck>Leistungen überarbeiten und neu abschicken</button></p>'}
           </div>` : ''}
-        <details class="aufklapp">
+        ${kompakt ? '' : `<details class="aufklapp">
           <summary>Leistungen anzeigen</summary>
           ${positionenTabelle(n)}
-        </details>
+        </details>`}
         <div class="aktionen">
-          <button type="button" class="btn btn-klein" data-word>Prämienabrechnung (Word) herunterladen</button>
+          ${kannZurueckziehen(n) ? '<button type="button" class="btn btn-klein" data-zurueckziehen>Zurückziehen und bearbeiten</button>' : ''}
+          <button type="button" class="btn btn-klein" data-word>Word herunterladen</button>
         </div>
-      </li>`).join('')}</ul>`
-    : '<section class="karte"><p>Noch keine Prämienabrechnungen.</p></section>'}
-    <p class="tipp">Abgeschickt → Angenommen → Bezahlt</p>`;
+      </li>`;
+}
 
-  el.querySelector('.liste')?.addEventListener('click', async (ev) => {
+/** Klicks in einer Liste von noteKarte(): Word, Zurückholen, Zurückziehen */
+export function notenAktionen(liste, noten, { store, neuLaden }) {
+  liste?.addEventListener('click', async (ev) => {
     const karte = ev.target.closest('[data-id]');
     const n = noten.find((x) => x.id === karte?.dataset.id);
     const knopf = ev.target.closest('button');
     if (!n || !knopf) return;
     if ('word' in knopf.dataset) {
       await mitSperre(knopf, () => honorarnoteHerunterladen(n).catch((e) => meldung(fehlerText(e), 'fehler')));
+    } else if ('zurueckziehen' in knopf.dataset) {
+      if (await zurueckziehen(store, n)) location.hash = '#/leistungen';
     } else if ('zurueck' in knopf.dataset) {
       try {
         await store.leistungenZurueckholen(n.id);
@@ -96,4 +120,38 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
       }
     }
   });
+}
+
+let gewaehltesJahr = null; // bleibt beim Neuladen der Seite erhalten
+
+export async function render(el, { store, flash, neuLaden, istAktuell }) {
+  const alle = await store.meineNoten();
+  if (!istAktuell()) return;
+  const diesesJahr = new Date().getFullYear();
+  const jahre = [...new Set([diesesJahr, ...alle.map(jahrVon)])].sort((a, b) => b - a);
+  if (!jahre.includes(gewaehltesJahr)) gewaehltesJahr = diesesJahr;
+  const noten = alle.filter((n) => jahrVon(n) === gewaehltesJahr);
+  const bezahlt = noten.filter((n) => n.status === 'bezahlt');
+  const unterwegs = noten.filter((n) => ['eingereicht', 'angenommen'].includes(n.status));
+
+  el.innerHTML = `
+    <div class="kopfzeile">
+      <h1>Meine Abrechnungen</h1>
+      <a class="btn" href="#/leistungen">Zu Mein Monat</a>
+    </div>
+    ${flash?.neu ? `<p class="erfolgbox" role="status">Danke! Deine Prämienabrechnung <strong>${esc(flash.neu)}</strong>
+      wurde eingereicht. Die Redaktion prüft sie. Bis dahin kannst du sie noch zurückziehen und ändern.</p>` : ''}
+    <section class="kennzahlen" aria-label="Summen ${gewaehltesJahr}">
+      <div class="kennzahl"><span class="kennzahl-titel">${gewaehltesJahr} ausgezahlt</span>
+        <strong>${esc(formatEuro(euroSumme(bezahlt)))}</strong><span class="klein">${bezahlt.length} ${bezahlt.length === 1 ? 'Abrechnung' : 'Abrechnungen'}</span></div>
+      <div class="kennzahl"><span class="kennzahl-titel">Unterwegs</span>
+        <strong>${esc(formatEuro(euroSumme(unterwegs)))}</strong><span class="klein">eingereicht oder angenommen, noch nicht bezahlt</span></div>
+      <div class="kennzahl kennzahl-wahl"><label for="n-jahr" class="kennzahl-titel">Jahr</label>
+        <select id="n-jahr">${jahre.map((j) => `<option ${j === gewaehltesJahr ? 'selected' : ''}>${j}</option>`).join('')}</select></div>
+    </section>
+    ${noten.length ? `<ul class="liste">${noten.map((n) => noteKarte(n, { neu: flash?.neu === n.nummer })).join('')}</ul>`
+    : `<section class="karte"><p>${gewaehltesJahr} noch keine Prämienabrechnungen.</p></section>`}`;
+
+  el.querySelector('#n-jahr').addEventListener('change', (ev) => { gewaehltesJahr = Number(ev.target.value); neuLaden(); });
+  notenAktionen(el.querySelector('.liste'), noten, { store, neuLaden });
 }

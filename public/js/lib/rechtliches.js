@@ -22,9 +22,22 @@ export const betreiberOder = (b) => ({ ...BETREIBER_STANDARD, ...(b ?? {}) });
 /** Muss allen der Hinweis „Betreiber nicht bei campus a angestellt“ gezeigt werden? */
 export const hinweisAktiv = (b) => Boolean(b?.name && b.extern);
 
-/** Hat diese Person den aktuellen Hinweis noch nicht bestätigt? */
-export const hinweisOffen = (nutzer, b) => hinweisAktiv(b) && Boolean(nutzer)
-  && (!nutzer.hinweis_bestaetigt_am || nutzer.hinweis_bestaetigt_am < (b.stand || ''));
+/**
+ * Hat diese Person Datenschutzerklärung und Hinweis (in der aktuellen Fassung) noch nicht zur Kenntnis genommen?
+ * Gilt für alle Konten, einmal beim ersten Anmelden; ändern sich die Angaben zum Betreiber, erneut.
+ */
+export const hinweisOffen = (nutzer, b) => Boolean(nutzer)
+  && (!nutzer.hinweis_bestaetigt_am || nutzer.hinweis_bestaetigt_am < (b?.stand || ''));
+
+/** Text für die Bestätigung: Hinweis zum Betreiber (falls nötig) und Verweis auf die Datenschutzerklärung */
+export function zustimmungHtml(r) {
+  return hinweisHtml(r) || `<strong>Datenschutz:</strong> Bitte lies die <a href="#/datenschutz">Datenschutzerklärung</a>.
+    Dort steht, welche Daten die App speichert, wer sie sieht und welche Rechte du hast.`;
+}
+
+/** Text der Pflicht-Bestätigung bei Zugangsanfrage und erstem Anmelden */
+export const ZUSTIMMUNG_TEXT = 'Ich habe die <a href="#/datenschutz" target="_blank">Datenschutzerklärung</a> gelesen '
+  + 'und den Hinweis zum Betreiber der App zur Kenntnis genommen.';
 
 const absaetze = (text) => String(text ?? '').trim().split(/\n{2,}/).filter(Boolean)
   .map((a) => `<p>${esc(a).replace(/\n/g, '<br>')}</p>`).join('');
@@ -136,9 +149,22 @@ export function datenschutzHtml(r, { istDemo = false } = {}) {
       <li>Sicherungskopien: 30 Tage. Anmelde-Sitzungen: 14 Tage. Versandprotokoll der E-Mails: 90 Tage.</li>
     </ul>
 
-    <h2>7. Cookies</h2>
-    <p>Nur ein technisch notwendiges Cookie (<code>hn_sitzung</code>), damit du angemeldet bleibst. Es wird beim
-      Abmelden gelöscht und läuft nach 14 Tagen ab. Dafür ist keine Einwilligung nötig.</p>
+    <h2>7. Cookies und Speicher im Browser</h2>
+    <ul>
+      <li><strong>Notwendig</strong> (ohne Einwilligung, § 165 Abs. 3 TKG 2021): das Cookie <code>hn_sitzung</code>,
+        damit du angemeldet bleibst (wird beim Abmelden gelöscht, läuft nach 14 Tagen ab), und ein Eintrag im
+        Browser-Speicher, der sich deine Cookie-Auswahl merkt. Beim Einrichten der App durch den Admin kommt
+        kurz das Cookie <code>hn_einrichten</code> (Schutz des Einrichtungsformulars) dazu.</li>
+      <li><strong>Optional „Komfort“</strong> (nur mit deiner Einwilligung, Art. 6 Abs. 1 lit. a DSGVO): Der Entwurf
+        der Externen Honorarnote und deren Nummern werden im Browser-Speicher dieses Geräts gemerkt. Die Daten
+        verlassen dein Gerät dabei nicht.</li>
+    </ul>
+    <p>Es gibt keine Werbe-, Tracking- oder Analyse-Cookies. Deine Auswahl kannst du jederzeit unter
+      <button type="button" class="link-knopf" data-cookie-einstellungen>Cookie-Einstellungen</button> (auch unten
+      auf jeder Seite) ändern; beim Widerruf wird das Gespeicherte sofort gelöscht.</p>
+    <p>Neue Konten bestätigen beim Zugang anfragen bzw. beim ersten Anmelden, dass sie diese Datenschutzerklärung
+      gelesen und den Hinweis zum Betreiber zur Kenntnis genommen haben; der Zeitpunkt wird gespeichert.
+      Ändern sich die Angaben zum Betreiber, wird erneut gefragt.</p>
 
     <h2>8. Deine Rechte</h2>
     <p>Du hast das Recht auf Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung,

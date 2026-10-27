@@ -1,4 +1,5 @@
-// Autor:in: Leistungen laufend speichern und einmal im Monat als Prämienabrechnung abschicken
+// Autor:in „Mein Monat“: Leistungen laufend speichern, am Monatsende als Prämienabrechnung einreichen,
+// darunter die eingereichten Abrechnungen, die noch unterwegs sind
 import {
   KATEGORIE_LABEL, artText, esc, formatBetragPlain, formatDatum, formatEuro, formatMonat, heuteIso, parseBetrag, summe,
 } from '../lib/format.js';
@@ -8,9 +9,26 @@ import {
 } from '../lib/campus.js';
 import { satzFuer } from '../lib/honorarsaetze.js';
 import { darfRedigieren } from '../lib/konto.js';
-import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
+import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
+import { noteKarte, notenAktionen } from './noten.js';
 
 let bearbeiteId = null; // Leistung, die gerade im Formular bearbeitet wird
+
+const euroSumme = (noten) => noten.reduce((s, n) => s + Math.round(n.betrag * 100), 0) / 100;
+const anzahlText = (n, eins, mehr) => `${n} ${n === 1 ? eins : mehr}`;
+
+/** Tage bis zum Monatsletzten (0 = heute ist der letzte Tag) */
+function tageBisMonatsende(iso) {
+  const [j, m, t] = iso.split('-').map(Number);
+  return new Date(Date.UTC(j, m, 0)).getUTCDate() - t;
+}
+
+function monatsHinweis(heute) {
+  const tage = tageBisMonatsende(heute);
+  const wann = tage === 0 ? 'Heute ist Monatsende.' : tage <= 3 ? `Noch ${anzahlText(tage, 'Tag', 'Tage')} bis Monatsende.` : '';
+  return `<p class="hinweisbox monat-hinweis"><strong>Bitte nur einmal am Monatsende einreichen.</strong>
+    Alles hier ist schon sicher am Server gespeichert. Du kannst den ganzen Monat weiter sammeln und ändern. ${esc(wann)}</p>`;
+}
 
 const satzText = (satz) => (satz != null ? formatBetragPlain(satz) : '');
 
@@ -168,10 +186,15 @@ function formularHtml(p, einstellungen, nutzer) {
 }
 
 export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, istAktuell }) {
-  const [liste, diesenMonat, naechste, einstellungen] = await Promise.all([
-    store.meineLeistungen(), store.notenDiesenMonat(), store.naechsteNummer(), store.einstellungen(),
+  const [liste, meineNoten, naechste, einstellungen] = await Promise.all([
+    store.meineLeistungen(), store.meineNoten(), store.naechsteNummer(), store.einstellungen(),
   ]);
   if (!istAktuell()) return;
+  const heute = heuteIso();
+  const diesenMonat = meineNoten.filter((n) => n.monat === heute.slice(0, 7));
+  // noch nicht bezahlt: eingereicht, angenommen oder abgelehnt und noch nicht überarbeitet
+  const unterwegs = meineNoten.filter((n) => ['eingereicht', 'angenommen'].includes(n.status) || (n.status === 'abgelehnt' && !n.zurueckgeholt_am));
+  const ausgezahlt = meineNoten.filter((n) => n.status === 'bezahlt' && n.monat.startsWith(heute.slice(0, 4)));
   const bearbeite = liste.find((p) => p.id === bearbeiteId) ?? null;
   if (!bearbeite) bearbeiteId = null;
   // campus a und campus a college werden getrennt abgerechnet: eine Karte pro Medium
@@ -180,10 +203,22 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
 
   el.innerHTML = `
     <div class="kopfzeile">
-      <h1>Meine Leistungen</h1>
-      <a href="#/noten" class="btn">Meine Prämienabrechnungen</a>
+      <h1>Mein Monat <span class="h1-zusatz">${esc(formatMonat(heute))}</span></h1>
+      <a href="#/noten" class="btn">Meine Abrechnungen</a>
     </div>
-    <p class="tipp">Beiträge speichern, sobald sie erschienen sind – einmal im Monat gesammelt abschicken,
+    <section class="kennzahlen" aria-label="Überblick">
+      <div class="kennzahl kennzahl-marke"><span class="kennzahl-titel">Gespeichert, noch nicht eingereicht</span>
+        <strong>${esc(formatEuro(summe(liste)))}</strong>
+        <span class="klein">${esc(anzahlText(liste.length, 'Leistung', 'Leistungen'))}${gruppen.length > 1
+          ? ` · ${gruppen.map((g) => `${g.positionen.length} ${mediumName(g.medium)}`).map(esc).join(', ')}` : ''}</span></div>
+      <div class="kennzahl"><span class="kennzahl-titel">Eingereicht, noch nicht bezahlt</span>
+        <strong>${esc(formatEuro(euroSumme(unterwegs)))}</strong>
+        <span class="klein">${esc(anzahlText(unterwegs.length, 'Abrechnung', 'Abrechnungen'))}</span></div>
+      <div class="kennzahl"><span class="kennzahl-titel">${esc(heute.slice(0, 4))} ausgezahlt</span>
+        <strong>${esc(formatEuro(euroSumme(ausgezahlt)))}</strong>
+        <a class="klein" href="#/noten">alle Abrechnungen</a></div>
+    </section>
+    <p class="tipp">Beiträge speichern, sobald sie erschienen sind. Am Monatsende einmal einreichen,
       getrennt für campus a college und campus a.</p>
 
     <div class="spalten">
@@ -222,18 +257,25 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
               </li>`).join('')}
           </ul>
           <p class="summenzeile">Ausgewählt: <strong data-summe>${esc(formatEuro(summe(positionen)))}</strong></p>
-          <h3>Monatsabrechnung ${esc(formatMonat(heuteIso()))} · ${esc(mediumName(medium))}</h3>
-          ${schon.length ? `<p class="hinweisbox">Diesen Monat schon abgeschickt: ${schon.map((n) => `<strong>${esc(n.nummer)}</strong>`).join(', ')}</p>` : ''}
+          <h3>Monat abschließen · ${esc(mediumName(medium))}</h3>
+          ${monatsHinweis(heute)}
+          ${schon.length ? `<p class="hinweisbox">Diesen Monat schon eingereicht: ${schon.map((n) => `<strong>${esc(n.nummer)}</strong>`).join(', ')}</p>` : ''}
           <dl class="angaben kompakt">
             <dt>Nummer</dt><dd class="nummer">${esc(naechste.nummer)}</dd>
             <dt>An</dt><dd>${esc(einstellungen.empfaenger.name)}</dd>
             <dt>Überweisung an</dt><dd>${esc(nutzer.profil.kontoinhaber)}<br><span class="mono">${esc(formatIban(nutzer.profil.iban))}</span></dd>
           </dl>
-          <button type="button" class="btn btn-primaer btn-breit" data-abschicken>Prämienabrechnung ${esc(mediumName(medium))} abschicken</button>
+          <button type="button" class="btn btn-primaer btn-breit" data-abschicken>${esc(formatMonat(heute).split(' ')[0])} einreichen …</button>
         </section>`;
         }).join('') : '<section class="karte"><h2>Noch nicht abgerechnet</h2><p class="klein">Noch keine Leistungen gespeichert.</p></section>'}
       </div>
-    </div>`;
+    </div>
+    ${unterwegs.length ? `
+    <section class="unterwegs">
+      <div class="kopfzeile"><h2>Eingereicht und unterwegs</h2><a href="#/noten" class="klein">Alle Abrechnungen</a></div>
+      <ul class="liste" id="unterwegs">${unterwegs.map((n) => noteKarte(n, { kompakt: true })).join('')}</ul>
+    </section>` : ''}`;
+  notenAktionen(el.querySelector('#unterwegs'), unterwegs, { store, neuLaden });
 
   // ---- Formular
   const form = el.querySelector('#l-form');
@@ -408,10 +450,22 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
       const ids = gewaehlt(karte);
       const auswahl = liste.filter((p) => ids.includes(p.id));
       const schon = diesenMonat.some((n) => mediumOder(n.medium) === medium);
-      const text = `${auswahl.length} ${auswahl.length === 1 ? 'Leistung' : 'Leistungen'} über ${formatEuro(summe(auswahl))} `
-        + `als Prämienabrechnung ${mediumName(medium)} (${naechste.nummer}) abschicken?`
-        + (schon ? `\n\nHinweis: Du hast diesen Monat schon eine Prämienabrechnung für ${mediumName(medium)} abgeschickt.` : '');
-      if (!confirm(text)) return;
+      const tage = tageBisMonatsende(heute);
+      const ok = await bestaetigen({
+        titel: `Prämienabrechnung ${mediumName(medium)} einreichen?`,
+        html: `
+          <dl class="angaben kompakt"><dt>Nummer</dt><dd class="nummer">${esc(naechste.nummer)}</dd>
+            <dt>Monat</dt><dd>${esc(formatMonat(heute))}</dd></dl>
+          <ul class="dialog-liste">${auswahl.map((p) => `<li><span>${esc(p.titel)}<br><span class="klein">${
+            esc([KATEGORIE_LABEL[p.kategorie], formatDatum(p.veroeffentlichung)].join(' · '))}</span></span>
+            <span class="mono">${esc(formatEuro(p.betrag))}</span></li>`).join('')}</ul>
+          <p class="summenzeile">Gesamt: <strong>${esc(formatEuro(summe(auswahl)))}</strong></p>
+          ${tage > 3 ? `<p class="hinweisbox">Es sind noch ${esc(anzahlText(tage, 'Tag', 'Tage'))} bis Monatsende. Leistungen, die danach dazukommen, brauchen eine eigene Abrechnung.</p>` : ''}
+          ${schon ? `<p class="hinweisbox">Du hast diesen Monat schon eine Prämienabrechnung für ${esc(mediumName(medium))} eingereicht.</p>` : ''}
+          <p class="klein">Bis die Redaktion sie annimmt, kannst du sie noch zurückziehen und ändern.</p>`,
+        ja: 'Jetzt einreichen',
+      });
+      if (!ok) return;
       await mitSperre(a, async () => {
         try {
           const note = await store.abrechnungAbschicken(ids);

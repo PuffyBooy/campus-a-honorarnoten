@@ -1,19 +1,25 @@
-/* campus a college – Prämienabrechnungen
-   Farben: nur diese Variablen anpassen, um das Design an das CI anzupassen. */
+/* Anerkennungsprämien – campus a und campus a college
+   Farben: nur diese Variablen anpassen. Die App ist Petrol (eigene Farbe zwischen dem Blau von
+   campus a und dem Beerenrot von campus a college); die Medien behalten ihre Farbe als Abzeichen. */
 :root {
-  --marke: #8a5370;          /* Beere/Mauve wie campus-a-college.at: Buttons, aktive Navigation */
-  --marke-dunkel: #6f4059;   /* Hover */
-  --marke-hell: #f5edf1;     /* helle Flächen */
+  --marke: #0f6b66;          /* Petrol: Knöpfe, Kopfzeile, aktive Navigation */
+  --marke-dunkel: #0a4f4b;   /* Hover, Text auf hellen Petrol-Flächen */
+  --marke-hell: #e3f1ef;     /* helle Flächen */
   --marke-kontrast: #ffffff;
-  --akzent: #8a5370;         /* Hervorhebungen, Zähler */
-  --kopf: #ffffff;           /* Kopfzeile */
-  --kopf-text: #1a1a1a;
+  --akzent: #0f6b66;         /* Hervorhebungen, Zähler */
+  --kopf: #0f6b66;           /* Kopfzeile */
+  --kopf-text: #ffffff;
 
-  --text: #1a1a1a;
-  --text-leise: #5f5a5d;
-  --hintergrund: #f5f4f2;
+  --campus-a: #174e86;       /* Blau aus dem Logo von campus-a.at */
+  --campus-a-hell: #e6eef7;
+  --college: #8a5370;        /* Beerenrot von campus-a-college.at */
+  --college-hell: #f4ebef;
+
+  --text: #1c2321;
+  --text-leise: #59645f;
+  --hintergrund: #f3f6f5;
   --flaeche: #ffffff;
-  --rand: #e3dfe1;
+  --rand: #dbe3e0;
 
   --erfolg: #1a7f37;
   --erfolg-hell: #e6f4ea;
@@ -59,7 +65,7 @@ code { font-family: var(--mono); font-size: .9em; }
 /* ---------- Kopfzeile ---------- */
 .kopf {
   background: var(--kopf); color: var(--kopf-text);
-  box-shadow: 0 1px 0 var(--rand), 0 2px 8px rgb(0 0 0 / 4%);
+  box-shadow: 0 2px 10px rgb(10 79 75 / 18%);
   position: relative; z-index: 2;
 }
 .kopf-innen {
@@ -67,23 +73,29 @@ code { font-family: var(--mono); font-size: .9em; }
   display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.5rem;
 }
 .marke { color: inherit; text-decoration: none; display: flex; flex-direction: column; line-height: 1.1; }
-.marke-name { font-family: var(--schrift-logo); font-weight: 700; font-size: 1.5rem; letter-spacing: -.01em; }
-.marke-name em { font-style: normal; color: var(--marke); }
-.marke-zusatz { font-style: italic; font-weight: 600; font-size: .78rem; margin-top: .1rem; }
+.marke-name { font-family: var(--schrift-logo); font-weight: 700; font-size: 1.45rem; letter-spacing: -.01em; }
+.marke-zusatz { font-weight: 600; font-size: .68rem; margin-top: .15rem; letter-spacing: .14em; text-transform: uppercase; opacity: .85; }
 .nav { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem 1rem; flex: 1; justify-content: space-between; }
 .nav-links, .nav-konto { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem; }
+.nav-konto { margin-left: auto; }
 .nav a {
-  color: inherit; text-decoration: none; padding: .5rem .75rem; border-radius: var(--radius-klein);
-  font-weight: 600; font-size: .9rem; text-transform: uppercase; letter-spacing: .02em;
+  color: inherit; text-decoration: none; padding: .45rem .65rem; border-radius: var(--radius-klein);
+  font-weight: 600; font-size: .92rem;
 }
-.nav a:hover { background: var(--marke-hell); }
-.nav a[aria-current="page"] { background: var(--marke); color: var(--marke-kontrast); }
-.nav a[aria-current="page"] .zaehler { background: #fff; color: var(--marke); }
+.nav a:hover { background: rgb(255 255 255 / 12%); }
+.nav a[aria-current="page"] { background: rgb(255 255 255 / 20%); color: var(--kopf-text); }
+.nav .zaehler { background: #fff; color: var(--marke-dunkel); }
 .nav .nav-user {
-  font-size: .85rem; font-weight: 500; color: var(--text-leise); text-transform: none; letter-spacing: 0;
+  display: inline-flex; align-items: center; gap: .5rem;
+  font-size: .88rem; font-weight: 500; color: var(--kopf-text); text-transform: none; letter-spacing: 0;
   max-width: 16rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.nav .btn-link { color: inherit; }
+.avatar {
+  flex: 0 0 auto; width: 30px; height: 30px; border-radius: 50%; display: inline-grid; place-items: center;
+  background: rgb(255 255 255 / 22%); font-size: .75rem; font-weight: 700; letter-spacing: .02em;
+}
+.nav .btn-link { color: var(--kopf-text); opacity: .9; }
+.kopf a:focus-visible, .kopf button:focus-visible { outline-color: #fff; }
 /* Menü-Knopf (drei Striche) – nur am Handy */
 .menue-knopf {
   display: none; margin-left: auto; width: 44px; height: 44px; padding: 0;
@@ -110,7 +122,7 @@ code { font-family: var(--mono); font-size: .9em; }
   .nav a { padding: .75rem .9rem; font-size: .95rem; }
   .nav-konto {
     flex-direction: row; justify-content: space-between; align-items: center;
-    margin-top: .5rem; padding-top: .5rem; border-top: 1px solid var(--rand);
+    margin-top: .5rem; padding-top: .5rem; border-top: 1px solid rgb(255 255 255 / 25%);
   }
   .nav .nav-user { max-width: 70%; }
 }
@@ -143,7 +155,7 @@ legend { font-weight: 700; font-size: 1.05rem; margin-bottom: .5rem; padding: 0;
 label { display: block; font-weight: 600; font-size: .95rem; margin-bottom: .25rem; }
 input, select, textarea {
   width: 100%; font: inherit; font-size: 16px; /* verhindert Zoom auf iOS */
-  padding: .6rem .7rem; border: 1px solid #d6d0d3; border-radius: var(--radius-klein);
+  padding: .6rem .7rem; border: 1px solid #cfd8d5; border-radius: var(--radius-klein);
   background: #fff; color: var(--text);
 }
 input[type="file"] { padding: .45rem; }
@@ -157,7 +169,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 input[type="date"]::-webkit-calendar-picker-indicator:hover { opacity: 1; background: var(--marke-hell); }
 select {
   appearance: none; cursor: pointer; padding-right: 2.2rem;
-  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%238a5370' stroke-width='2'/%3E%3C/svg%3E") no-repeat right .8rem center;
+  background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%230f6b66' stroke-width='2'/%3E%3C/svg%3E") no-repeat right .8rem center;
 }
 textarea { resize: vertical; }
 input:focus, select:focus, textarea:focus, .btn:focus-visible, a:focus-visible {
@@ -225,7 +237,7 @@ section.fehlerbox { border: 0; }
 /* ---------- Tabellen (am Handy als Karten) ---------- */
 .tabelle { width: 100%; border-collapse: collapse; background: var(--flaeche); }
 .tabelle th, .tabelle td { text-align: left; padding: .6rem .7rem; border-bottom: 1px solid var(--rand); vertical-align: top; }
-.tabelle th { font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--text-leise); background: #faf8f9; }
+.tabelle th { font-size: .8rem; text-transform: uppercase; letter-spacing: .03em; color: var(--text-leise); background: #f6f9f8; }
 .tabelle .rechts { text-align: right; white-space: nowrap; }
 .tabelle.klickbar tbody tr { cursor: pointer; }
 .tabelle.klickbar tbody tr:hover { background: var(--marke-hell); }
@@ -305,13 +317,17 @@ section.fehlerbox { border: 0; }
 }
 .meldung {
   padding: .75rem 1rem; border-radius: 8px; box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
-  background: #2b2528; color: #fff; font-weight: 600;
+  background: #1f2a28; color: #fff; font-weight: 600;
 }
 .meldung-erfolg { background: var(--erfolg); }
 .meldung-fehler { background: var(--gefahr); }
 
 /* ---------- Login ---------- */
 .login-raster { display: grid; gap: 0 1rem; max-width: 480px; margin: 1.5rem auto; }
+.login-intro { grid-column: 1 / -1; display: grid; gap: .75rem; justify-items: center; text-align: center; margin: .5rem 0 1.25rem; }
+.login-logos { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: .75rem 2rem; }
+.login-logos img { height: 40px; width: auto; }
+.login-intro p { margin: 0; max-width: 34rem; color: var(--text-leise); }
 .login-raster:has(> .demo) { max-width: 960px; }
 @media (min-width: 820px) { .login-raster:has(> .demo) { grid-template-columns: 1.2fr 1fr; align-items: start; } }
 .login-raster form label { margin-top: .6rem; }
@@ -386,8 +402,8 @@ section.fehlerbox { border: 0; }
 .aktionen.eng { margin: 0; gap: .3rem; }
 tr.inaktiv { opacity: .6; }
 .badge-medium { font-weight: 600; text-transform: none; letter-spacing: 0; }
-.badge-college { background: var(--marke-hell); color: var(--marke-dunkel); border: 1px solid var(--marke); }
-.badge-campus-a { background: #1f2d3d; color: #fff; }
+.badge-college { background: var(--college-hell); color: var(--college); border: 1px solid rgb(138 83 112 / 35%); }
+.badge-campus-a { background: var(--campus-a-hell); color: var(--campus-a); border: 1px solid rgb(23 78 134 / 30%); }
 .medium-wahl legend { font-weight: 600; margin-bottom: .25rem; }
 .einrichtung { max-width: 46rem; margin: 0 auto; }
 .einrichtung fieldset { margin-bottom: .5rem; }
@@ -492,3 +508,52 @@ body.modus-demo .fuss-demo { display: block; }
 .medium-fest { margin: 0 0 .5rem; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
 .demo-frisch { border-color: var(--marke); border-style: dashed; }
 .zurueck-hinweis { display: inline-block; margin: .15rem 0; padding: .1rem .45rem; border-radius: 6px; font-size: .8rem; background: var(--gefahr-hell); color: #7a1a12; }
+
+/* ---- Mein Monat: Kennzahlen, Verlauf, Bestätigungsdialog */
+.h1-zusatz { font-weight: 400; color: var(--text-leise); font-size: .8em; margin-left: .35rem; }
+.kennzahlen { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1rem; }
+.kennzahl {
+  display: flex; flex-direction: column; gap: .15rem; background: var(--flaeche); border-radius: var(--radius);
+  box-shadow: var(--schatten); padding: .9rem 1.1rem;
+}
+.kennzahl strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.kennzahl-titel { font-size: .8rem; font-weight: 600; color: var(--text-leise); }
+.kennzahl-marke { background: var(--marke); color: #fff; }
+.kennzahl-marke .kennzahl-titel, .kennzahl-marke .klein { color: rgb(255 255 255 / 85%); }
+.kennzahl-wahl select { margin-top: .25rem; }
+.monat-hinweis { font-size: .9rem; }
+.unterwegs h2 { margin: 0; }
+.schritte { list-style: none; display: flex; flex-wrap: wrap; gap: .35rem; padding: 0; margin: .5rem 0; font-size: .8rem; }
+.schritte li {
+  display: flex; align-items: center; gap: .3rem; padding: .2rem .6rem; border-radius: 999px;
+  background: #eef2f1; color: var(--text-leise);
+}
+.schritte .schritt-erledigt { background: var(--marke-hell); color: var(--marke-dunkel); font-weight: 600; }
+.schritte .schritt-erledigt::after { content: "✓"; }
+.schritte .schritt-jetzt { background: var(--warnung-hell); color: var(--warnung); font-weight: 700; box-shadow: inset 0 0 0 1.5px currentColor; }
+.schritte .schritt-fehler { background: var(--gefahr-hell); color: var(--gefahr); font-weight: 600; }
+.dialog {
+  border: 0; border-radius: var(--radius); padding: 1.25rem; width: min(560px, calc(100vw - 2rem));
+  box-shadow: 0 10px 40px rgb(0 0 0 / 25%); color: var(--text); background: var(--flaeche);
+}
+.dialog::backdrop { background: rgb(15 40 38 / 45%); }
+.dialog h2 { margin-top: 0; }
+.dialog-inhalt { max-height: 60vh; overflow: auto; }
+.dialog-aktionen { justify-content: flex-end; margin-bottom: 0; }
+.dialog-liste { list-style: none; padding: 0; margin: .75rem 0; border-top: 1px solid var(--rand); }
+.dialog-liste li { display: flex; justify-content: space-between; gap: 1rem; padding: .45rem 0; border-bottom: 1px solid var(--rand); }
+
+/* ---- Cookie-Auswahl */
+.cookie-banner {
+  position: fixed; inset: auto 0 0 0; z-index: 50; padding: .75rem 1rem calc(.75rem + env(safe-area-inset-bottom));
+  background: var(--flaeche); box-shadow: 0 -6px 30px rgb(0 0 0 / 18%); border-top: 4px solid var(--marke);
+}
+.cookie-innen { max-width: 1100px; margin: 0 auto; }
+.cookie-banner h2 { margin: 0 0 .35rem; font-size: 1.05rem; }
+.cookie-banner p { margin: 0 0 .5rem; font-size: .92rem; }
+.cookie-banner .aktionen { margin: .5rem 0 0; }
+.cookie-banner .aktionen .btn { flex: 1 1 10rem; }
+.cookie-details summary { cursor: pointer; font-weight: 600; color: var(--marke); }
+.cookie-liste { list-style: none; padding: 0; margin: .5rem 0; display: grid; gap: .4rem; }
+.cookie-liste .check { align-items: flex-start; white-space: normal; }
+.bestaetigen a { font-weight: 600; }

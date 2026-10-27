@@ -5,7 +5,7 @@ import { esc } from '../lib/format.js';
 import { formatIban, ibanFehler, bicIstGueltig } from '../lib/iban.js';
 import { MEDIEN, MEDIUM_KEYS, PROFIL_FELD, profilIdAusLink, profilLink } from '../lib/campus.js';
 import { fehlerText, mitSperre } from '../lib/ui.js';
-import { hinweisHtml, hinweisOffen } from '../lib/rechtliches.js';
+import { ZUSTIMMUNG_TEXT, hinweisHtml, hinweisOffen } from '../lib/rechtliches.js';
 
 function feld(name, label, wert, { typ = 'text', pflicht = true, attrs = '', hinweis = '' } = {}) {
   return `
@@ -21,7 +21,7 @@ export function render(el, { store, nutzer, recht, weiter, abmelden }) {
   const p = nutzer.profil ?? {};
   const istAutor = nutzer.rollen.includes('autor');
   let passwortNoetig = nutzer.muss_passwort_aendern;
-  // Hinweis zum Betreiber (nicht bei campus a angestellt) muss beim Einrichten bestätigt werden
+  // Datenschutzerklärung und Hinweis zum Betreiber (nicht bei campus a angestellt) beim Einrichten bestätigen
   const hinweisNoetig = Boolean(recht && hinweisOffen(nutzer, recht.betreiber));
 
   el.innerHTML = `
@@ -72,9 +72,9 @@ export function render(el, { store, nutzer, recht, weiter, abmelden }) {
           <strong>Datenschutz:</strong> Adresse und Bankverbindung sieht nur die Buchhaltung, sie dienen nur der Auszahlung. Mehr in der <a href="#/datenschutz" target="_blank">Datenschutzerklärung</a>.
         </aside>` : ''}
         ${hinweisNoetig ? `
-        <aside class="hinweis-betreiber">${hinweisHtml(recht)}</aside>
+        ${hinweisHtml(recht) ? `<aside class="hinweis-betreiber">${hinweisHtml(recht)}</aside>` : ''}
         <label class="check bestaetigen"><input type="checkbox" name="hinweis" required>
-          Ich habe den Hinweis und die <a href="#/datenschutz" target="_blank">Datenschutzerklärung</a> zur Kenntnis genommen.</label>
+          <span>${ZUSTIMMUNG_TEXT} <span class="pflicht" aria-hidden="true">*</span></span></label>
         <p class="feldfehler" data-fehler="hinweis"></p>` : ''}
         <p class="feldfehler" data-fehler="formular" role="alert"></p>
         <button class="btn btn-primaer btn-breit" type="submit">${istAutor ? 'Konto einrichten' : 'Passwort speichern'}</button>
@@ -125,7 +125,7 @@ export function render(el, { store, nutzer, recht, weiter, abmelden }) {
         f.links = 'Bitte mindestens einen Profil-Link angeben.';
       }
     }
-    if (hinweisNoetig && !form.hinweis.checked) f.hinweis = 'Bitte bestätigen, dass du den Hinweis gelesen hast.';
+    if (hinweisNoetig && !form.hinweis.checked) f.hinweis = 'Bitte bestätige, dass du die Datenschutzerklärung und den Hinweis gelesen hast.';
     if (Object.keys(f).length) {
       Object.entries(f).forEach(([n, t]) => fehler(n, t));
       (form.elements[Object.keys(f)[0]] ?? form.elements[PROFIL_FELD.college])?.focus();

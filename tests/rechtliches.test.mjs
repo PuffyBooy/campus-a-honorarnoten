@@ -19,6 +19,9 @@ test('Hinweis: nicht bei campus a angestellt', () => {
   assert.ok(hinweisOffen({ hinweis_bestaetigt_am: null }, r.betreiber));
   assert.ok(hinweisOffen({ hinweis_bestaetigt_am: '2026-09-30T00:00:00.000Z' }, r.betreiber), 'vor dem Stand bestätigt');
   assert.ok(!hinweisOffen({ hinweis_bestaetigt_am: '2026-10-02T00:00:00.000Z' }, r.betreiber));
+  // Datenschutzerklärung bestätigen alle einmal, auch wenn kein Hinweis zum Betreiber nötig ist
+  assert.ok(hinweisOffen({ hinweis_bestaetigt_am: null }, { ...r.betreiber, extern: false }));
+  assert.ok(!hinweisOffen({ hinweis_bestaetigt_am: '2026-10-02T00:00:00.000Z' }, { ...r.betreiber, extern: false }));
 });
 
 test('Impressum und Datenschutzerklärung', () => {

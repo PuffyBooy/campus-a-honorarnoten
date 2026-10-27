@@ -16,6 +16,7 @@ const BETREIBER_STANDARD = [
     'zusatz_impressum' => '', 'zusatz_datenschutz' => '', 'stand' => '',
 ];
 const ARTIKEL_DOPPELT = 'Dieser Artikel ist schon als Leistung gespeichert oder abgerechnet.';
+const ZUSTIMMUNG_FEHLT = 'Bitte bestätige, dass du die Datenschutzerklärung und den Hinweis zum Betreiber gelesen hast.';
 
 /** Kontext einer Anfrage */
 final class Ctx
@@ -204,7 +205,7 @@ final class Honorare
     public const FUNKTIONEN = [
         'aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'erstesPasswortSetzen', 'passwortAendern',
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'meineArtikel',
-        'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen',
+        'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'kommentieren', 'kommentare', 'verlaufVon',
         'offeneZahlungen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
@@ -260,6 +261,7 @@ final class Honorare
         $email = strtolower(tr($d['email'] ?? ''));
         pruefe(!leer($d['vorname'] ?? '') && !leer($d['nachname'] ?? ''), 'Bitte Vor- und Nachnamen angeben.');
         pruefe(ist_email($email) && strlen($email) <= 200, 'Bitte eine gültige E-Mail-Adresse angeben.');
+        pruefe(($d['zustimmung'] ?? null) === true, ZUSTIMMUNG_FEHLT);
         // bewusst dieselbe Antwort, ob ein Konto existiert oder nicht (kein Ausforschen von Konten)
         $vorhanden = wert($db, 'select 1 from nutzer where email = ?', [$email])
             || wert($db, "select 1 from anfragen where email = ? and status = 'offen'", [$email]);
@@ -270,8 +272,8 @@ final class Honorare
                 'vorname' => kuerze(tr($d['vorname']), 100), 'nachname' => kuerze(tr($d['nachname']), 100), 'email' => $email,
                 'nachricht' => kuerze(tr($d['nachricht'] ?? ''), 1000),
             ];
-            q($db, 'insert into anfragen (id, vorname, nachname, email, nachricht, am) values (?, ?, ?, ?, ?, ?)',
-                [neue_id(), $a['vorname'], $a['nachname'], $email, $a['nachricht'], jetzt()]);
+            q($db, 'insert into anfragen (id, vorname, nachname, email, nachricht, am, zustimmung_am) values (?, ?, ?, ?, ?, ?, ?)',
+                [neue_id(), $a['vorname'], $a['nachname'], $email, $a['nachricht'], jetzt(), jetzt()]);
             benachrichtigen($db, 'anfrage', mail_anfrage_admin($db, $a));
         }
         return true;
@@ -537,6 +539,26 @@ final class Honorare
             pruefe($note['status'] === 'abgelehnt', 'Nur abgelehnte Prämienabrechnungen können überarbeitet werden.');
             pruefe(!$note['zurueckgeholt_am'], 'Die Leistungen wurden bereits zurückgeholt.');
             zurueck_an_autor($db, $note, $n);
+            return true;
+        });
+    }
+
+    /**
+     * Abgeschickte Prämienabrechnung zurückziehen, solange die Redaktion sie noch nicht angenommen hat: die Leistungen
+     * kommen zurück zu den gespeicherten Leistungen, die Abrechnung verschwindet (Vermerk im Löschprotokoll).
+     */
+    public function abrechnungZurueckziehen(mixed $noteId = null): bool
+    {
+        $db = $this->db();
+        $n = brauche($this->ctx, 'autor');
+        return transaktion($db, function () use ($db, $n, $noteId) {
+            $note = note_holen($db, $noteId);
+            pruefe($note['autor_id'] === $n['id'], 'Dafür fehlt dir die Berechtigung.', 403);
+            pruefe($note['status'] === 'eingereicht', 'Diese Prämienabrechnung wurde schon geprüft und kann nicht mehr zurückgezogen werden. Bitte schreib der Redaktion.');
+            zurueck_an_autor($db, ['ablehnungsgrund' => ''] + $note, $n);
+            q($db, 'delete from noten where id = ?', [$note['id']]);
+            q($db, 'insert into loeschprotokoll (id, nummer, geloescht_von, am) values (?, ?, ?, ?)',
+                [neue_id(), $note['nummer'], anzeigename($n) . ' (zurückgezogen)', jetzt()]);
             return true;
         });
     }
@@ -967,7 +989,7 @@ function zugang_melden(PDO $db, array $z, bool $neu = true): array
 }
 
 /**
- * Leistungen einer abgelehnten Note zurück in „Meine Leistungen“ der Autor:in (mit eingereichtem Betrag,
+ * Leistungen einer abgelehnten Note zurück in „Mein Monat“ der Autor:in (mit eingereichtem Betrag,
  * Medium, Artikel-Link und der Begründung als Hinweis). Die Note gilt danach als zurückgeholt.
  */
 function zurueck_an_autor(PDO $db, array $note, array $akteur): void

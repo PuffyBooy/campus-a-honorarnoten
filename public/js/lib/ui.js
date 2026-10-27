@@ -76,3 +76,29 @@ export async function mitSperre(button, fn) {
 export function ladeAnzeige(el, text = 'Wird geladen …') {
   el.innerHTML = `<p class="laden" aria-live="polite">${esc(text)}</p>`;
 }
+
+/**
+ * Bestätigungsdialog mit eigenem Inhalt (HTML, bereits maskiert). Liefert true, wenn bestätigt wurde.
+ * Ohne <dialog>-Unterstützung: einfaches confirm() mit dem Titel.
+ */
+export function bestaetigen({ titel, html = '', ja = 'Bestätigen', nein = 'Abbrechen', gefahr = false }) {
+  const d = document.createElement('dialog');
+  if (typeof d.showModal !== 'function') return Promise.resolve(confirm(titel));
+  d.className = 'dialog';
+  d.setAttribute('aria-labelledby', 'dialog-titel');
+  d.innerHTML = `
+    <form method="dialog">
+      <h2 id="dialog-titel">${esc(titel)}</h2>
+      <div class="dialog-inhalt">${html}</div>
+      <div class="aktionen dialog-aktionen">
+        <button class="btn" value="nein">${esc(nein)}</button>
+        <button class="btn ${gefahr ? 'btn-gefahr' : 'btn-primaer'}" value="ja">${esc(ja)}</button>
+      </div>
+    </form>`;
+  document.body.append(d);
+  return new Promise((ok) => {
+    d.addEventListener('close', () => { ok(d.returnValue === 'ja'); d.remove(); });
+    d.showModal();
+    d.querySelector('[value=ja]').focus();
+  });
+}

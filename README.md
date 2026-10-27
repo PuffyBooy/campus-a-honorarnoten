@@ -26,7 +26,7 @@ Auf der Startseite gibt es **Demo-Zugänge** für jede Rolle (Passwort jeweils `
 | Rolle | Konto | Was man sieht |
 |---|---|---|
 | Erstes Anmelden | `neu@demo.at` | „Konto einrichten“ wie mit einem Startpasswort – startet bei jedem Klick frisch |
-| Autor:in | `maria@demo.at` | Meine Leistungen (mit Rolle Redigieren), Meine Prämienabrechnungen, Profil |
+| Autor:in | `maria@demo.at` | Mein Monat (mit Rolle Redigieren), Meine Abrechnungen, Profil |
 | Redaktion | `redaktion@demo.at` | Bearbeiter-Terminal |
 | Buchhaltung | `buchhaltung@demo.at` | Bezahl-Terminal |
 | Admin | `admin@demo.at` | Admin-Terminal + alles andere |
@@ -56,14 +56,14 @@ Lokal starten: `npm run dev` → http://localhost:5173
    Autor:innen-Rolle legen nur das Passwort fest. Fehlt einer bestehenden Autor:in etwas (z. B. nach
    dem Update der Profil-Link), erscheint die Seite beim nächsten Anmelden ebenfalls, mit den
    vorhandenen Daten vorausgefüllt. Die Daten werden für jede Prämienabrechnung automatisch übernommen.
-2. **Meine Leistungen:** Jeden Beitrag speichern, sobald er erschienen ist – **für campus a college
+2. **Mein Monat:** Jeden Beitrag speichern, sobald er erschienen ist – **für campus a college
    oder campus a**. Wählen kann man nur, wenn beide Profil-Links hinterlegt sind; sonst gilt immer das
    verbundene Medium (das prüft auch der Server). Als *Kolumne* oder
    *außerordentliche Anerkennungsprämie* (mit „Vereinbart mit“), jeweils mit Titel, Veröffentlichungsdatum
    und Betrag. Bei Kolumnen kann man die **Art der Kolumne** als freien Text dazuschreiben (optional),
    bei außerordentlichen Anerkennungsprämien die **Art der Anerkennungsprämie** (freier Text, Pflicht). Der Betrag ist mit dem **Prämiensatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin
    **pro Medium** einstellbar). Gespeicherte Leistungen kann man bearbeiten oder löschen.
-   **Artikel übernehmen:** Unter „Meine Leistungen“ stehen **alle eigenen Artikel** von
+   **Artikel übernehmen:** Unter „Mein Monat“ stehen **alle eigenen Artikel** von
    campus-a-college.at und campus-a.at (je nach hinterlegten Profil-Links) mit Medium, Datum, Ressort
    und Kategorie (z. B. „Meinung“). „Übernehmen“ füllt Medium, Titel und Veröffentlichungsdatum aus
    und verknüpft die Leistung mit dem Artikel.
@@ -73,12 +73,20 @@ Lokal starten: `npm run dev` → http://localhost:5173
    Prämienabrechnung abschicken – **getrennt pro Medium**: Es gibt eine Karte für campus a college und eine
    für campus a, jede mit eigenem Knopf. Die Prämienabrechnung heißt dann „Prämienabrechnung campus a college“
    bzw. „Prämienabrechnung campus a“ (Word und PDF). Die Nummer folgt der Vorlage: `NACHNAME-VO-JAHR-NN`
-   (z. B. `MUSTERFRAU-MA-2026-01`). Wurde im Monat schon eine abgeschickt, kommt ein Hinweis.
+   (z. B. `MUSTERFRAU-MA-2026-01`). Einreichen geht jederzeit, aber mit deutlichem Hinweis „Bitte nur
+   einmal am Monatsende“ und einem Bestätigungsschritt mit allen Leistungen und der Summe. Wurde im Monat
+   schon eine eingereicht, kommt ein Hinweis.
+   **Verlauf und Zurückziehen:** Jede Abrechnung zeigt ihren Weg (Eingereicht → In Prüfung → Angenommen →
+   Auszahlung KW → Bezahlt, mit Datum). Solange die Redaktion noch nicht angenommen hat, kann die
+   Autor:in sie **zurückziehen und bearbeiten**: Die Leistungen kommen zurück in „Mein Monat“, die
+   Abrechnung verschwindet (Vermerk im Löschprotokoll). War es die letzte Nummer, bekommt die neue
+   Abrechnung wieder dieselbe. „Meine Abrechnungen“ zeigt pro Jahr die ausgezahlte Summe und was noch
+   unterwegs ist.
 4. **Redaktion:** Filter nach Status und Medium, Suche nach Name oder Nummer, Sortierung nach Datum und
    Betrag. Annehmen, Ablehnen (Begründung Pflicht), Betrag pro Leistung korrigieren (Vermerk
    Pflicht), interne Kommentare, Verlauf. **IBAN und Adresse sind ausgeblendet.**
 5. **Abgelehnt?** Beim Ablehnen (Begründung Pflicht) gehen die Leistungen **sofort zurück an die
-   Autor:in**: Sie stehen wieder unter „Meine Leistungen“, mit dem Hinweis „Zurück aus <Nummer> zum
+   Autor:in**: Sie stehen wieder unter „Mein Monat“, mit dem Hinweis „Zurück aus <Nummer> zum
    Überarbeiten“ und der Begründung. Die Autor:in korrigiert sie und schickt sie als neue Prämienabrechnung
    ab; die abgelehnte Note bleibt mit ihrer Nummer als „Abgelehnt“ stehen und kann nicht mehr
    angenommen werden (damit nichts doppelt abgerechnet wird).
@@ -223,10 +231,21 @@ Ist der Haken **„Der Betreiber ist nicht bei der campus a Medien GmbH angestel
 sehen alle einen **Hinweis**: Wer die App betreibt, ist nicht bei campus a angestellt, hat aber als
 Admin Zugriff auf alle Daten (auch Adressen und IBANs), und die Daten liegen bei World4You.
 - auf der Anmeldeseite und in der Datenschutzerklärung,
-- beim Konto einrichten mit Pflicht-Häkchen „zur Kenntnis genommen“,
-- bei allen anderen als Banner, bis sie „Zur Kenntnis genommen“ klicken (Zeitpunkt wird gespeichert).
+- beim **Zugang anfragen** mit Pflicht-Häkchen „Datenschutzerklärung gelesen und Hinweis zur Kenntnis
+  genommen“ (ohne Häkchen lehnt auch der Server ab; der Zeitpunkt steht bei der Anfrage im Admin),
+- beim **Konto einrichten** (erstes Anmelden) mit demselben Pflicht-Häkchen,
+- bei allen anderen als Banner, bis sie „Gelesen und zur Kenntnis genommen“ klicken (Zeitpunkt wird gespeichert).
 
-Ändern sich Name, Anschrift, Hosting oder der Haken, müssen alle den Hinweis neu bestätigen.
+Die Bestätigung der Datenschutzerklärung fragt die App bei **allen Konten** ab, auch wenn kein Hinweis
+zum Betreiber nötig ist. Ändern sich Name, Anschrift, Hosting oder der Haken, müssen alle neu bestätigen.
+
+### Cookies
+
+Beim ersten Besuch erscheint unten die **Cookie-Auswahl** („Nur notwendige“ oder „Alle erlauben“, mit
+Details). Notwendig sind nur das Anmelde-Cookie und das Merken der Auswahl. Optional ist **„Komfort“**:
+Dabei merkt sich der Browser den Entwurf der Externen Honorarnote; ohne Zustimmung bleibt er nur, bis die
+Seite geschlossen wird. Unten auf jeder Seite kann man über **„Cookie-Einstellungen“** jederzeit ändern;
+beim Widerruf wird das Gespeicherte sofort gelöscht. Werbung, Tracking oder Analyse gibt es nicht.
 
 ### Automatische E-Mails
 

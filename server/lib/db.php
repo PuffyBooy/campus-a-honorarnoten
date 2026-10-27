@@ -216,6 +216,10 @@ const MIGRATIONEN = [
     <<<'SQL'
     alter table nutzer add column benachrichtigungen text not null default '{}';
     SQL,
+    // Version 9: wann bei der Zugangsanfrage Datenschutzerklärung und Hinweis zur Kenntnis genommen wurden
+    <<<'SQL'
+    alter table anfragen add column zustimmung_am text;
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -398,6 +402,9 @@ const MYSQL_MIGRATIONEN = [
       gesperrt_bis bigint not null default 0,
       index mails_offen (gesendet_am)
     ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    SQL,    // Version 2 = SQLite-Version 9
+    <<<'SQL'
+    alter table anfragen add column zustimmung_am varchar(30) null;
     SQL,
 ];
 

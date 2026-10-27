@@ -235,14 +235,15 @@ function neuePersonPruefen({ vorname, nachname, email }) {
 }
 
 /** Öffentlich (ohne Anmeldung): Zugang anfragen */
-export function zugangAnfragen({ vorname, nachname, email, nachricht }) {
+export function zugangAnfragen({ vorname, nachname, email, nachricht, zustimmung }) {
   email = trim(email).toLowerCase();
   neuePersonPruefen({ vorname, nachname, email });
+  pruefe(zustimmung === true, 'Bitte bestätige, dass du die Datenschutzerklärung und den Hinweis zum Betreiber gelesen hast.');
   pruefe(!db.anfragen.some((a) => a.email === email && a.status === 'offen'),
     'Für diese E-Mail-Adresse gibt es schon eine offene Anfrage. Bitte etwas Geduld.');
   db.anfragen.push({
     id: id(), vorname: trim(vorname), nachname: trim(nachname), email,
-    nachricht: trim(nachricht).slice(0, 1000), status: 'offen', am: jetzt(),
+    nachricht: trim(nachricht).slice(0, 1000), status: 'offen', am: jetzt(), zustimmung_am: jetzt(),
   });
   speichern();
 }
@@ -585,7 +586,7 @@ export function meineNoten() {
 
 /** Abgelehnte Note: Leistungen zurück in die Entwürfe holen, um sie korrigiert neu abzuschicken */
 /**
- * Leistungen einer abgelehnten Note zurück in „Meine Leistungen“ der Autor:in (mit eingereichtem Betrag,
+ * Leistungen einer abgelehnten Note zurück in „Mein Monat“ der Autor:in (mit eingereichtem Betrag,
  * Medium, Artikel-Link und der Begründung als Hinweis). Die Note gilt danach als zurückgeholt.
  */
 function zurueckAnAutor(note, akteur) {
@@ -611,6 +612,20 @@ export function leistungenZurueckholen(noteId) {
   pruefe(note.status === 'abgelehnt', 'Nur abgelehnte Prämienabrechnungen können überarbeitet werden.');
   pruefe(!note.zurueckgeholt_am, 'Die Leistungen wurden bereits zurückgeholt.');
   zurueckAnAutor(note, n);
+  speichern();
+}
+
+/** Abgeschickte Prämienabrechnung zurückziehen, solange die Redaktion sie noch nicht angenommen hat */
+export function abrechnungZurueckziehen(noteId) {
+  const n = brauche('autor');
+  const note = noteHolen(noteId);
+  pruefe(note.autor_id === n.id, 'Dafür fehlt dir die Berechtigung.');
+  pruefe(note.status === 'eingereicht', 'Diese Prämienabrechnung wurde schon geprüft und kann nicht mehr zurückgezogen werden. Bitte schreib der Redaktion.');
+  zurueckAnAutor({ ...note, ablehnungsgrund: '' }, n);
+  db.noten = db.noten.filter((y) => y.id !== noteId);
+  db.kommentare = db.kommentare.filter((k) => k.note_id !== noteId);
+  db.verlauf = db.verlauf.filter((v) => v.note_id !== noteId);
+  db.loeschprotokoll.push({ id: id(), nummer: note.nummer, geloescht_von: `${anzeigename(n)} (zurückgezogen)`, am: jetzt() });
   speichern();
 }
 
