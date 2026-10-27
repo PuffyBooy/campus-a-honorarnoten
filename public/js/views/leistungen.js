@@ -52,20 +52,18 @@ function waehlbareMedien(nutzer, p) {
   return m.length ? m : [STANDARD_MEDIUM];
 }
 
-function artikelKarteHtml(daten) {
-  if (!daten) return '<p class="klein" role="status">Artikel werden geladen … Beim ersten Mal kann das bis zu einer Minute dauern.</p>';
-  if (daten.fehler) return `<p class="fehlerbox" role="alert">${esc(daten.fehler)}</p>`;
-  if (!daten.verknuepft) {
-    return '<p class="klein">Trag im <a href="#/profil">Profil</a> den Link zu deiner Profilseite auf campus-a-college.at oder campus-a.at ein, dann erscheinen hier alle deine Artikel.</p>';
-  }
-  const offen = daten.artikel.filter((a) => !a.erfasst).length;
-  const seiten = (daten.medien ?? []).map((m) => MEDIEN[m].seite).join(' und ');
-  return `
-    ${daten.demo ? `<p class="tipp">Demo: Beispielartikel. Im echten Betrieb stehen hier deine Artikel von ${esc(seiten)}.</p>` : ''}
-    ${daten.warnung ? `<p class="hinweisbox">${esc(daten.warnung)}</p>` : ''}
-    <p class="klein">${daten.artikel.length} Artikel von ${esc(seiten)}, davon ${offen} noch nicht erfasst.</p>
-    ${daten.artikel.length ? `<ul class="artikel-liste">
-      ${daten.artikel.map((a, i) => `
+// Filter der Artikelliste (bleiben beim Neuzeichnen erhalten)
+const artikelFilter = { medium: '', suche: '', nurOffen: false };
+
+function artikelListeHtml(daten) {
+  const q = artikelFilter.suche.trim().toLowerCase();
+  const treffer = daten.artikel.map((a, i) => ({ a, i }))
+    .filter(({ a }) => !artikelFilter.medium || a.medium === artikelFilter.medium)
+    .filter(({ a }) => !artikelFilter.nurOffen || !a.erfasst)
+    .filter(({ a }) => !q || [a.titel, a.ressort, a.kategorie].some((x) => String(x ?? '').toLowerCase().includes(q)));
+  if (!treffer.length) return '<p class="klein">Keine Artikel gefunden.</p>';
+  return `<ul class="artikel-liste">
+      ${treffer.map(({ a, i }) => `
         <li class="artikel${a.erfasst ? ' erfasst' : ''}">
           <span>
             <strong>${artikelLink(a.url, a.titel, '', a.medium)}</strong><br>
@@ -74,7 +72,31 @@ function artikelKarteHtml(daten) {
           ${a.erfasst ? '<span class="badge badge-bezahlt">erfasst</span>'
             : `<button type="button" class="btn btn-klein" data-uebernehmen="${i}">Übernehmen</button>`}
         </li>`).join('')}
-    </ul>` : ''}
+    </ul>`;
+}
+
+function artikelKarteHtml(daten) {
+  if (!daten) return '<p class="klein" role="status">Artikel werden geladen … Beim ersten Mal kann das bis zu einer Minute dauern.</p>';
+  if (daten.fehler) return `<p class="fehlerbox" role="alert">${esc(daten.fehler)}</p><button type="button" class="link-knopf" id="artikel-neu">Erneut versuchen</button>`;
+  if (!daten.verknuepft) {
+    return '<p class="klein">Trag im <a href="#/profil">Profil</a> den Link zu deiner Profilseite auf campus-a-college.at oder campus-a.at ein, dann erscheinen hier alle deine Artikel.</p>';
+  }
+  const offen = daten.artikel.filter((a) => !a.erfasst).length;
+  const medien = daten.medien ?? [];
+  const seiten = medien.map((m) => MEDIEN[m].seite).join(' und ');
+  return `
+    ${daten.demo ? `<p class="tipp">Demo: Beispielartikel. Im echten Betrieb stehen hier deine Artikel von ${esc(seiten)}.</p>` : ''}
+    ${daten.warnung ? `<p class="hinweisbox">${esc(daten.warnung)}</p>` : ''}
+    <p class="klein">${daten.artikel.length} Artikel von ${esc(seiten)}, davon ${offen} noch nicht erfasst.</p>
+    ${daten.artikel.length ? `<div class="artikel-filter">
+      <label class="sr-only" for="artikel-suche">Artikel suchen</label>
+      <input id="artikel-suche" type="search" placeholder="Titel suchen …" autocomplete="off" value="${esc(artikelFilter.suche)}">
+      ${medien.length > 1 ? `<label class="sr-only" for="artikel-medium">Medium</label>
+      <select id="artikel-medium"><option value="">Beide Medien</option>
+        ${medien.map((m) => `<option value="${m}" ${artikelFilter.medium === m ? 'selected' : ''}>${esc(MEDIEN[m].name)}</option>`).join('')}</select>` : ''}
+      <label class="check"><input type="checkbox" id="artikel-offen" ${artikelFilter.nurOffen ? 'checked' : ''}> nur noch nicht erfasste</label>
+    </div>
+    <div id="artikel-treffer">${artikelListeHtml(daten)}</div>` : ''}
     <button type="button" class="link-knopf" id="artikel-neu">Liste aktualisieren</button>`;
 }
 
@@ -351,6 +373,18 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     if (!istAktuell()) return;
     artikelInhalt.innerHTML = artikelKarteHtml(artikelDaten);
   };
+  // Suche und Filter: nur die Liste neu zeichnen, damit das Suchfeld den Fokus behält
+  const filterAnwenden = () => {
+    const ziel = artikelInhalt.querySelector('#artikel-treffer');
+    if (ziel && artikelDaten?.artikel) ziel.innerHTML = artikelListeHtml(artikelDaten);
+  };
+  artikelInhalt.addEventListener('input', (ev) => {
+    if (ev.target.id === 'artikel-suche') { artikelFilter.suche = ev.target.value; filterAnwenden(); }
+  });
+  artikelInhalt.addEventListener('change', (ev) => {
+    if (ev.target.id === 'artikel-medium') { artikelFilter.medium = ev.target.value; filterAnwenden(); }
+    if (ev.target.id === 'artikel-offen') { artikelFilter.nurOffen = ev.target.checked; filterAnwenden(); }
+  });
   artikelInhalt.addEventListener('click', (ev) => {
     if (ev.target.closest('#artikel-neu')) {
       artikelLaden(true);

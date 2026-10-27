@@ -105,6 +105,10 @@ function api(): array
             return [429, ['fehler' => 'Zu viele Anmeldeversuche. Bitte in 15 Minuten erneut versuchen.']];
         }
     }
+    // Links: gegen Durchprobieren von Tokens
+    if (in_array($name, ['linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren'], true) && !versuch_erlaubt($db, "link:$ip", 30, 900)) {
+        return [429, ['fehler' => 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.']];
+    }
     if ($name === 'zugangAnfragen' && !versuch_erlaubt($db, "anfrage:$ip", 5, 3600)) {
         return [429, ['fehler' => 'Zu viele Anfragen. Bitte später erneut versuchen.']];
     }

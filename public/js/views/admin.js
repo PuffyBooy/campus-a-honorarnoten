@@ -9,37 +9,42 @@ import { bestaetigen, fehlerText, kopierenMitFeedback, meldung, mitSperre, statu
 import { STANDARD_HOSTER, betreiberOder } from '../lib/rechtliches.js';
 
 const REITER = {
-  anfragen: 'Anfragen', benutzer: 'Benutzer', noten: 'Prämienabrechnungen', einstellungen: 'Einstellungen', mail: 'E-Mail', daten: 'Daten',
+  anfragen: 'Anfragen', einladen: 'Einladen', benutzer: 'Benutzer', noten: 'Prämienabrechnungen', einstellungen: 'Einstellungen', mail: 'E-Mail', daten: 'Daten',
 };
 
 // Zuletzt erzeugte Zugangsdaten – bleiben sichtbar, bis der Admin sie wegklickt
 let zugangsdaten = null;
 
 function zugangsText(z) {
-  const adresse = location.origin + location.pathname;
-  return `Hallo ${z.vorname},\n\ndein Zugang zu den Anerkennungsprämien von campus a college ist bereit.\n\n`
-    + `Adresse: ${adresse}\nE-Mail: ${z.email}\nStartpasswort: ${z.passwort}\n\n`
+  return `Hallo ${z.vorname},\n\ndein Zugang zu den Anerkennungsprämien von campus a college und campus a ist bereit.\n\n`
+    + `Mit diesem Link bist du direkt angemeldet (gilt einmal, 7 Tage):\n${z.link}\n\n`
+    + `Oder anmelden mit\nE-Mail: ${z.email}\nStartpasswort: ${z.passwort}\n\n`
     + 'Beim ersten Anmelden legst du dein eigenes Passwort fest.\n\nLiebe Grüße\ndeine Redaktion';
 }
 
 function zugangsdatenHtml(z) {
+  // Mit eingerichtetem E-Mail-Versand geht alles automatisch hinaus – dann nur zur Info
   const mailto = `mailto:${encodeURIComponent(z.email)}?subject=${encodeURIComponent('Dein Zugang zu den Anerkennungsprämien')}`
     + `&body=${encodeURIComponent(zugangsText(z))}`;
   return `
     <section class="karte zugangsdaten" role="status">
       <h2>Zugangsdaten für ${esc(z.vorname)}</h2>
-      ${z.mail ? `<p class="erfolgbox">Die Zugangsdaten werden automatisch per E-Mail an ${esc(z.email)} geschickt.</p>` : ''}
-      <p>Das Startpasswort wird nur jetzt angezeigt.</p>
+      ${z.mail ? `<p class="erfolgbox">Die Zugangsdaten gehen automatisch per E-Mail an <strong>${esc(z.email)}</strong>,
+        mit einem Knopf, der direkt anmeldet. Du musst nichts weiter tun.</p>`
+        : '<p>Der E-Mail-Versand ist nicht eingerichtet. Bitte die Zugangsdaten selbst weitergeben. Sie werden nur jetzt angezeigt.</p>'}
       <div class="kopierblock">
         <div class="kopierzeile"><span class="kopier-label">E-Mail</span><span class="kopier-wert">${esc(z.email)}</span><span></span></div>
         <div class="kopierzeile"><span class="kopier-label">Startpasswort</span>
           <span class="kopier-wert mono">${esc(z.passwort)}</span>
           <button type="button" class="btn btn-klein" data-z="pw">Kopieren</button></div>
+        ${z.link ? `<div class="kopierzeile"><span class="kopier-label">Link zum direkten Anmelden (einmal, 7 Tage)</span>
+          <span class="kopier-wert klein">${esc(z.link)}</span>
+          <button type="button" class="btn btn-klein" data-z="link">Kopieren</button></div>` : ''}
       </div>
       <div class="aktionen">
-        <a class="btn${z.mail ? '' : ' btn-primaer'}" href="${esc(mailto)}">E-Mail vorbereiten</a>
-        <button type="button" class="btn" data-z="text">Text kopieren</button>
-        <button type="button" class="btn" data-z="fertig">Erledigt</button>
+        ${z.mail ? '' : `<a class="btn btn-primaer" href="${esc(mailto)}">E-Mail vorbereiten</a>
+        <button type="button" class="btn" data-z="text">Text kopieren</button>`}
+        <button type="button" class="btn" data-z="fertig">${z.mail ? 'Ok' : 'Erledigt'}</button>
       </div>
     </section>`;
 }
@@ -49,17 +54,101 @@ function zugangsdatenBinden(box, neuLaden) {
     const k = ev.target.closest('[data-z]');
     if (!k || !zugangsdaten) return;
     if (k.dataset.z === 'pw') kopierenMitFeedback(k, zugangsdaten.passwort);
+    if (k.dataset.z === 'link') kopierenMitFeedback(k, zugangsdaten.link);
     if (k.dataset.z === 'text') kopierenMitFeedback(k, zugangsText(zugangsdaten));
     if (k.dataset.z === 'fertig') { zugangsdaten = null; neuLaden(); }
   });
 }
 
-function rollenAuswahl(vorauswahl = ['autor']) {
-  return `<span class="rollen-wahl">${Object.entries(ROLLEN_LABEL).map(([r, l]) => `
+function rollenAuswahl(vorauswahl = ['autor'], ohne = []) {
+  return `<span class="rollen-wahl">${Object.entries(ROLLEN_LABEL).filter(([r]) => !ohne.includes(r)).map(([r, l]) => `
     <label class="check"><input type="checkbox" data-rolle="${r}" ${vorauswahl.includes(r) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}</span>`;
 }
 
 const gewaehlteRollen = (el) => Array.from(el.querySelectorAll('[data-rolle]:checked'), (x) => x.dataset.rolle);
+
+// Zuletzt erstellter Registrierungslink – der Link selbst ist nur jetzt sichtbar (gespeichert wird nur ein Hash)
+let neuerLink = null;
+const LINK_GUELTIG = { 1: '1 Tag', 3: '3 Tage', 7: '7 Tage', 14: '14 Tage', 30: '30 Tage' };
+
+/** Registrierungslinks: verschicken, wer ihn hat, legt sein Konto selbst an (begrenzte Zeit und Anzahl) */
+async function einladen(inhalt, { store, neuLaden, istDemo }) {
+  const links = await store.registrierungslinks();
+  const nutzbar = (l) => (l.max == null ? `${l.nutzungen} verwendet` : `${l.nutzungen} von ${l.max} verwendet`);
+  inhalt.innerHTML = `
+    ${neuerLink ? `<section class="karte zugangsdaten" role="status">
+      <h2>Registrierungslink erstellt</h2>
+      ${neuerLink.mail ? '<p class="erfolgbox">Die Einladung geht per E-Mail hinaus.</p>' : ''}
+      <p>Gilt ${esc(LINK_GUELTIG[neuerLink.tage])}, ${neuerLink.max == null ? 'beliebig oft' : neuerLink.max === 1 ? 'für eine Person' : `für ${neuerLink.max} Personen`}.
+        <strong>Der Link wird nur jetzt angezeigt.</strong></p>
+      <div class="kopierblock"><div class="kopierzeile"><span class="kopier-label">Link</span>
+        <span class="kopier-wert klein">${esc(neuerLink.link)}</span>
+        <button type="button" class="btn btn-klein" id="l-kopieren">Kopieren</button></div></div>
+      <div class="aktionen"><button type="button" class="btn" id="l-ok">Ok</button></div>
+    </section>` : ''}
+    <form class="karte" id="l-form" novalidate>
+      <h2>Registrierungslink erstellen</h2>
+      <p class="tipp">Wer den Link bekommt, legt sein Konto selbst an, ohne dass du freischalten musst.
+        Der Link läuft ab und gilt nur so oft, wie du hier einstellst.</p>
+      <div class="zeile">
+        <div class="feld"><label for="l-tage">Gültig</label>
+          <select id="l-tage" name="tage">${Object.entries(LINK_GUELTIG).map(([t, l]) => `<option value="${t}" ${t === '7' ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></div>
+        <div class="feld"><label for="l-max">Wie oft</label>
+          <select id="l-max" name="max"><option value="1">Für eine Person</option><option value="5">Für bis zu 5 Personen</option>
+            <option value="20">Für bis zu 20 Personen</option><option value="">Beliebig oft (bis zum Ablauf)</option></select></div>
+      </div>
+      <p class="klein">Rollen der neuen Konten:</p>
+      ${rollenAuswahl(['autor'], ['admin'])}
+      <div class="zeile">
+        <div class="feld"><label for="l-email">Gleich per E-Mail schicken an <span class="optional">(optional)</span></label>
+          <input id="l-email" name="email" type="email" inputmode="email" placeholder="name@example.org"></div>
+        <div class="feld"><label for="l-notiz">Notiz <span class="optional">(optional, nur für dich)</span></label>
+          <input id="l-notiz" name="notiz" maxlength="200" placeholder="z. B. Neue Klasse 7B"></div>
+      </div>
+      ${istDemo ? '<p class="klein">In der Demo werden keine E-Mails verschickt. Den Link kannst du hier kopieren und im selben Browser öffnen.</p>' : ''}
+      <p class="feldfehler" role="alert"></p>
+      <button type="submit" class="btn btn-primaer">Link erstellen</button>
+    </form>
+    <section class="karte">
+      <h2>Bisherige Links</h2>
+      ${links.length ? `<table class="tabelle"><thead><tr><th>Erstellt</th><th>Notiz</th><th>Rollen</th><th>Nutzung</th><th>Gültig bis</th><th></th></tr></thead>
+        <tbody>${links.map((l) => `<tr data-id="${esc(l.id)}">
+          <td data-label="Erstellt"><span>${esc(formatZeitpunkt(l.erstellt_am))}<br><span class="klein">${esc(l.erstellt_von)}</span></span></td>
+          <td data-label="Notiz">${esc(l.notiz || '–')}</td>
+          <td data-label="Rollen">${esc(l.rollen.map((r) => ROLLEN_LABEL[r] ?? r).join(', '))}</td>
+          <td data-label="Nutzung">${esc(nutzbar(l))}</td>
+          <td data-label="Gültig bis"><span>${esc(formatZeitpunkt(l.gueltig_bis))}<br>${l.aktiv ? '<span class="badge badge-bezahlt">aktiv</span>'
+            : `<span class="badge badge-abgelehnt">${l.widerrufen_am ? 'zurückgezogen' : 'abgelaufen'}</span>`}</span></td>
+          <td data-label="">${l.aktiv ? '<button type="button" class="btn btn-klein btn-gefahr" data-widerrufen>Zurückziehen</button>' : ''}</td>
+        </tr>`).join('')}</tbody></table>` : '<p class="klein">Noch keine Registrierungslinks.</p>'}
+    </section>`;
+
+  inhalt.querySelector('#l-kopieren')?.addEventListener('click', (ev) => kopierenMitFeedback(ev.currentTarget, neuerLink.link));
+  inhalt.querySelector('#l-ok')?.addEventListener('click', () => { neuerLink = null; neuLaden(); });
+  const form = inhalt.querySelector('#l-form');
+  form.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const fehler = form.querySelector('.feldfehler');
+    fehler.textContent = '';
+    await mitSperre(form.querySelector('[type=submit]'), async () => {
+      try {
+        neuerLink = await store.registrierungslinkErstellen({
+          tage: Number(form.tage.value), max: form.max.value === '' ? null : Number(form.max.value),
+          rollen: gewaehlteRollen(form), email: form.email.value, notiz: form.notiz.value,
+        });
+        neuLaden();
+      } catch (e) {
+        fehler.textContent = fehlerText(e);
+      }
+    });
+  });
+  inhalt.querySelector('tbody')?.addEventListener('click', (ev) => {
+    if (!ev.target.closest('[data-widerrufen]')) return;
+    const id = ev.target.closest('tr').dataset.id;
+    if (!confirm('Diesen Link zurückziehen? Danach kann sich niemand mehr damit registrieren.')) return;
+    versuche(() => store.registrierungslinkWiderrufen(id), 'Link zurückgezogen.', neuLaden);
+  });
+}
 
 async function anfragen(inhalt, { store, neuLaden }) {
   const alle = await store.anfragen();
@@ -542,5 +631,5 @@ export async function render(el, ctx) {
     <div id="a-inhalt"></div>`;
   zugangsdatenBinden(el.querySelector('#a-zugang'), ctx.neuLaden);
   const inhalt = el.querySelector('#a-inhalt');
-  await ({ anfragen, benutzer, noten, einstellungen, mail, daten })[tab](inhalt, ctx);
+  await ({ anfragen, einladen, benutzer, noten, einstellungen, mail, daten })[tab](inhalt, ctx);
 }

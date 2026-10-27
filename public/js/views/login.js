@@ -1,5 +1,5 @@
 // Anmelden / Zugang anfragen, dazu Schnellzugang zu den Demo-Konten.
-// Selbst registrieren geht nicht – ein Admin schaltet Anfragen frei.
+// Selbst registrieren geht nur mit einem Registrierungslink vom Admin (views/registrieren.js), sonst schaltet ein Admin Anfragen frei.
 import { DEMO_KONTEN, DEMO_PASSWORT } from '../demo-konten.js';
 import { esc } from '../lib/format.js';
 import { fehlerText, mitSperre } from '../lib/ui.js';

@@ -214,11 +214,13 @@ final class Honorare
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'alleNotenAdmin', 'noteLoeschen',
         'loeschprotokoll', 'einstellungenSpeichern', 'statistik', 'exportieren',
-        'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail', 'rechtliches', 'hinweisBestaetigen', 'benachrichtigungenSpeichern',
+        'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail', 'linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren',
+        'registrierungslinkErstellen', 'registrierungslinks', 'registrierungslinkWiderrufen', 'rechtliches', 'hinweisBestaetigen', 'benachrichtigungenSpeichern',
     ];
 
     /** ohne Anmeldung erlaubt (Impressum und Datenschutz müssen für alle lesbar sein) */
-    public const OEFFENTLICH = ['aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'rechtliches'];
+    public const OEFFENTLICH = ['aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'rechtliches',
+        'linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren'];
 
     public function __construct(private Ctx $ctx)
     {
@@ -293,6 +295,7 @@ final class Honorare
         pruefe(!password_verify(s($neu), $alt), 'Bitte ein neues Passwort wählen, nicht das Startpasswort.');
         q($db, 'update nutzer set passwort = ?, muss_passwort_aendern = 0 where id = ?', [passwort_hash(s($neu)), $n['id']]);
         alle_sitzungen_beenden($db, $n['id'], $this->ctx->token);
+        anmeldelinks_widerrufen($db, $n['id']); // ab jetzt gilt das eigene Passwort
         return true;
     }
 
@@ -749,9 +752,9 @@ final class Honorare
             pruefe($a, 'Diese Anfrage gibt es nicht (mehr).', 404);
             pruefe($a['status'] === 'offen', 'Diese Anfrage wurde bereits bearbeitet.');
             pruefe(!wert($db, 'select 1 from nutzer where email = ?', [$a['email']]), 'Für diese E-Mail-Adresse gibt es schon ein Konto.');
-            konto_einfuegen($db, $a['vorname'], $a['nachname'], $a['email'], $r, $hash);
+            $id = konto_einfuegen($db, $a['vorname'], $a['nachname'], $a['email'], $r, $hash);
             q($db, "update anfragen set status = 'freigeschaltet', bearbeitet_am = ?, bearbeitet_von = ? where id = ?", [jetzt(), anzeigename($admin), $a['id']]);
-            return zugang_melden($db, ['email' => $a['email'], 'vorname' => $a['vorname'], 'passwort' => $passwort]);
+            return zugang_melden($db, ['id' => $id, 'email' => $a['email'], 'vorname' => $a['vorname'], 'passwort' => $passwort]);
         });
     }
 
@@ -778,9 +781,9 @@ final class Honorare
         $hash = passwort_hash($passwort);
         return transaktion($db, function () use ($db, $d, $email, $r, $passwort, $hash) {
             pruefe(!wert($db, 'select 1 from nutzer where email = ?', [$email]), 'Für diese E-Mail-Adresse gibt es schon ein Konto.');
-            konto_einfuegen($db, s($d['vorname']), s($d['nachname']), $email, $r, $hash);
+            $id = konto_einfuegen($db, s($d['vorname']), s($d['nachname']), $email, $r, $hash);
             q($db, "update anfragen set status = 'freigeschaltet', bearbeitet_am = ? where email = ? and status = 'offen'", [jetzt(), $email]);
-            return zugang_melden($db, ['email' => $email, 'vorname' => tr($d['vorname']), 'passwort' => $passwort]);
+            return zugang_melden($db, ['id' => $id, 'email' => $email, 'vorname' => tr($d['vorname']), 'passwort' => $passwort]);
         });
     }
 
@@ -828,7 +831,7 @@ final class Honorare
         $passwort = startpasswort();
         q($db, 'update nutzer set passwort = ?, muss_passwort_aendern = 1 where id = ?', [passwort_hash($passwort), $n['id']]);
         alle_sitzungen_beenden($db, $n['id'], $n['id'] === $this->ctx->nutzer['id'] ? $this->ctx->token : null);
-        return zugang_melden($db, ['email' => $n['email'], 'vorname' => $n['vorname'], 'passwort' => $passwort], false);
+        return zugang_melden($db, ['id' => $n['id'], 'email' => $n['email'], 'vorname' => $n['vorname'], 'passwort' => $passwort], false);
     }
 
     /** E-Mail-Adresse eines Kontos ändern (z. B. Tippfehler). Alte und neue Adresse bekommen eine Info-Mail. */
@@ -969,6 +972,101 @@ final class Honorare
     }
 
     /** Test-E-Mail sofort an die eigene Adresse (oder die angegebene) – mit verständlicher Fehlermeldung */
+    // ---------------------------------------------------------------- Links (Anmelden, Registrieren)
+    /** Link aus der Zugangs-Mail: meldet direkt an (einmal, 7 Tage); danach eigenes Passwort festlegen */
+    public function linkAnmelden(mixed $token = null): array
+    {
+        $db = $this->db();
+        return transaktion($db, function () use ($db, $token) {
+            $l = link_pruefen($db, $token, 'anmelden');
+            $n = nutzer_laden($db, (string) $l['nutzer_id']);
+            pruefe($n && $n['aktiv'], 'Dieses Konto ist deaktiviert. Bitte wende dich an die Redaktion.', 403);
+            q($db, 'update links set nutzungen = nutzungen + 1 where id = ?', [$l['id']]);
+            if ($this->ctx->token) sitzung_beenden($db, $this->ctx->token);
+            $this->ctx->neueSitzung = sitzung_erstellen($db, $n['id']);
+            q($db, 'update nutzer set letzter_login = ? where id = ?', [jetzt(), $n['id']]);
+            return nutzer_laden($db, $n['id']);
+        });
+    }
+
+    /** Gilt der Registrierungslink? (für die Seite „Registrieren“) */
+    public function einladungPruefen(mixed $token = null): array
+    {
+        $l = link_pruefen($this->db(), $token, 'registrieren');
+        return ['rollen' => json_decode($l['rollen'], true) ?: [], 'gueltig_bis' => $l['gueltig_bis']];
+    }
+
+    /** Mit Registrierungslink selbst ein Konto anlegen – ohne Freischalten durch den Admin */
+    public function mitLinkRegistrieren(mixed $token = null, mixed $daten = []): array
+    {
+        $db = $this->db();
+        $d = is_array($daten) ? $daten : [];
+        $email = strtolower(tr($d['email'] ?? ''));
+        pruefe(!leer($d['vorname'] ?? '') && !leer($d['nachname'] ?? ''), 'Bitte Vor- und Nachnamen angeben.');
+        pruefe(ist_email($email) && strlen($email) <= 200, 'Bitte eine gültige E-Mail-Adresse angeben.');
+        pruefe(mb_strlen(s($d['passwort'] ?? '')) >= 8, 'Das Passwort muss mindestens 8 Zeichen haben.');
+        pruefe(($d['zustimmung'] ?? null) === true, ZUSTIMMUNG_FEHLT);
+        $hash = passwort_hash(s($d['passwort']));
+        $n = transaktion($db, function () use ($db, $d, $token, $email, $hash) {
+            $l = link_pruefen($db, $token, 'registrieren');
+            pruefe(!wert($db, 'select 1 from nutzer where email = ?', [$email]), 'Für diese E-Mail-Adresse gibt es schon ein Konto. Bitte melde dich an.');
+            $rollen = rollen_normalisieren(json_decode($l['rollen'], true)) ?: ['autor'];
+            $id = konto_einfuegen($db, s($d['vorname']), s($d['nachname']), $email, $rollen, $hash);
+            q($db, 'update nutzer set muss_passwort_aendern = 0, hinweis_bestaetigt_am = ? where id = ?', [jetzt(), $id]);
+            q($db, 'update links set nutzungen = nutzungen + 1 where id = ?', [$l['id']]);
+            q($db, "update anfragen set status = 'freigeschaltet', bearbeitet_am = ?, bearbeitet_von = ? where email = ? and status = 'offen'",
+                [jetzt(), 'Registrierungslink', $email]);
+            if ($this->ctx->token) sitzung_beenden($db, $this->ctx->token);
+            $this->ctx->neueSitzung = sitzung_erstellen($db, $id);
+            return nutzer_laden($db, $id);
+        });
+        benachrichtigen($db, 'anfrage', mail_registriert_admin($db, $n));
+        return $n;
+    }
+
+    public function registrierungslinkErstellen(mixed $daten = []): array
+    {
+        $db = $this->db();
+        $admin = brauche($this->ctx, 'admin');
+        $d = is_array($daten) ? $daten : [];
+        $tage = (int) ($d['tage'] ?? 7);
+        pruefe(in_array($tage, LINK_TAGE, true), 'Bitte eine Gültigkeit wählen.');
+        $max = ($d['max'] ?? null) === null || $d['max'] === '' ? null : (int) $d['max'];
+        pruefe($max === null || ($max >= 1 && $max <= 500), 'Bitte angeben, wie oft der Link verwendet werden darf (1 bis 500 oder unbegrenzt).');
+        $rollen = array_values(array_intersect(rollen_normalisieren($d['rollen'] ?? ['autor']), LINK_ROLLEN));
+        pruefe($rollen, 'Bitte mindestens eine Rolle wählen.');
+        $an = strtolower(tr($d['email'] ?? ''));
+        pruefe($an === '' || ist_email($an), 'Bitte eine gültige E-Mail-Adresse angeben oder das Feld leer lassen.');
+        $link = app_link($db, 'registrieren/' . link_erstellen($db, 'registrieren', [
+            'rollen' => $rollen, 'max' => $max, 'tage' => $tage, 'notiz' => kuerze(tr($d['notiz'] ?? '') ?: $an, 200), 'von' => anzeigename($admin),
+        ]));
+        $mail = $an !== '' && mail_einstellungen($db)['aktiv'];
+        if ($mail) mail_einreihen($db, $an, mail_einladung($db, $link, $tage, $admin));
+        return ['link' => $link, 'mail' => $mail, 'tage' => $tage, 'max' => $max];
+    }
+
+    public function registrierungslinks(): array
+    {
+        $db = $this->db();
+        brauche($this->ctx, 'admin');
+        return array_map(fn ($l) => [
+            'id' => $l['id'], 'rollen' => json_decode($l['rollen'], true) ?: [], 'max' => $l['max_nutzungen'] === null ? null : (int) $l['max_nutzungen'],
+            'nutzungen' => (int) $l['nutzungen'], 'gueltig_bis' => $l['gueltig_bis'], 'notiz' => $l['notiz'], 'erstellt_von' => $l['erstellt_von'],
+            'erstellt_am' => $l['erstellt_am'], 'widerrufen_am' => $l['widerrufen_am'],
+            'aktiv' => !$l['widerrufen_am'] && strtotime($l['gueltig_bis']) >= time()
+                && ($l['max_nutzungen'] === null || (int) $l['nutzungen'] < (int) $l['max_nutzungen']),
+        ], zeilen($db, "select * from links where art = 'registrieren' order by erstellt_am desc limit 50"));
+    }
+
+    public function registrierungslinkWiderrufen(mixed $id = null): bool
+    {
+        $db = $this->db();
+        brauche($this->ctx, 'admin');
+        $r = q($db, "update links set widerrufen_am = ? where id = ? and art = 'registrieren' and widerrufen_am is null", [jetzt(), s($id)]);
+        pruefe($r->rowCount() === 1, 'Diesen Link gibt es nicht (mehr) oder er ist schon zurückgezogen.', 404);
+        return true;
+    }
+
     /** Konto, von dem die Sammelüberweisung (SEPA) abgeht – nur Buchhaltung und Admin */
     public function zahlungskonto(): array
     {
@@ -1064,6 +1162,45 @@ function zahlungskonto_laden(PDO $db): array
     return array_merge($leer, is_array($k) ? array_intersect_key($k, $leer) : []);
 }
 
+const LINK_ANMELDEN_TAGE = 7;
+const LINK_TAGE = [1, 3, 7, 14, 30]; // wählbare Gültigkeit der Registrierungslinks
+const LINK_ROLLEN = ['autor', 'redigieren', 'redaktion', 'buchhaltung']; // Admin nie per Link
+
+/** Neuer Link; gespeichert wird nur der Hash, der Token steht danach nirgends mehr */
+function link_erstellen(PDO $db, string $art, array $w): string
+{
+    $token = rtrim(strtr(base64_encode(random_bytes(24)), '+/', '-_'), '=');
+    q($db, 'insert into links (id, token_hash, art, nutzer_id, rollen, max_nutzungen, gueltig_bis, notiz, erstellt_von, erstellt_am)
+            values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
+        neue_id(), token_hash($token), $art, $w['nutzer_id'] ?? null, json_text($w['rollen'] ?? []), $w['max'] ?? null,
+        zeit_iso(time() + $w['tage'] * 86400), $w['notiz'] ?? '', $w['von'] ?? '', jetzt(),
+    ]);
+    return $token;
+}
+
+/** Der Link, wenn er (noch) gilt – sonst eine verständliche Meldung */
+function link_pruefen(PDO $db, mixed $token, string $art): array
+{
+    $t = s($token);
+    $l = $t !== '' && strlen($t) <= 100 ? zeile($db, 'select * from links where token_hash = ? and art = ?', [token_hash($t), $art]) : null;
+    pruefe($l, 'Dieser Link ist ungültig. Bitte prüfe, ob er vollständig kopiert wurde.', 404);
+    $verbraucht = $l['max_nutzungen'] !== null && (int) $l['nutzungen'] >= (int) $l['max_nutzungen'];
+    if ($art === 'anmelden') {
+        pruefe(!$l['widerrufen_am'] && !$verbraucht, 'Dieser Anmeldelink wurde schon verwendet. Bitte melde dich mit E-Mail und Passwort an.', 410);
+        pruefe(strtotime($l['gueltig_bis']) >= time(), 'Dieser Anmeldelink ist abgelaufen. Bitte melde dich mit E-Mail und Startpasswort an.', 410);
+    } else {
+        pruefe(!$l['widerrufen_am'], 'Dieser Registrierungslink wurde zurückgezogen. Bitte frag nach einem neuen.', 410);
+        pruefe(strtotime($l['gueltig_bis']) >= time(), 'Dieser Registrierungslink ist abgelaufen. Bitte frag nach einem neuen.', 410);
+        pruefe(!$verbraucht, 'Dieser Registrierungslink wurde schon so oft verwendet wie erlaubt. Bitte frag nach einem neuen.', 410);
+    }
+    return $l;
+}
+
+function anmeldelinks_widerrufen(PDO $db, string $nutzerId): void
+{
+    q($db, "update links set widerrufen_am = ? where nutzer_id = ? and art = 'anmelden' and widerrufen_am is null", [jetzt(), $nutzerId]);
+}
+
 /** Info an alte und neue Adresse, dass die E-Mail-Adresse geändert wurde (Schutz vor unbemerkter Übernahme) */
 function email_geaendert_melden(PDO $db, string $vorname, string $alt, string $neu): bool
 {
@@ -1074,6 +1211,9 @@ function email_geaendert_melden(PDO $db, string $vorname, string $alt, string $n
 
 function zugang_melden(PDO $db, array $z, bool $neu = true): array
 {
+    // Link zum direkten Anmelden (einmal, 7 Tage); ältere Links dieses Kontos gelten nicht mehr
+    anmeldelinks_widerrufen($db, $z['id']);
+    $z['link'] = app_link($db, 'link/' . link_erstellen($db, 'anmelden', ['nutzer_id' => $z['id'], 'max' => 1, 'tage' => LINK_ANMELDEN_TAGE]));
     $e = mail_einstellungen($db);
     $z['mail'] = $e['aktiv'] && $e['zugangsdaten'];
     if ($z['mail']) mail_einreihen($db, $z['email'], mail_zugang($db, $z, $neu));

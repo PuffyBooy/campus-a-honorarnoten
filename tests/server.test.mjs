@@ -326,6 +326,58 @@ test('Buchhaltung: PDF an sich selbst mailen (als Anhang)', async () => {
   assert.match(m.text, /im Anhang/);
 });
 
+test('Link in der Zugangs-Mail meldet direkt an (einmal, danach eigenes Passwort)', async () => {
+  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Lina', nachname: 'Link', email: 'lina@example.org', rollen: ['autor'] });
+  assert.match(z.link, /#\/link\/[\w-]{20,}$/);
+  const mail = await mailAbwarten(php.smtp, (m) => m.an === 'lina@example.org' && m.betreff.startsWith('Dein Zugang'));
+  assert.ok(mail.html.includes(z.link.replace(/&/g, '&amp;')), 'der Knopf führt zum Anmeldelink');
+  const token = z.link.split('#/link/')[1];
+  const lina = client();
+  const n = await lina.ok('linkAnmelden', token);
+  assert.equal(n.email, 'lina@example.org');
+  assert.equal(n.muss_passwort_aendern, true, 'danach eigenes Passwort festlegen');
+  assert.equal((await lina.ok('aktuellerNutzer')).email, 'lina@example.org');
+  assert.match((await client().aufruf('linkAnmelden', token)).fehler, /schon verwendet/);
+  assert.equal((await client().aufruf('linkAnmelden', 'falsch')).status, 404);
+  // neues Startpasswort: neuer Link, der alte gilt nicht mehr
+  const z2 = await k.admin.ok('passwortZuruecksetzen', n.id);
+  const z3 = await k.admin.ok('passwortZuruecksetzen', n.id);
+  assert.equal((await client().aufruf('linkAnmelden', z2.link.split('#/link/')[1])).status, 410);
+  // abgelaufen
+  php.sql("update links set gueltig_bis = '2020-01-01T00:00:00.000Z' where nutzer_id = ?", [n.id]);
+  assert.match((await client().aufruf('linkAnmelden', z3.link.split('#/link/')[1])).fehler, /abgelaufen/);
+  await k.admin.ok('nutzerLoeschen', n.id);
+});
+
+test('Registrierungslink: Konto selbst anlegen, begrenzt in Zeit und Anzahl', async () => {
+  assert.equal((await k.rita.aufruf('registrierungslinkErstellen', { tage: 7 })).status, 403);
+  assert.match((await k.admin.aufruf('registrierungslinkErstellen', { tage: 5 })).fehler, /Gültigkeit/);
+  const r = await k.admin.ok('registrierungslinkErstellen', { tage: 7, max: 1, rollen: ['autor', 'admin'], email: 'neu@example.org', notiz: 'Klasse 7B' });
+  assert.equal(r.mail, true);
+  assert.ok(await mailAbwarten(php.smtp, (m) => m.an === 'neu@example.org' && m.betreff === 'Einladung zu den Anerkennungsprämien'));
+  const token = r.link.split('#/registrieren/')[1];
+  const gast = client();
+  assert.deepEqual((await gast.ok('einladungPruefen', token)).rollen, ['autor'], 'nie Admin über einen Link');
+  const daten = { vorname: 'Nina', nachname: 'Neu', email: 'neu@example.org', passwort: 'geheim12345' };
+  assert.match((await gast.aufruf('mitLinkRegistrieren', token, daten)).fehler, /Datenschutzerklärung/);
+  assert.match((await gast.aufruf('mitLinkRegistrieren', token, { ...daten, zustimmung: true, passwort: 'kurz' })).fehler, /8 Zeichen/);
+  assert.match((await gast.aufruf('mitLinkRegistrieren', token, { ...daten, zustimmung: true, email: 'anna@example.org' })).fehler, /schon ein Konto/);
+  const nina = await gast.ok('mitLinkRegistrieren', token, { ...daten, zustimmung: true });
+  assert.deepEqual([nina.rollen, nina.muss_passwort_aendern, Boolean(nina.hinweis_bestaetigt_am)], [['autor'], false, true]);
+  assert.equal((await gast.ok('aktuellerNutzer')).email, 'neu@example.org', 'gleich angemeldet');
+  assert.ok(await mailAbwarten(php.smtp, (m) => m.an === 'admin@example.org' && m.betreff === 'Neu registriert: Nina Neu'));
+  // nur einmal
+  assert.match((await client().aufruf('mitLinkRegistrieren', token, { ...daten, email: 'x@example.org', zustimmung: true })).fehler, /so oft/);
+  // zurückziehen
+  const r2 = await k.admin.ok('registrierungslinkErstellen', { tage: 1, max: null });
+  const liste = await k.admin.ok('registrierungslinks');
+  assert.deepEqual(liste.slice(0, 2).map((l) => [l.max, l.nutzungen, l.aktiv]), [[null, 0, true], [1, 1, false]]);
+  assert.equal(liste[1].notiz, 'Klasse 7B');
+  await k.admin.ok('registrierungslinkWiderrufen', liste[0].id);
+  assert.match((await client().aufruf('einladungPruefen', r2.link.split('#/registrieren/')[1])).fehler, /zurückgezogen/);
+  await k.admin.ok('nutzerLoeschen', nina.id);
+});
+
 test('Admin: E-Mail-Adresse ändern, alte und neue Adresse bekommen eine Info', async () => {
   const bert = (await k.admin.ok('nutzerListe')).find((n) => n.email === 'bert@example.org');
   assert.equal((await k.rita.aufruf('emailAendern', bert.id, 'b@example.org')).status, 403);

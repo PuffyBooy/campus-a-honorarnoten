@@ -1,99 +1,121 @@
 <?php
-// Gestaltung der automatischen E-Mails: Kopf in der Farbe von campus a college, eine weiße Karte mit
-// Text, Übersicht und Knopf zur App. Nur Tabellen und Inline-Stile – so sieht es in Outlook, Gmail
-// und Apple Mail gleich aus. Jede Mail hat auch eine reine Textfassung.
+// Gestaltung der automatischen E-Mails: schlicht wie ein Brief – weißer Grund, kleiner Schriftzug oben,
+// Text, Übersicht und ein Knopf zur App. Nur Tabellen und Inline-Stile (Outlook, Gmail, Apple Mail),
+// feste Schriftgrößen in px und eine eigene Fassung für den Dunkelmodus. Jede Mail hat auch eine Textfassung.
 declare(strict_types=1);
 
 const FARBE = '#0f6b66';      // Petrol, wie die App
 const FARBE_HELL = '#e3f1ef';
+const SCHRIFT = "font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;";
+const TEXT = '#1c2321';
+const LEISE = '#5d6864';
+const LINIE = '#e2e8e6';
+
+/** Dunkelmodus: Apple Mail, iOS, Outlook (neu) und Outlook.com übernehmen diese Farben statt sie selbst umzudrehen */
+const DUNKEL_CSS = '@media (prefers-color-scheme: dark){'
+    . '.m-grund{background:#151a19 !important;}.m-text{color:#e7ecea !important;}.m-leise{color:#a3aeaa !important;}'
+    . '.m-linie{border-color:#2c3533 !important;}.m-akzent{color:#5cc2b8 !important;}.m-kasten{background:#1f2826 !important;}'
+    . '.m-knopf{background:#1a8c84 !important;}}'
+    . '[data-ogsc] .m-text{color:#e7ecea !important;}[data-ogsc] .m-leise{color:#a3aeaa !important;}'
+    . '[data-ogsc] .m-akzent{color:#5cc2b8 !important;}[data-ogsb] .m-grund{background:#151a19 !important;}'
+    . '[data-ogsb] .m-kasten{background:#1f2826 !important;}';
+
+/** Absatz-Stil (Schrift überall wiederholt: Outlook erbt sie nicht zuverlässig) */
+function m_stil(int $groesse, string $farbe = TEXT, string $mehr = ''): string
+{
+    return SCHRIFT . "font-size:{$groesse}px;line-height:" . round($groesse * 1.5) . "px;color:$farbe;$mehr";
+}
 
 /**
  * Baut eine Mail.
  * $t = [
  *   'betreff', 'vorschau' (Text in der Postfach-Vorschau), 'titel', 'medium' (optional),
  *   'absaetze' => [Text, …] (einfacher Text, wird maskiert),
- *   'hinweis' => [Text, Farbe: 'erfolg'|'gefahr'|'info'] (optional, hervorgehobener Kasten),
- *   'tabelle' => [[links, rechts], …] (optional, Übersicht wie Nummer, Betrag),
+ *   'hinweis' => [Text, Art: 'erfolg'|'gefahr'|'info'] (optional, hervorgehobener Absatz),
+ *   'tabelle' => [[links, rechts, festbreite?], …] (optional, Übersicht wie Nummer, Betrag),
  *   'positionen' => [[Titel, Datum, Betrag], …] (optional), 'summe' => Text (optional),
- *   'knopf' => [Beschriftung, Adresse] (optional),
+ *   'knopf' => [Beschriftung, Adresse] (optional), 'nachsatz' => kleiner Text unter dem Knopf (optional),
  * ]
  */
 function mail_bauen(array $t): array
 {
     $medium = $t['medium'] ?? null;
     $marke = $medium ? medium_name($medium) : 'campus a';
-    $hinweisFarben = [
-        'erfolg' => ['#e6f4ea', '#1a7f37'],
-        'gefahr' => ['#fdecea', '#b42318'],
-        'info' => [FARBE_HELL, FARBE],
-    ];
+    $randFarben = ['erfolg' => '#1a7f37', 'gefahr' => '#b42318', 'info' => FARBE];
 
     $html = '';
     foreach ($t['absaetze'] ?? [] as $a) {
-        $html .= '<p style="margin:0 0 14px;font-size:16px;line-height:1.55;color:#1c2321;">' . nl2br(h($a)) . '</p>';
+        $html .= '<p class="m-text" style="margin:0 0 16px;' . m_stil(16) . '">' . nl2br(h($a)) . '</p>';
     }
     if (!empty($t['hinweis'])) {
         [$text, $art] = $t['hinweis'] + [1 => 'info'];
-        [$hg, $rand] = $hinweisFarben[$art] ?? $hinweisFarben['info'];
-        $html .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:6px 0 18px;"><tr>'
-            . '<td style="background:' . $hg . ';border-left:4px solid ' . $rand . ';border-radius:6px;padding:12px 16px;'
-            . 'font-size:15px;line-height:1.5;color:#1c2321;">' . nl2br(h($text)) . '</td></tr></table>';
+        $html .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 20px;"><tr>'
+            . '<td class="m-kasten m-text" style="background:#f4f7f6;border-left:3px solid ' . ($randFarben[$art] ?? FARBE) . ';padding:12px 16px;'
+            . m_stil(15) . '">' . nl2br(h($text)) . '</td></tr></table>';
     }
     if (!empty($t['tabelle'])) {
-        $html .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px;border-collapse:collapse;">';
+        $html .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 22px;border-collapse:collapse;">';
         foreach ($t['tabelle'] as $zeile) {
             [$l, $r] = $zeile;
             // dritter Wert true: Festbreitenschrift (z. B. Startpasswort – l und I nicht verwechseln)
-            $schrift = !empty($zeile[2]) ? 'font-family:Menlo,Consolas,\'Courier New\',monospace;font-size:17px;letter-spacing:.05em;' : 'font-size:15px;';
-            $html .= '<tr><td style="padding:7px 0;border-bottom:1px solid #e3ebe8;font-size:14px;color:#59645f;width:42%;">' . h($l) . '</td>'
-                . '<td style="padding:7px 0;border-bottom:1px solid #e3ebe8;' . $schrift . 'color:#1c2321;font-weight:600;">' . h($r) . '</td></tr>';
+            $wert = !empty($zeile[2])
+                ? "font-family:Menlo,Consolas,'Courier New',monospace;font-size:16px;line-height:24px;color:" . TEXT . ';letter-spacing:1px;'
+                : m_stil(15);
+            $html .= '<tr><td class="m-leise m-linie" style="padding:8px 12px 8px 0;border-bottom:1px solid ' . LINIE . ';width:40%;' . m_stil(14, LEISE) . '">' . h($l) . '</td>'
+                . '<td class="m-text m-linie" style="padding:8px 0;border-bottom:1px solid ' . LINIE . ';' . $wert . '">' . h($r) . '</td></tr>';
         }
         $html .= '</table>';
     }
     if (!empty($t['positionen'])) {
-        $html .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 18px;border-collapse:collapse;">'
-            . '<tr><td style="padding:6px 8px 6px 0;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#59645f;border-bottom:2px solid ' . FARBE . ';">Leistung</td>'
-            . '<td style="padding:6px 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#59645f;border-bottom:2px solid ' . FARBE . ';white-space:nowrap;">Datum</td>'
-            . '<td align="right" style="padding:6px 0 6px 8px;font-size:12px;letter-spacing:.04em;text-transform:uppercase;color:#59645f;border-bottom:2px solid ' . FARBE . ';white-space:nowrap;">Betrag</td></tr>';
+        $kopf = fn ($text, $mehr = '') => '<td class="m-leise m-linie" ' . $mehr . ' style="padding:0 0 6px;border-bottom:1px solid ' . LINIE . ';'
+            . m_stil(13, LEISE) . '">' . $text . '</td>';
+        $html .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 22px;border-collapse:collapse;"><tr>'
+            . $kopf('Leistung') . $kopf('Datum') . $kopf('Betrag', 'align="right"') . '</tr>';
         foreach ($t['positionen'] as [$titel, $datum, $betrag]) {
-            $html .= '<tr><td style="padding:8px 8px 8px 0;border-bottom:1px solid #e3ebe8;font-size:15px;color:#1c2321;">' . h($titel) . '</td>'
-                . '<td style="padding:8px;border-bottom:1px solid #e3ebe8;font-size:14px;color:#59645f;white-space:nowrap;">' . h($datum) . '</td>'
-                . '<td align="right" style="padding:8px 0 8px 8px;border-bottom:1px solid #e3ebe8;font-size:15px;color:#1c2321;white-space:nowrap;">' . h($betrag) . '</td></tr>';
+            $html .= '<tr><td class="m-text m-linie" style="padding:10px 12px 10px 0;border-bottom:1px solid ' . LINIE . ';' . m_stil(15) . '">' . h($titel) . '</td>'
+                . '<td class="m-leise m-linie" style="padding:10px 12px 10px 0;border-bottom:1px solid ' . LINIE . ';white-space:nowrap;' . m_stil(14, LEISE) . '">' . h($datum) . '</td>'
+                . '<td class="m-text m-linie" align="right" style="padding:10px 0;border-bottom:1px solid ' . LINIE . ';white-space:nowrap;' . m_stil(15) . '">' . h($betrag) . '</td></tr>';
         }
         if (!empty($t['summe'])) {
-            $html .= '<tr><td colspan="2" style="padding:10px 8px 0 0;font-size:15px;font-weight:700;color:#1c2321;">Gesamt</td>'
-                . '<td align="right" style="padding:10px 0 0 8px;font-size:17px;font-weight:700;color:' . FARBE . ';white-space:nowrap;">' . h($t['summe']) . '</td></tr>';
+            $html .= '<tr><td colspan="2" class="m-text" style="padding:12px 12px 0 0;' . m_stil(15, TEXT, 'font-weight:600;') . '">Gesamt</td>'
+                . '<td class="m-text" align="right" style="padding:12px 0 0;white-space:nowrap;' . m_stil(16, TEXT, 'font-weight:700;') . '">' . h($t['summe']) . '</td></tr>';
         }
         $html .= '</table>';
     }
     if (!empty($t['knopf'][1])) {
         [$beschriftung, $link] = $t['knopf'];
-        $html .= '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 6px;"><tr>'
-            . '<td style="border-radius:999px;background:' . FARBE . ';">'
-            . '<a href="' . h($link) . '" style="display:inline-block;padding:13px 26px;font-size:16px;font-weight:600;'
-            . 'color:#ffffff;text-decoration:none;border-radius:999px;">' . h($beschriftung) . '</a></td></tr></table>';
+        $html .= '<table role="presentation" cellpadding="0" cellspacing="0" style="margin:8px 0 8px;"><tr>'
+            . '<td class="m-knopf" style="border-radius:6px;background:' . FARBE . ';">'
+            . '<a href="' . h($link) . '" style="display:inline-block;padding:12px 22px;' . SCHRIFT . 'font-size:16px;line-height:20px;font-weight:600;'
+            . 'color:#ffffff;text-decoration:none;border-radius:6px;">' . h($beschriftung) . '</a></td></tr></table>';
+        // bei wichtigen Links (Anmelden, Einladung) zusätzlich die Adresse zum Kopieren
+        if (isset($t['nachsatz'])) {
+            $html .= '<p class="m-leise" style="margin:0 0 8px;' . m_stil(13, LEISE) . '">' . h($t['nachsatz'])
+                . '<br><a class="m-akzent" href="' . h($link) . '" style="color:' . FARBE . ';word-break:break-all;">' . h($link) . '</a></p>';
+        }
     }
 
     $seite = '<!DOCTYPE html><html lang="de"><head><meta charset="utf-8">'
-        . '<meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light">'
-        . '<title>' . h($t['betreff']) . '</title></head>'
-        . '<body style="margin:0;padding:0;background:#f3f6f5;-webkit-text-size-adjust:100%;">'
+        . '<meta name="viewport" content="width=device-width,initial-scale=1">'
+        . '<meta name="color-scheme" content="light dark"><meta name="supported-color-schemes" content="light dark">'
+        . '<title>' . h($t['betreff']) . '</title><style>' . DUNKEL_CSS . '</style></head>'
+        . '<body class="m-grund" style="margin:0;padding:0;background:#ffffff;-webkit-text-size-adjust:100%;">'
         . '<div style="display:none;max-height:0;overflow:hidden;opacity:0;">' . h($t['vorschau'] ?? '') . '</div>'
-        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f3f6f5;"><tr><td align="center" style="padding:28px 12px;">'
-        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:600px;font-family:-apple-system,\'Segoe UI\',Roboto,Helvetica,Arial,sans-serif;">'
-        // Kopf
-        . '<tr><td style="background:' . FARBE . ';border-radius:16px 16px 0 0;padding:22px 28px;">'
-        . '<span style="font-family:Georgia,\'Times New Roman\',serif;font-size:24px;color:#ffffff;letter-spacing:.01em;">' . h($marke) . '</span>'
-        . '<span style="font-size:13px;color:#e3f1ef;letter-spacing:.06em;text-transform:uppercase;padding-left:10px;">Anerkennungsprämien</span>'
+        . '<table role="presentation" class="m-grund" width="100%" cellpadding="0" cellspacing="0" style="background:#ffffff;"><tr><td align="center" style="padding:32px 20px;">'
+        . '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">'
+        // Schriftzug
+        . '<tr><td class="m-linie" style="padding:0 0 14px;border-bottom:2px solid ' . FARBE . ';">'
+        . '<span class="m-akzent" style="font-family:Georgia,\'Times New Roman\',serif;font-size:22px;line-height:26px;color:' . FARBE . ';">' . h($marke) . '</span>'
+        . '<span class="m-leise" style="' . SCHRIFT . 'font-size:12px;line-height:26px;color:' . LEISE . ';letter-spacing:1px;padding-left:8px;">ANERKENNUNGSPRÄMIEN</span>'
         . '</td></tr>'
         // Inhalt
-        . '<tr><td style="background:#ffffff;border-radius:0 0 16px 16px;padding:30px 28px 26px;">'
-        . '<h1 style="margin:0 0 18px;font-size:22px;line-height:1.3;color:#1c2321;font-weight:700;">' . h($t['titel']) . '</h1>'
+        . '<tr><td style="padding:28px 0 8px;">'
+        . '<h1 class="m-text" style="margin:0 0 18px;' . m_stil(22, TEXT, 'font-weight:700;line-height:28px;') . '">' . h($t['titel']) . '</h1>'
         . $html
         . '</td></tr>'
         // Fuß
-        . '<tr><td style="padding:18px 28px 0;font-size:12px;line-height:1.5;color:#7f8a86;text-align:center;">'
-        . 'Automatische Nachricht der Anerkennungsprämien-App von campus a college und campus a.<br>Bitte nicht auf diese E-Mail antworten.'
+        . '<tr><td class="m-leise m-linie" style="padding:18px 0 0;border-top:1px solid ' . LINIE . ';' . m_stil(12, LEISE, 'line-height:18px;') . '">'
+        . 'Automatische Nachricht der Anerkennungsprämien-App von campus a college und campus a. Bitte nicht direkt antworten.'
         . '</td></tr></table></td></tr></table></body></html>';
 
     // Textfassung
@@ -105,7 +127,7 @@ function mail_bauen(array $t): array
     foreach ($t['positionen'] ?? [] as [$titel, $datum, $betrag]) $text .= "- $titel ($datum): $betrag\n";
     if (!empty($t['summe'])) $text .= "Gesamt: {$t['summe']}\n";
     if (!empty($t['positionen'])) $text .= "\n";
-    if (!empty($t['knopf'][1])) $text .= $t['knopf'][0] . ': ' . $t['knopf'][1] . "\n\n";
+    if (!empty($t['knopf'][1])) $text .= $t['knopf'][0] . ': ' . $t['knopf'][1] . "\n" . (isset($t['nachsatz']) ? $t['nachsatz'] . "\n" : '') . "\n";
     $text .= "--\nAutomatische Nachricht der Anerkennungsprämien-App von campus a college und campus a.\n";
 
     return ['betreff' => $t['betreff'], 'html' => $seite, 'text' => $text];
@@ -283,10 +305,12 @@ function mail_zugang(PDO $db, array $z, bool $neu = true): array
         'absaetze' => array_values(array_filter([
             "Hallo {$z['vorname']},",
             $neu ? 'dein Zugang zu den Anerkennungsprämien von campus a college und campus a ist bereit.' : 'für dein Konto wurde ein neues Startpasswort erstellt.',
-            'Beim ersten Anmelden legst du ein eigenes Passwort fest' . ($neu ? ' und richtest dein Konto ein (Adresse, IBAN und Link zu deinem Profil).' : '.'),
+            'Mit dem Knopf unten bist du direkt angemeldet und legst ein eigenes Passwort fest' . ($neu ? '. Danach trägst du Adresse, IBAN und den Link zu deinem Profil ein.' : '.'),
+            'Falls der Knopf nicht mehr gilt: Anmelden geht auch mit deiner E-Mail-Adresse und dem Startpasswort.',
         ])),
         'tabelle' => [['E-Mail', $z['email']], ['Startpasswort', $z['passwort'], true]],
-        'knopf' => ['Jetzt anmelden', app_link($db)],
+        'knopf' => [$neu ? 'Konto einrichten' : 'Jetzt anmelden', $z['link'] ?? app_link($db)],
+        'nachsatz' => 'Der Knopf meldet dich direkt an und gilt einmal, 7 Tage lang. Danach meldest du dich mit E-Mail und Passwort an.',
     ]);
 }
 
@@ -312,6 +336,33 @@ function mail_pdf(PDO $db, string $vorname, string $titel, string $dateiname): a
         'absaetze' => ["Hallo $vorname,", 'wie gewünscht kommen die Prämienabrechnungen als PDF im Anhang.'],
         'tabelle' => [['Datei', $dateiname]],
         'knopf' => ['Zur Buchhaltung', app_link($db, 'zahlung')],
+    ]);
+}
+
+function mail_registriert_admin(PDO $db, array $n): array
+{
+    $name = trim($n['vorname'] . ' ' . $n['nachname']);
+    return mail_bauen([
+        'betreff' => "Neu registriert: $name",
+        'vorschau' => "$name hat sich mit einem Registrierungslink angemeldet.",
+        'titel' => 'Neues Konto über Registrierungslink',
+        'absaetze' => ["$name hat sich mit einem Registrierungslink selbst registriert."],
+        'tabelle' => [['Name', $name], ['E-Mail', $n['email']], ['Rollen', implode(', ', array_map(fn ($r) => ROLLEN_LABEL[$r] ?? $r, $n['rollen']))]],
+        'knopf' => ['Konten ansehen', app_link($db, 'admin/benutzer')],
+    ]);
+}
+
+function mail_einladung(PDO $db, string $link, int $tage, array $von): array
+{
+    $bis = $tage === 1 ? 'einen Tag' : "$tage Tage";
+    return mail_bauen([
+        'betreff' => 'Einladung zu den Anerkennungsprämien',
+        'vorschau' => 'Mit diesem Link legst du dein Konto selbst an.',
+        'titel' => 'Du bist eingeladen',
+        'absaetze' => ['Hallo,', anzeigename($von) . " lädt dich zu den Anerkennungsprämien von campus a college und campus a ein. Mit dem Knopf unten legst du dein Konto selbst an – das dauert eine Minute.",
+            "Der Link gilt $bis."],
+        'knopf' => ['Konto anlegen', $link],
+        'nachsatz' => 'Oder diese Adresse im Browser öffnen:',
     ]);
 }
 

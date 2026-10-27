@@ -12,6 +12,7 @@ import * as zahlung from './views/zahlung.js';
 import * as admin from './views/admin.js';
 import * as generator from './views/generator.js';
 import * as rechtlichesSeite from './views/rechtliches.js';
+import * as registrieren from './views/registrieren.js';
 import { hinweisOffen, zustimmungHtml } from './lib/rechtliches.js';
 import { cookieBanner, gewaehlt } from './lib/cookies.js';
 
@@ -173,6 +174,30 @@ async function render() {
     await rechtlichesSeite.render(main, { store, istDemo: IST_DEMO, seite: pfad, angemeldet: Boolean(nutzer) }).catch((e) => {
       main.innerHTML = `<section class="karte fehlerbox" role="alert"><p>${esc(fehlerText(e))}</p></section>`;
     });
+    return;
+  }
+
+  // Link aus der Zugangs-Mail: direkt anmelden, Token danach aus der Adresszeile entfernen
+  if (pfad.startsWith('link/')) {
+    ladeAnzeige(main);
+    try {
+      await store.linkAnmelden(pfad.slice(5));
+      history.replaceState(null, '', location.pathname + location.search);
+      render();
+    } catch (e) {
+      history.replaceState(null, '', location.pathname + location.search);
+      main.innerHTML = `<section class="karte schmal"><h1>Anmelden</h1><p class="fehlerbox">${esc(fehlerText(e))}</p>
+        <p><a href="#/" class="btn btn-primaer">Zur Anmeldung</a></p></section>`;
+    }
+    return;
+  }
+  // Registrierungslink vom Admin
+  if (pfad.startsWith('registrieren/')) {
+    ladeAnzeige(main);
+    await registrieren.render(main, { store, token: pfad.slice(13), recht, fertig: () => {
+      history.replaceState(null, '', location.pathname + location.search);
+      render();
+    } });
     return;
   }
 

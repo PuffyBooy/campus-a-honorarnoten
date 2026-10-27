@@ -276,10 +276,10 @@ export async function anfrageFreischalten(anfrageId, rollen = ['autor']) {
   neuePersonPruefen(a);
   const passwort = startpasswort();
   const hash = await passwortHash(passwort);
-  kontoErstellen({ ...a, rollen }, hash);
+  const n = kontoErstellen({ ...a, rollen }, hash);
   Object.assign(a, { status: 'freigeschaltet', bearbeitet_am: jetzt(), bearbeitet_von: anzeigename(admin) });
   speichern();
-  return { email: a.email, vorname: a.vorname, passwort };
+  return zugang(n, passwort);
 }
 
 export function anfrageAblehnen(anfrageId) {
@@ -297,12 +297,12 @@ export async function nutzerAnlegen({ vorname, nachname, email, rollen }) {
   rollen = erlaubteRollen(rollen ?? []);
   pruefe(rollen.length, 'Bitte mindestens eine Rolle wählen.');
   const passwort = startpasswort();
-  kontoErstellen({ vorname, nachname, email, rollen }, await passwortHash(passwort));
+  const n = kontoErstellen({ vorname, nachname, email, rollen }, await passwortHash(passwort));
   // eine evtl. offene Anfrage derselben Person ist damit erledigt
   db.anfragen.filter((a) => a.email === email && a.status === 'offen')
     .forEach((a) => Object.assign(a, { status: 'freigeschaltet', bearbeitet_am: jetzt() }));
   speichern();
-  return { email, vorname: trim(vorname), passwort };
+  return zugang(n, passwort);
 }
 
 /** Nach Login mit Startpasswort: eigenes Passwort festlegen */
@@ -313,6 +313,118 @@ export async function erstesPasswortSetzen(neu) {
   pruefe(!(await passwortPasst(n, neu)), 'Bitte ein neues Passwort wählen, nicht das Startpasswort.');
   n.passwort = await passwortHash(neu);
   n.muss_passwort_aendern = false;
+  anmeldelinksWiderrufen(n.id); // ab jetzt gilt das eigene Passwort
+  speichern();
+}
+
+// ------------------------------------------------------------------ Links (Anmelden, Registrieren)
+// Wie auf dem Server; in der Demo bleibt der Token im Browser-Speicher (der Server speichert nur einen Hash).
+
+const LINK_TAGE = [1, 3, 7, 14, 30];
+const LINK_ROLLEN = ['autor', 'redigieren', 'redaktion', 'buchhaltung'];
+const appLink = (pfad) => `${location.origin}${location.pathname}#/${pfad}`;
+
+function linkErstellen(art, { nutzer_id = null, rollen = [], max = null, tage, notiz = '', von = '' }) {
+  const token = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, '0')).join('');
+  db.links ??= [];
+  db.links.push({
+    id: id(), token, art, nutzer_id, rollen, max_nutzungen: max, nutzungen: 0,
+    gueltig_bis: new Date(Date.now() + tage * 86400000).toISOString(), notiz, erstellt_von: von, erstellt_am: jetzt(), widerrufen_am: null,
+  });
+  return token;
+}
+
+function linkPruefen(token, art) {
+  const l = (db.links ?? []).find((x) => x.token === String(token ?? '') && x.art === art);
+  pruefe(l, 'Dieser Link ist ungültig. Bitte prüfe, ob er vollständig kopiert wurde.');
+  const verbraucht = l.max_nutzungen != null && l.nutzungen >= l.max_nutzungen;
+  const abgelaufen = l.gueltig_bis < new Date().toISOString();
+  if (art === 'anmelden') {
+    pruefe(!l.widerrufen_am && !verbraucht, 'Dieser Anmeldelink wurde schon verwendet. Bitte melde dich mit E-Mail und Passwort an.');
+    pruefe(!abgelaufen, 'Dieser Anmeldelink ist abgelaufen. Bitte melde dich mit E-Mail und Startpasswort an.');
+  } else {
+    pruefe(!l.widerrufen_am, 'Dieser Registrierungslink wurde zurückgezogen. Bitte frag nach einem neuen.');
+    pruefe(!abgelaufen, 'Dieser Registrierungslink ist abgelaufen. Bitte frag nach einem neuen.');
+    pruefe(!verbraucht, 'Dieser Registrierungslink wurde schon so oft verwendet wie erlaubt. Bitte frag nach einem neuen.');
+  }
+  return l;
+}
+
+function anmeldelinksWiderrufen(nutzerId) {
+  (db.links ?? []).filter((l) => l.nutzer_id === nutzerId && l.art === 'anmelden' && !l.widerrufen_am)
+    .forEach((l) => { l.widerrufen_am = jetzt(); });
+}
+
+/** Zugangsdaten mit Link zum direkten Anmelden (einmal, 7 Tage) */
+function zugang(n, passwort) {
+  anmeldelinksWiderrufen(n.id);
+  const link = appLink(`link/${linkErstellen('anmelden', { nutzer_id: n.id, max: 1, tage: 7 })}`);
+  speichern();
+  return { email: n.email, vorname: n.vorname, passwort, link };
+}
+
+export function linkAnmelden(token) {
+  const l = linkPruefen(token, 'anmelden');
+  const n = db.nutzer.find((x) => x.id === l.nutzer_id);
+  pruefe(n?.aktiv, 'Dieses Konto ist deaktiviert. Bitte wende dich an die Redaktion.');
+  l.nutzungen++;
+  sessionStorage.setItem(SITZUNG_KEY, n.id);
+  n.letzter_login = jetzt();
+  speichern();
+  return nutzerSicht(n);
+}
+
+export function einladungPruefen(token) {
+  const l = linkPruefen(token, 'registrieren');
+  return { rollen: kopie(l.rollen), gueltig_bis: l.gueltig_bis };
+}
+
+export async function mitLinkRegistrieren(token, { vorname, nachname, email, passwort, zustimmung } = {}) {
+  email = trim(email).toLowerCase();
+  neuePersonPruefen({ vorname, nachname, email });
+  passwortPruefen(passwort);
+  pruefe(zustimmung === true, 'Bitte bestätige, dass du die Datenschutzerklärung und den Hinweis zum Betreiber gelesen hast.');
+  const l = linkPruefen(token, 'registrieren');
+  const n = kontoErstellen({ vorname, nachname, email, rollen: erlaubteRollen(l.rollen) }, await passwortHash(passwort));
+  Object.assign(n, { muss_passwort_aendern: false, hinweis_bestaetigt_am: jetzt() });
+  l.nutzungen++;
+  db.anfragen.filter((a) => a.email === email && a.status === 'offen')
+    .forEach((a) => Object.assign(a, { status: 'freigeschaltet', bearbeitet_am: jetzt(), bearbeitet_von: 'Registrierungslink' }));
+  sessionStorage.setItem(SITZUNG_KEY, n.id);
+  speichern();
+  return nutzerSicht(n);
+}
+
+export function registrierungslinkErstellen({ tage = 7, max = null, rollen = ['autor'], notiz = '', email = '' } = {}) {
+  const admin = brauche('admin');
+  tage = Number(tage);
+  pruefe(LINK_TAGE.includes(tage), 'Bitte eine Gültigkeit wählen.');
+  max = max === null || max === '' ? null : Number(max);
+  pruefe(max === null || (Number.isInteger(max) && max >= 1 && max <= 500), 'Bitte angeben, wie oft der Link verwendet werden darf (1 bis 500 oder unbegrenzt).');
+  rollen = erlaubteRollen(rollen).filter((r) => LINK_ROLLEN.includes(r));
+  pruefe(rollen.length, 'Bitte mindestens eine Rolle wählen.');
+  const an = trim(email).toLowerCase();
+  pruefe(!an || EMAIL_MUSTER.test(an), 'Bitte eine gültige E-Mail-Adresse angeben oder das Feld leer lassen.');
+  const link = appLink(`registrieren/${linkErstellen('registrieren', { rollen, max, tage, notiz: trim(notiz).slice(0, 200) || an, von: anzeigename(admin) })}`);
+  speichern();
+  return { link, mail: false, tage, max };
+}
+
+export function registrierungslinks() {
+  brauche('admin');
+  const jetztIso = new Date().toISOString();
+  return (db.links ?? []).filter((l) => l.art === 'registrieren').sort((a, b) => b.erstellt_am.localeCompare(a.erstellt_am)).slice(0, 50)
+    .map(({ token, max_nutzungen, ...l }) => ({
+      ...kopie(l), max: max_nutzungen,
+      aktiv: !l.widerrufen_am && l.gueltig_bis >= jetztIso && (max_nutzungen == null || l.nutzungen < max_nutzungen),
+    }));
+}
+
+export function registrierungslinkWiderrufen(linkId) {
+  brauche('admin');
+  const l = (db.links ?? []).find((x) => x.id === linkId && x.art === 'registrieren' && !x.widerrufen_am);
+  pruefe(l, 'Diesen Link gibt es nicht (mehr) oder er ist schon zurückgezogen.');
+  l.widerrufen_am = jetzt();
   speichern();
 }
 
@@ -796,7 +908,7 @@ export async function passwortZuruecksetzen(uid) {
   n.passwort = await passwortHash(passwort);
   n.muss_passwort_aendern = true;
   speichern();
-  return { email: n.email, vorname: n.vorname, passwort };
+  return zugang(n, passwort);
 }
 
 /** E-Mail-Adresse eines Kontos ändern (Admin) */

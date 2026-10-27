@@ -613,3 +613,8 @@ body.modus-demo .fuss-demo { display: block; }
   .inhalt:has(.arbeitsplatz.mit-auswahl) :is(.reiter, .redaktion-filter) { display: none; }
 }
 .kennzahl-text { font-size: 1rem !important; }
+.karte.schmal:has(#reg-form) { max-width: 580px; }
+.artikel-filter { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: center; margin: .5rem 0 .75rem; }
+.artikel-filter input[type=search] { flex: 1 1 12rem; }
+.artikel-filter select { flex: 0 1 12rem; width: auto; }
+#l-form .rollen-wahl { display: flex; flex-wrap: wrap; gap: .25rem 1rem; margin-bottom: .75rem; }
