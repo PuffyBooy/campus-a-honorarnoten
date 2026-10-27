@@ -79,7 +79,16 @@ function api(): array
     if (!is_array($body)) return [400, ['fehler' => 'Ungültige Anfrage.']];
     $args = is_array($body['args'] ?? null) ? array_values($body['args']) : [];
 
-    $db = datenbank();
+    try {
+        $db = datenbank();
+    } catch (Throwable $e) {
+        error_log('Anerkennungsprämien: Datenbank: ' . $e->getMessage());
+        // noch nicht eingerichtet (z. B. World4You: kein SQLite und noch keine MySQL-Zugangsdaten)
+        if (!is_array(konfiguration()['datenbank']) && !extension_loaded('pdo_sqlite')) {
+            return [503, ['fehler' => 'Die App ist noch nicht eingerichtet. Bitte zuerst ' . aktuelle_adresse() . 'einrichten.php öffnen.']];
+        }
+        return [503, ['fehler' => 'Keine Verbindung zur Datenbank. Bitte die Zugangsdaten prüfen (' . aktuelle_adresse() . 'einrichten.php).']];
+    }
     $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? 'unbekannt');
     $token = isset($_COOKIE[COOKIE]) && is_string($_COOKIE[COOKIE]) ? $_COOKIE[COOKIE] : null;
     $nutzerId = sitzung_pruefen($db, $token);

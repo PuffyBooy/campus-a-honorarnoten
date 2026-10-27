@@ -95,7 +95,7 @@ async function smtpAttrappe() {
  * Mit MySQL statt SQLite: HONORARE_TEST_MYSQL='{"host":"127.0.0.1","benutzer":"…","passwort":"…"}' npm test
  * (legt für jeden Lauf eine eigene, leere Datenbank an und löscht sie danach)
  */
-export async function phpServerStarten({ campusHolen } = {}) {
+export async function phpServerStarten({ campusHolen, envZusatz = {} } = {}) {
   const ordner = mkdtempSync(join(tmpdir(), 'honorare-'));
   const campus = campusHolen ? await campusErsatz(campusHolen) : null;
   const smtp = await smtpAttrappe();
@@ -113,6 +113,8 @@ export async function phpServerStarten({ campusHolen } = {}) {
   } else {
     env.HONORARE_DATENBANK = join(ordner, 'honorarnoten.sqlite');
   }
+  const envBasis = { ...env }; // zum Aufräumen der Test-Datenbank, auch wenn envZusatz sie verstellt
+  Object.assign(env, envZusatz);
   const php = spawn(PHP, ['-d', 'display_errors=stderr', '-d', 'log_errors=0', '-S', `127.0.0.1:${port}`, join(WURZEL, 'server/router.php')],
     { env, stdio: ['ignore', 'ignore', 'pipe'] });
   const fehler = [];
@@ -132,7 +134,9 @@ export async function phpServerStarten({ campusHolen } = {}) {
     smtp.server.close();
     campus?.server.close();
     await new Promise((ok) => php.once('exit', ok));
-    if (mysql) sql(`drop database \`${mysql.name}\``);
+    if (mysql) {
+      execFileSync(PHP, [join(WURZEL, 'tests/php/sql.php')], { env: envBasis, input: JSON.stringify({ sql: `drop database \`${mysql.name}\`` }) });
+    }
     rmSync(ordner, { recursive: true, force: true });
   };
   return { basis, cli, sql, stop, smtp, fehler, mysql: Boolean(mysql), ordner };
