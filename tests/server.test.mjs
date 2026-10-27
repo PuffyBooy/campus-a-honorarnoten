@@ -271,6 +271,24 @@ test('Abgeschickte Note zurückziehen, solange sie nicht angenommen ist', async 
   assert.match((await k.bert.aufruf('abrechnungZurueckziehen', neu.id)).fehler, /schon geprüft/);
 });
 
+test('Redaktion: Haken „geprüft“ pro Leistung', async () => {
+  await k.bert.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Bruck', veroeffentlichung: '2026-09-06', betrag: 15 });
+  const note = await k.bert.ok('abrechnungAbschicken', (await k.bert.ok('meineLeistungen')).map((p) => p.id));
+  const pid = note.positionen[0].id;
+  assert.equal(note.positionen[0].geprueft_am, null);
+  assert.equal((await k.bert.aufruf('positionPruefen', note.id, pid, true)).status, 403);
+  await k.rita.ok('positionPruefen', note.id, pid, true);
+  await k.rita.ok('positionPruefen', note.id, pid, true); // zweimal geht auch (MySQL meldet dann 0 geänderte Zeilen)
+  let p = (await k.rita.ok('note', note.id)).positionen[0];
+  assert.equal(p.geprueft_von, 'Rita Redaktion');
+  assert.ok(p.geprueft_am);
+  await k.rita.ok('positionPruefen', note.id, pid, false);
+  p = (await k.rita.ok('note', note.id)).positionen[0];
+  assert.deepEqual([p.geprueft_von, p.geprueft_am], [null, null]);
+  assert.equal((await k.rita.aufruf('positionPruefen', note.id, 'gibt-es-nicht', true)).status, 404);
+  await k.rita.ok('annehmen', note.id);
+});
+
 test('Admin: Rollen, letzter Admin, Deaktivieren beendet Sitzungen', async () => {
   const ich = await k.admin.ok('aktuellerNutzer');
   assert.match((await k.admin.aufruf('rollenSetzen', ich.id, ['autor'])).fehler, /Admin-Konto/);

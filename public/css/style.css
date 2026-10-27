@@ -69,10 +69,10 @@ code { font-family: var(--mono); font-size: .9em; }
   position: relative; z-index: 2;
 }
 .kopf-innen {
-  max-width: 1100px; margin: 0 auto; padding: .7rem 1rem;
+  max-width: 1400px; margin: 0 auto; padding: .7rem 1rem;
   display: flex; flex-wrap: wrap; align-items: center; gap: .5rem 1.5rem;
 }
-.marke { color: inherit; text-decoration: none; display: flex; flex-direction: column; line-height: 1.1; }
+.marke { flex: none; color: inherit; text-decoration: none; display: flex; flex-direction: column; line-height: 1.1; }
 .marke-name { font-family: var(--schrift-logo); font-weight: 700; font-size: 1.45rem; letter-spacing: -.01em; }
 .marke-zusatz { font-weight: 600; font-size: .68rem; margin-top: .15rem; letter-spacing: .14em; text-transform: uppercase; opacity: .85; }
 .nav { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem 1rem; flex: 1; justify-content: space-between; }
@@ -129,6 +129,8 @@ code { font-family: var(--mono); font-size: .9em; }
 
 /* ---------- Layout ---------- */
 .inhalt { max-width: 1100px; margin: 0 auto; padding: 1rem; outline: none; }
+/* Redaktion: mehr Platz für die Prüfansicht */
+.inhalt[data-seite="redaktion"] { max-width: 1400px; }
 .karte {
   background: var(--flaeche); border: 0; border-radius: var(--radius);
   box-shadow: var(--schatten); padding: 1.25rem; margin-bottom: 1rem;
@@ -290,7 +292,7 @@ section.fehlerbox { border: 0; }
   padding: .6rem 1.1rem; text-decoration: none; font: inherit; font-weight: 600; color: var(--text-leise);
   background: none; border: 0; border-bottom: 3px solid transparent; cursor: pointer;
 }
-.reiter a[aria-current="page"], .reiter button[aria-selected="true"] { color: var(--text); border-bottom-color: var(--akzent); }
+.reiter a[aria-current="page"], .reiter button[aria-selected="true"], .reiter button[aria-pressed="true"] { color: var(--text); border-bottom-color: var(--akzent); }
 
 /* ---------- Bezahl-Terminal ---------- */
 .kopierblock { border: 1px solid var(--rand); border-radius: 8px; margin: .75rem 0; }
@@ -557,3 +559,56 @@ body.modus-demo .fuss-demo { display: block; }
 .cookie-liste { list-style: none; padding: 0; margin: .5rem 0; display: grid; gap: .4rem; }
 .cookie-liste .check { align-items: flex-start; white-space: normal; }
 .bestaetigen a { font-weight: 600; }
+
+/* ---- Redaktion: Posteingang links, Prüfansicht rechts */
+.zaehler { display: inline-block; min-width: 1.5em; padding: 0 .4em; border-radius: 999px; background: #e8eeec; font-size: .8rem; text-align: center; }
+.zaehler-wichtig { background: var(--marke); color: #fff; }
+.redaktion-filter { background: none; box-shadow: none; padding: 0; }
+.arbeitsplatz { display: grid; gap: 1rem; align-items: start; }
+.posteingang, .pruefung { background: var(--flaeche); border-radius: var(--radius); box-shadow: var(--schatten); padding: 1rem; min-width: 0; }
+.posteingang .treffer { margin: 0 0 .5rem; }
+.sammel { display: flex; align-items: center; justify-content: space-between; gap: .5rem; padding: .25rem 0 .5rem; border-bottom: 1px solid var(--rand); }
+.eingang-liste { list-style: none; margin: 0; padding: 0; }
+.eingang { display: flex; align-items: flex-start; gap: .5rem; border-bottom: 1px solid var(--rand); }
+.eingang-wahl { width: auto; margin: .9rem 0 0 .25rem; accent-color: var(--akzent); }
+.eingang a { flex: 1; min-width: 0; display: block; padding: .6rem .5rem; color: inherit; text-decoration: none; border-radius: var(--radius-klein); border-left: 3px solid transparent; }
+.eingang a:hover { background: #f4f8f7; }
+.eingang.aktiv a { background: var(--marke-hell); border-left-color: var(--marke); }
+.eingang-zeile { display: flex; justify-content: space-between; align-items: center; gap: .5rem; }
+.eingang-betrag { font-variant-numeric: tabular-nums; font-weight: 600; }
+.nummer-klein { font-family: var(--mono); font-size: .75rem; color: var(--text-leise); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leer { color: var(--text-leise); padding: 1rem 0; text-align: center; }
+.pruefung-leer { padding: 3rem 1rem; text-align: center; color: var(--text-leise); }
+.pruef-kopf { display: flex; justify-content: space-between; align-items: flex-start; gap: .75rem; flex-wrap: wrap; }
+.pruef-kopf h2 { margin: 0; font-size: 1.3rem; }
+.pruef-kopf h2 .nummer { font-size: .85rem; color: var(--text-leise); margin-left: .35rem; }
+.pruef-kopf p { margin: .2rem 0 .75rem; }
+.kennzahlen-klein .kennzahl { box-shadow: none; background: #f4f8f7; padding: .6rem .8rem; }
+.kennzahlen-klein .kennzahl strong { font-size: 1.15rem; }
+.pruef-tabelle tr.geprueft td { background: #f1f8f3; }
+.spalte-haken { width: 5.5rem; }
+.haken { display: flex; flex-direction: column; align-items: center; gap: .1rem; margin: 0; }
+.haken input { width: 1.3rem; height: 1.3rem; accent-color: var(--erfolg); margin: 0; }
+.hinweise { display: flex; flex-wrap: wrap; gap: .25rem; }
+.zeichen { display: inline-block; padding: .1rem .5rem; border-radius: 999px; font-size: .75rem; font-weight: 600; white-space: nowrap; }
+.zeichen-ok { background: var(--erfolg-hell); color: var(--erfolg); }
+.zeichen-warn { background: var(--warnung-hell); color: var(--warnung); }
+.zeichen-fehler { background: var(--gefahr-hell); color: var(--gefahr); }
+.notiz-autor { font-size: .85rem; color: #5c3c00; background: var(--warnung-hell); border-radius: 4px; padding: 0 .3rem; }
+.entscheidung { display: flex; flex-wrap: wrap; justify-content: space-between; gap: .5rem; border-top: 1px solid var(--rand); margin-top: 1rem; padding-top: .25rem; }
+.entscheidung .btn-erfolg { min-width: 10rem; }
+.pruef-unten { border-top: 1px solid var(--rand); margin-top: .5rem; }
+.pruef-unten h3 { font-size: 1rem; }
+.nur-handy { display: none; }
+@media (min-width: 1000px) {
+  .arbeitsplatz { grid-template-columns: 330px 1fr; }
+  .posteingang { position: sticky; top: .75rem; max-height: calc(100vh - 1.5rem); overflow: auto; }
+}
+@media (max-width: 999px) {
+  .arbeitsplatz.mit-auswahl .posteingang, .arbeitsplatz:not(.mit-auswahl) .pruefung { display: none; }
+  .nur-handy { display: block; margin: 0 0 .5rem; }
+}
+@media (max-width: 999px) {
+  /* Handy: in der Prüfansicht nur die Abrechnung, ohne Reiter und Filter */
+  .inhalt:has(.arbeitsplatz.mit-auswahl) :is(.reiter, .redaktion-filter) { display: none; }
+}

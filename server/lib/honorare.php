@@ -117,6 +117,7 @@ function position_aus_zeile(array $p): array
         'ausgabe' => $p['ausgabe'], 'vereinbart_mit' => $p['vereinbart_mit'], 'notiz' => $p['notiz'],
         'betrag' => euro((int) $p['betrag_cent']), 'betrag_eingereicht' => euro((int) $p['betrag_eingereicht_cent']),
         'betrag_vermerk' => $p['betrag_vermerk'],
+        'geprueft_von' => $p['geprueft_von'] ?? null, 'geprueft_am' => $p['geprueft_am'] ?? null,
     ];
 }
 
@@ -206,7 +207,7 @@ final class Honorare
         'aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'erstesPasswortSetzen', 'passwortAendern',
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'meineArtikel',
         'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
-        'alleNoten', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'kommentieren', 'kommentare', 'verlaufVon',
+        'alleNoten', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
         'offeneZahlungen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'alleNotenAdmin', 'noteLoeschen',
@@ -631,6 +632,20 @@ final class Honorare
             verlauf_eintragen($db, $x['id'], $n, 'betrag_korrigiert', ['position' => $p['titel'], 'alt' => $p['betrag'], 'neu' => euro($neuCent), 'vermerk' => $v]);
             return true;
         });
+    }
+
+    /** Haken „geprüft“ der Redaktion an einer Leistung setzen oder entfernen */
+    public function positionPruefen(mixed $noteId = null, mixed $positionId = null, mixed $geprueft = true): bool
+    {
+        $db = $this->db();
+        $n = brauche($this->ctx, 'redaktion');
+        $x = note_holen($db, $noteId);
+        pruefe($x['status'] !== 'bezahlt', 'Bezahlte Prämienabrechnungen können nicht mehr geändert werden.');
+        $r = q($db, 'update note_positionen set geprueft_von = ?, geprueft_am = ? where note_id = ? and id = ?',
+            $geprueft === true ? [anzeigename($n), jetzt(), $x['id'], s($positionId)] : [null, null, $x['id'], s($positionId)]);
+        pruefe($r->rowCount() === 1 || wert($db, 'select 1 from note_positionen where note_id = ? and id = ?', [$x['id'], s($positionId)]),
+            'Diese Leistung gibt es nicht (mehr).', 404);
+        return true;
     }
 
     public function kommentieren(mixed $noteId = null, mixed $text = null): bool

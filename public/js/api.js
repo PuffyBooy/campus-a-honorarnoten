@@ -65,6 +65,7 @@ export const note = f('note');
 export const annehmen = f('annehmen');
 export const ablehnen = f('ablehnen');
 export const betragKorrigieren = f('betragKorrigieren');
+export const positionPruefen = f('positionPruefen');
 export const kommentieren = f('kommentieren');
 export const kommentare = f('kommentare');
 export const verlaufVon = f('verlaufVon');

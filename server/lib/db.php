@@ -220,6 +220,11 @@ const MIGRATIONEN = [
     <<<'SQL'
     alter table anfragen add column zustimmung_am text;
     SQL,
+    // Version 10: Haken „geprüft“ der Redaktion pro Leistung
+    <<<'SQL'
+    alter table note_positionen add column geprueft_von text;
+    alter table note_positionen add column geprueft_am text;
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -405,6 +410,11 @@ const MYSQL_MIGRATIONEN = [
     SQL,    // Version 2 = SQLite-Version 9
     <<<'SQL'
     alter table anfragen add column zustimmung_am varchar(30) null;
+    SQL,
+    // Version 3 = SQLite-Version 10
+    <<<'SQL'
+    alter table note_positionen add column geprueft_von varchar(250) null;
+    alter table note_positionen add column geprueft_am varchar(30) null;
     SQL,
 ];
 

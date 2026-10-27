@@ -132,6 +132,11 @@ export async function demoDaten(db, { passwortHash }) {
     v(28, rita, 'betrag_korrigiert', { position: n.positionen[2].titel, alt: 80, neu: 70, vermerk: n.positionen[2].betrag_vermerk });
     v(27, rita, 'angenommen', { vorher: 'eingereicht' });
   }
+  // eingereicht, zum Ausprobieren der Prüfansicht: ein Betrag über dem Satz, eine Leistung ohne Artikel-Link
+  note(maria, 4, [
+    pos('kolumne', 'Mensa-Check: Was taugt das Essen?', 9, 18),
+    pos('ausserordentlich', 'Umfrage: Wie gestresst sind wir?', 7, 40, { vereinbart_mit: 'Rita Redaktion', artikel_url: '' }),
+  ], 'eingereicht');
   db.positionen.push(
     { ...pos('kolumne', 'Erste Schulwoche: ein Rückblick', 12, 15), autor_id: maria.id, erstellt_am: iso(tageZurueck(12)) },
     { ...pos('kolumne', 'Was Social Media mit uns macht', 5, 15), autor_id: maria.id, erstellt_am: iso(tageZurueck(5)) },

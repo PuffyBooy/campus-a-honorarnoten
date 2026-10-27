@@ -82,9 +82,15 @@ Lokal starten: `npm run dev` → http://localhost:5173
    Abrechnung verschwindet (Vermerk im Löschprotokoll). War es die letzte Nummer, bekommt die neue
    Abrechnung wieder dieselbe. „Meine Abrechnungen“ zeigt pro Jahr die ausgezahlte Summe und was noch
    unterwegs ist.
-4. **Redaktion:** Filter nach Status und Medium, Suche nach Name oder Nummer, Sortierung nach Datum und
-   Betrag. Annehmen, Ablehnen (Begründung Pflicht), Betrag pro Leistung korrigieren (Vermerk
-   Pflicht), interne Kommentare, Verlauf. **IBAN und Adresse sind ausgeblendet.**
+4. **Redaktion:** Reiter nach Status mit Zählern (Zu prüfen, Angenommen, Zurückgegeben, Bezahlt, Alle),
+   Filter nach Medium und Abrechnungsmonat, Suche nach Name oder Nummer, Sortierung. Links der
+   Posteingang, rechts die **große Prüfansicht**: jede Leistung mit Haken **„geprüft“** (am Server
+   gespeichert, alle in der Redaktion sehen ihn), Artikel-Link und **Hinweisen** (Betrag über/unter dem
+   Satz, ohne Artikel-Link, Artikel schon in einer anderen Abrechnung), Betrag ändern (Vermerk Pflicht),
+   Jahressumme der Person, interne Kommentare und Verlauf. Annehmen fragt nach, wenn noch nicht alles
+   geprüft ist; danach geht es automatisch zur nächsten Abrechnung (oder mit „Vorige/Nächste“).
+   Mehrere Abrechnungen lassen sich auf einmal annehmen. Am Handy erst die Liste, dann die Prüfansicht.
+   **IBAN und Adresse sind ausgeblendet.**
 5. **Abgelehnt?** Beim Ablehnen (Begründung Pflicht) gehen die Leistungen **sofort zurück an die
    Autor:in**: Sie stehen wieder unter „Mein Monat“, mit dem Hinweis „Zurück aus <Nummer> zum
    Überarbeiten“ und der Begründung. Die Autor:in korrigiert sie und schickt sie als neue Prämienabrechnung
