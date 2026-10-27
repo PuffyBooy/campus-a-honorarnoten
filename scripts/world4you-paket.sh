@@ -19,7 +19,7 @@ scripts/cache-bust.sh "$ziel" "$version"
 # Server-Teil (PHP) im geschützten Ordner app/
 mkdir -p "$ziel/app/daten"
 cp -R server/lib "$ziel/app/lib"
-cp server/api.php server/einrichten.php server/cli.php "$ziel/app/"
+cp server/api.php server/einrichten.php server/cli.php deploy/world4you/aktualisieren.sh "$ziel/app/"
 cp deploy/world4you/htaccess-gesperrt "$ziel/app/.htaccess"
 cp deploy/world4you/htaccess-gesperrt "$ziel/app/daten/.htaccess"
 cp deploy/world4you/htaccess "$ziel/.htaccess"

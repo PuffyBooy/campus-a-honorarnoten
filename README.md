@@ -248,7 +248,28 @@ Die Mails gehen über das World4You-Postfach (SMTP) hinaus, nachdem die App dem 
 geantwortet hat – niemand wartet darauf. Klappt der Versand nicht (Passwort falsch, Server kurz
 weg), wird es bis zu 5-mal erneut versucht; den letzten Fehler zeigt **Admin → E-Mail**.
 
-### Updates
+### Hochladen und Updates per SSH (statt FTP)
+
+SSH gibt es bei World4You in allen Webhosting-Paketen (im Kundenbereich aktivieren; Server, Benutzer
+und Passwort stehen dort). Am eigenen Rechner im Terminal (Windows: PowerShell):
+
+```bash
+# 1. Paket auf den Webspace kopieren (landet im Home-Ordner)
+scp anerkennungspraemien-world4you.zip BENUTZER@SERVER:
+
+# 2. Anmelden und zum Hauptordner der Domain wechseln (mit ls nachsehen, wie er heißt)
+ssh BENUTZER@SERVER
+ls
+cd HAUPTORDNER
+
+# 3a. Erstes Mal: auspacken, dann im Browser /einrichten.php öffnen
+unzip -o ~/anerkennungspraemien-world4you.zip -d .
+
+# 3b. Jedes Update danach: sichert zuerst die Datenbank, lässt app/daten unangetastet
+bash app/aktualisieren.sh ~/anerkennungspraemien-world4you.zip
+```
+
+### Updates per FTP
 
 Neues Paket herunterladen und einfach drüber hochladen (alte Dateien überschreiben). **Den Ordner
 `app/daten/` nie löschen** – dort liegen Datenbank und Sicherungen. Die Datenbank wird beim ersten
@@ -265,7 +286,7 @@ Aufruf nach einem Update automatisch angepasst.
 ### Passwort vergessen
 
 Andere Konten setzt der Admin unter **Admin → Benutzer → Passwort zurücksetzen** zurück. Für das
-Admin-Konto selbst per SSH (bei World4You in allen Paketen möglich, im Kundenbereich aktivieren):
+Admin-Konto selbst per SSH (im Hauptordner der Domain):
 
 ```bash
 php app/cli.php passwort deine@email.at      # neues Startpasswort
@@ -274,7 +295,8 @@ php app/cli.php testmail an@beispiel.at      # Test-E-Mail
 php app/cli.php mails                        # wartende E-Mails sofort verschicken
 ```
 
-(Falls `php` auf der Kommandozeile eine alte Version ist: `php83` bzw. `php84` verwenden.)
+Auf der Kommandozeile ist `php` bei World4You oft eine alte Version – mit `php -v` prüfen und sonst
+`php84` bzw. `php83` statt `php` schreiben. Sicherungen holen: `scp -r BENUTZER@SERVER:HAUPTORDNER/app/daten/backups .`
 
 ### Andere Webspaces
 
