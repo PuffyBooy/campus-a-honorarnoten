@@ -362,7 +362,7 @@ export async function passwortAendern(alt, neu) {
 
 // ------------------------------------------------------------------ Leistungen (Entwürfe)
 
-function positionPruefen(p) {
+function leistungPruefen(p) {
   pruefe(['kolumne', 'ausserordentlich', 'redigieren'].includes(p.kategorie), 'Bitte wählen, ob Kolumne oder außerordentliche Anerkennungsprämie.');
   pruefe(!leer(p.titel), 'Bitte den Titel des Beitrags angeben.');
   pruefe(/^\d{4}-\d{2}-\d{2}$/.test(p.veroeffentlichung ?? ''), 'Bitte das Datum der Veröffentlichung angeben.');
@@ -406,7 +406,7 @@ export function leistungSpeichern(daten) {
     betrag: istRedigieren ? Math.round(anzahl * einstellungen().honorarsaetze.college.redigieren * 100) / 100 : Number(daten.betrag),
     notiz: trim(daten.notiz),
   };
-  positionPruefen(p);
+  leistungPruefen(p);
   if (p.kategorie === 'ausserordentlich') pruefe(p.art, 'Bitte die Art der Anerkennungsprämie angeben.');
   pruefe(istMedium(p.medium), 'Bitte wählen, ob für campus a college oder campus a.');
   // nur Medien mit Profil-Link (Redigieren: Rolle vom Admin, immer campus a college); eine ältere Leistung darf ihr Medium behalten
@@ -544,7 +544,7 @@ export function abrechnungAbschicken(positionIds) {
   const n = brauche('autor');
   const positionen = db.positionen.filter((p) => p.autor_id === n.id && positionIds.includes(p.id));
   pruefe(positionen.length, 'Bitte mindestens eine Leistung auswählen.');
-  positionen.forEach(positionPruefen);
+  positionen.forEach(leistungPruefen);
   // campus a und campus a college bekommen getrennte Prämienabrechnungen
   const medium = mediumOder(positionen[0].medium);
   pruefe(positionen.every((p) => mediumOder(p.medium) === medium), 'Leistungen für campus a und campus a college bitte getrennt abschicken.');
@@ -683,6 +683,17 @@ export function betragKorrigieren(noteId, positionId, betrag, vermerk) {
   speichern();
 }
 
+/** Haken „geprüft“ der Redaktion an einer Leistung setzen oder entfernen */
+export function positionPruefen(noteId, positionId, geprueft = true) {
+  const n = brauche('redaktion');
+  const x = noteHolen(noteId);
+  pruefe(x.status !== 'bezahlt', 'Bezahlte Prämienabrechnungen können nicht mehr geändert werden.');
+  const p = x.positionen.find((y) => y.id === positionId);
+  pruefe(p, 'Diese Leistung gibt es nicht (mehr).');
+  Object.assign(p, geprueft === true ? { geprueft_von: anzeigename(n), geprueft_am: jetzt() } : { geprueft_von: null, geprueft_am: null });
+  speichern();
+}
+
 export function kommentieren(noteId, textInhalt) {
   const n = brauche('redaktion');
   pruefe(!leer(textInhalt), 'Der Kommentar ist leer.');
@@ -786,6 +797,18 @@ export async function passwortZuruecksetzen(uid) {
   n.muss_passwort_aendern = true;
   speichern();
   return { email: n.email, vorname: n.vorname, passwort };
+}
+
+/** E-Mail-Adresse eines Kontos ändern (Admin) */
+export function emailAendern(uid, email) {
+  const { n } = adminNutzer(uid);
+  const neu = trim(email).toLowerCase();
+  pruefe(/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(neu) && neu.length <= 200, 'Bitte eine gültige E-Mail-Adresse angeben.');
+  pruefe(neu !== n.email, 'Das ist schon die E-Mail-Adresse dieses Kontos.');
+  pruefe(!db.nutzer.some((x) => x.email === neu && x.id !== uid), 'Diese E-Mail-Adresse wird schon verwendet.');
+  n.email = neu;
+  speichern();
+  return { email: neu, mail: false };
 }
 
 /** Konto löschen (Datenschutz). Abgeschickte Prämienabrechnungen bleiben für die Buchhaltung erhalten. */

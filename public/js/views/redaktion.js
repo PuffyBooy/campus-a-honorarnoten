@@ -1,108 +1,174 @@
-// Bearbeiter-Terminal – alle Prämienabrechnungen mit Filter, Suche und Sortierung
-import { STATUS_LABEL, esc, formatDatum, formatEuro, formatMonat, vollerName } from '../lib/format.js';
-import { statusBadge } from '../lib/ui.js';
-import { MEDIEN, hatArtikel, mediumBadge, mediumOder } from '../lib/campus.js';
+// Redaktion: Posteingang (Reiter nach Status, Filter, Suche) links, große Prüfansicht rechts.
+// Auf dem Handy: erst die Liste, nach dem Antippen nur die Prüfansicht.
+import { esc, formatEuro, formatMonat, vollerName } from '../lib/format.js';
+import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
+import { MEDIEN, mediumBadge, mediumOder } from '../lib/campus.js';
+import { pruefungRendern } from './redaktion-detail.js';
 
-/** „· 2 mit Artikel-Link“ – zeigt, wie viele Leistungen sich direkt anschauen lassen */
-function linkText(n) {
-  const mit = n.positionen.filter((p) => hatArtikel(p.artikel_url)).length;
-  return mit ? ` · ${mit} mit Artikel-Link` : '';
-}
+// Filter bleiben beim Wechseln zwischen Abrechnungen erhalten
+const filter = { status: 'eingereicht', medium: '', monat: '', suche: '', sortierung: 'eingereicht_asc' };
 
-// Filter bleiben erhalten, wenn man aus der Detailansicht zurückkommt
-const filter = { status: 'eingereicht', medium: '', suche: '', sortierung: 'eingereicht_desc' };
+const REITER = [
+  ['eingereicht', 'Zu prüfen'], ['angenommen', 'Angenommen'], ['abgelehnt', 'Zurückgegeben'], ['bezahlt', 'Bezahlt'], ['', 'Alle'],
+];
 
 const SORTIERUNGEN = {
-  eingereicht_desc: ['Datum: neueste zuerst', (a, b) => b.eingereicht_am.localeCompare(a.eingereicht_am)],
-  eingereicht_asc: ['Datum: älteste zuerst', (a, b) => a.eingereicht_am.localeCompare(b.eingereicht_am)],
-  betrag_desc: ['Betrag: höchster zuerst', (a, b) => b.betrag - a.betrag],
-  betrag_asc: ['Betrag: niedrigster zuerst', (a, b) => a.betrag - b.betrag],
+  eingereicht_asc: ['Älteste zuerst', (a, b) => a.eingereicht_am.localeCompare(b.eingereicht_am)],
+  eingereicht_desc: ['Neueste zuerst', (a, b) => b.eingereicht_am.localeCompare(a.eingereicht_am)],
+  betrag_desc: ['Höchster Betrag', (a, b) => b.betrag - a.betrag],
+  name: ['Name A–Z', (a, b) => vollerName(a.autor).localeCompare(vollerName(b.autor), 'de')],
 };
 
-export async function render(el, { store, istAktuell }) {
-  const daten = await store.alleNoten();
+const euroSumme = (noten) => noten.reduce((s, n) => s + Math.round(n.betrag * 100), 0) / 100;
+
+/** „heute“, „gestern“, „vor 3 Tagen“ */
+export function wieLange(iso) {
+  const tage = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
+  return tage <= 0 ? 'heute' : tage === 1 ? 'gestern' : `vor ${tage} Tagen`;
+}
+
+function gefiltert(daten) {
+  const q = filter.suche.trim().toLowerCase();
+  return daten
+    .filter((n) => !filter.status || n.status === filter.status)
+    .filter((n) => !filter.medium || mediumOder(n.medium) === filter.medium)
+    .filter((n) => !filter.monat || n.monat === filter.monat)
+    .filter((n) => !q || n.nummer.toLowerCase().includes(q) || vollerName(n.autor).toLowerCase().includes(q)
+      || `${n.autor.nachname} ${n.autor.vorname}`.toLowerCase().includes(q))
+    .sort(SORTIERUNGEN[filter.sortierung][1]);
+}
+
+function eintragHtml(n, aktiv, mitAuswahl) {
+  return `
+    <li class="eingang${aktiv ? ' aktiv' : ''}" data-id="${esc(n.id)}">
+      ${mitAuswahl ? `<input type="checkbox" class="eingang-wahl" value="${esc(n.id)}" aria-label="${esc(n.nummer)} auswählen">` : ''}
+      <a href="#/redaktion/${esc(n.id)}"${aktiv ? ' aria-current="true"' : ''}>
+        <span class="eingang-zeile"><strong>${esc(vollerName(n.autor))}</strong><span class="eingang-betrag">${esc(formatEuro(n.betrag))}</span></span>
+        <span class="eingang-zeile klein"><span class="nummer-klein">${esc(n.nummer)} · ${esc(wieLange(n.eingereicht_am))}</span>${mediumBadge(n.medium)}</span>
+      </a>
+    </li>`;
+}
+
+export async function render(el, ctx) {
+  const { store, params, neuLaden, istAktuell } = ctx;
+  const [daten, einstellungen] = await Promise.all([store.alleNoten(), store.einstellungen()]);
   if (!istAktuell()) return;
-  const zaehler = Object.fromEntries(Object.keys(STATUS_LABEL).map((s) => [s, 0]));
-  daten.forEach((n) => zaehler[n.status]++);
+  const zaehler = Object.fromEntries(REITER.map(([s]) => [s, s ? daten.filter((n) => n.status === s).length : daten.length]));
+  const monate = [...new Set(daten.map((n) => n.monat))].sort().reverse();
+  if (filter.monat && !monate.includes(filter.monat)) filter.monat = '';
+  const liste = gefiltert(daten);
+  const gewaehlt = params.id ? daten.find((n) => n.id === params.id) : null;
+  const mitAuswahl = filter.status === 'eingereicht' && liste.length > 1;
 
   el.innerHTML = `
-    <h1>Bearbeiter-Terminal</h1>
-    <section class="karte filterleiste" aria-label="Filter">
-      <div class="feld">
-        <label for="r-status">Status</label>
-        <select id="r-status">
-          <option value="">Alle (${daten.length})</option>
-          ${Object.entries(STATUS_LABEL).map(([w, l]) => `<option value="${w}">${esc(l)} (${zaehler[w]})</option>`).join('')}
-        </select>
-      </div>
-      <div class="feld">
-        <label for="r-medium">Medium</label>
-        <select id="r-medium">
-          <option value="">Beide</option>
-          ${Object.entries(MEDIEN).map(([m, x]) => `<option value="${m}">${esc(x.name)} (${daten.filter((n) => mediumOder(n.medium) === m).length})</option>`).join('')}
-        </select>
-      </div>
-      <div class="feld">
-        <label for="r-suche">Suche (Name oder Nummer)</label>
-        <input id="r-suche" type="search" placeholder="z. B. Musterfrau oder MUSTERFRAU-MA-2026-01" autocomplete="off">
-      </div>
-      <div class="feld">
-        <label for="r-sort">Sortierung</label>
-        <select id="r-sort">
-          ${Object.entries(SORTIERUNGEN).map(([w, [l]]) => `<option value="${w}">${esc(l)}</option>`).join('')}
-        </select>
-      </div>
+    <div class="kopfzeile"><h1>Redaktion</h1></div>
+    <nav class="reiter" aria-label="Status">${REITER.map(([s, l]) => `
+      <button type="button" class="reiter-knopf" data-status="${s}" aria-pressed="${filter.status === s}">
+        ${esc(l)} <span class="zaehler${s === 'eingereicht' && zaehler[s] ? ' zaehler-wichtig' : ''}">${zaehler[s]}</span></button>`).join('')}
+    </nav>
+    <section class="filterleiste redaktion-filter" aria-label="Filter">
+      <div class="feld"><label for="r-medium">Medium</label>
+        <select id="r-medium"><option value="">Beide</option>
+          ${Object.entries(MEDIEN).map(([m, x]) => `<option value="${m}">${esc(x.name)}</option>`).join('')}</select></div>
+      <div class="feld"><label for="r-monat">Abrechnungsmonat</label>
+        <select id="r-monat"><option value="">Alle Monate</option>
+          ${monate.map((m) => `<option value="${esc(m)}">${esc(formatMonat(m))}</option>`).join('')}</select></div>
+      <div class="feld"><label for="r-suche">Suche</label>
+        <input id="r-suche" type="search" placeholder="Name oder Nummer" autocomplete="off"></div>
+      <div class="feld"><label for="r-sort">Sortierung</label>
+        <select id="r-sort">${Object.entries(SORTIERUNGEN).map(([w, [l]]) => `<option value="${w}">${esc(l)}</option>`).join('')}</select></div>
     </section>
-    <p class="treffer" id="r-treffer" aria-live="polite"></p>
-    <div id="r-tabelle"></div>`;
+    <div class="arbeitsplatz${gewaehlt ? ' mit-auswahl' : ''}">
+      <aside class="posteingang" aria-label="Prämienabrechnungen">
+        <p class="treffer" aria-live="polite"><strong>${liste.length}</strong> ${liste.length === 1 ? 'Abrechnung' : 'Abrechnungen'}
+          · ${esc(formatEuro(euroSumme(liste)))}</p>
+        ${mitAuswahl ? `<div class="sammel">
+          <label class="check"><input type="checkbox" id="r-alle"> alle</label>
+          <button type="button" class="btn btn-klein btn-erfolg" id="r-sammel" disabled>Ausgewählte annehmen</button></div>` : ''}
+        ${liste.length ? `<ul class="eingang-liste">${liste.map((n) => eintragHtml(n, n.id === gewaehlt?.id, mitAuswahl)).join('')}</ul>`
+          : `<p class="leer">${filter.status === 'eingereicht' ? 'Alles geprüft. 🎉' : 'Nichts gefunden.'}</p>`}
+      </aside>
+      <section class="pruefung" id="pruefung" aria-live="polite">
+        ${gewaehlt ? '<p class="laden">Wird geladen …</p>'
+          : `<div class="pruefung-leer"><p><strong>Wähle links eine Abrechnung aus.</strong></p>
+            <p class="klein">Tipp: Mit „Nächste“ geht es nach dem Prüfen ohne Zurückspringen weiter.</p></div>`}
+      </section>
+    </div>`;
 
-  const statusSel = el.querySelector('#r-status');
-  const mediumSel = el.querySelector('#r-medium');
-  mediumSel.value = filter.medium;
-  const suche = el.querySelector('#r-suche');
-  const sort = el.querySelector('#r-sort');
-  statusSel.value = filter.status;
-  suche.value = filter.suche;
-  sort.value = filter.sortierung;
-
-  function zeichnen() {
-    const q = filter.suche.trim().toLowerCase();
-    const liste = daten
-      .filter((n) => !filter.status || n.status === filter.status)
-      .filter((n) => !filter.medium || mediumOder(n.medium) === filter.medium)
-      .filter((n) => !q || n.nummer.toLowerCase().includes(q) || vollerName(n.autor).toLowerCase().includes(q)
-        || `${n.autor.nachname} ${n.autor.vorname}`.toLowerCase().includes(q))
-      .sort(SORTIERUNGEN[filter.sortierung][1]);
-
-    const summe = liste.reduce((s, n) => s + n.betrag, 0);
-    el.querySelector('#r-treffer').textContent =
-      `${liste.length} ${liste.length === 1 ? 'Prämienabrechnung' : 'Prämienabrechnungen'} · Summe ${formatEuro(summe)}`;
-
-    el.querySelector('#r-tabelle').innerHTML = liste.length
-      ? `<table class="tabelle klickbar">
-          <thead><tr><th>Nummer</th><th>Name</th><th>Abrechnung</th><th>Abgeschickt</th>
-            <th class="rechts">Betrag</th><th>Status</th></tr></thead>
-          <tbody>${liste.map((n) => `
-            <tr data-id="${esc(n.id)}">
-              <td data-label="Nummer"><a href="#/redaktion/${esc(n.id)}" class="nummer">${esc(n.nummer)}</a></td>
-              <td data-label="Name"><span>${esc(vollerName(n.autor))}<br>${mediumBadge(n.medium)}</span></td>
-              <td data-label="Abrechnung"><span>${esc(formatMonat(n.monat))}<br><span class="klein">${n.positionen.length}
-                ${n.positionen.length === 1 ? 'Leistung' : 'Leistungen'}${linkText(n)}</span></span></td>
-              <td data-label="Abgeschickt">${esc(formatDatum(n.eingereicht_am.slice(0, 10)))}</td>
-              <td data-label="Betrag" class="rechts">${esc(formatEuro(n.betrag))}</td>
-              <td data-label="Status">${statusBadge(n.status)}</td>
-            </tr>`).join('')}</tbody>
-        </table>`
-      : '<section class="karte"><p>Keine Prämienabrechnungen gefunden.</p></section>';
-  }
-
-  statusSel.addEventListener('change', () => { filter.status = statusSel.value; zeichnen(); });
-  mediumSel.addEventListener('change', () => { filter.medium = mediumSel.value; zeichnen(); });
-  suche.addEventListener('input', () => { filter.suche = suche.value; zeichnen(); });
-  sort.addEventListener('change', () => { filter.sortierung = sort.value; zeichnen(); });
-  el.querySelector('#r-tabelle').addEventListener('click', (ev) => {
-    const tr = ev.target.closest('tr[data-id]');
-    if (tr && !ev.target.closest('a')) location.hash = `#/redaktion/${tr.dataset.id}`;
+  // ---- Filter
+  const setzen = (feld, wert) => { filter[feld] = wert; neuLaden(); };
+  el.querySelector('.reiter').addEventListener('click', (ev) => {
+    const k = ev.target.closest('[data-status]');
+    if (k) setzen('status', k.dataset.status);
   });
-  zeichnen();
+  const sel = (id, feld) => {
+    const e = el.querySelector(id);
+    e.value = filter[feld];
+    e.addEventListener('change', () => setzen(feld, e.value));
+  };
+  sel('#r-medium', 'medium');
+  sel('#r-monat', 'monat');
+  sel('#r-sort', 'sortierung');
+  const suche = el.querySelector('#r-suche');
+  suche.value = filter.suche;
+  let warten;
+  suche.addEventListener('input', () => {
+    clearTimeout(warten);
+    warten = setTimeout(async () => {
+      filter.suche = suche.value;
+      await neuLaden();
+      const neu = document.getElementById('r-suche');
+      neu?.focus();
+      neu?.setSelectionRange(neu.value.length, neu.value.length);
+    }, 250);
+  });
+
+  // ---- Mehrere auf einmal annehmen
+  const sammel = el.querySelector('#r-sammel');
+  const auswahl = () => Array.from(el.querySelectorAll('.eingang-wahl:checked'), (c) => c.value);
+  el.querySelector('.posteingang').addEventListener('change', (ev) => {
+    if (ev.target.id === 'r-alle') el.querySelectorAll('.eingang-wahl').forEach((c) => { c.checked = ev.target.checked; });
+    if (sammel) {
+      const n = auswahl().length;
+      sammel.disabled = !n;
+      sammel.textContent = n ? `${n} annehmen` : 'Ausgewählte annehmen';
+    }
+  });
+  sammel?.addEventListener('click', async () => {
+    const noten = liste.filter((n) => auswahl().includes(n.id));
+    const ok = await bestaetigen({
+      titel: `${noten.length} Prämienabrechnungen annehmen?`,
+      html: `<ul class="dialog-liste">${noten.map((n) => `<li><span>${esc(vollerName(n.autor))}<br><span class="klein">${esc(n.nummer)}</span></span>
+        <span class="mono">${esc(formatEuro(n.betrag))}</span></li>`).join('')}</ul>
+        <p class="summenzeile">Gesamt: <strong>${esc(formatEuro(euroSumme(noten)))}</strong></p>
+        <p class="klein">Sie gehen danach an die Buchhaltung. Die Autor:innen bekommen eine Nachricht.</p>`,
+      ja: 'Alle annehmen',
+    });
+    if (!ok) return;
+    await mitSperre(sammel, async () => {
+      let fertig = 0;
+      for (const n of noten) {
+        try {
+          await store.annehmen(n.id);
+          fertig++;
+        } catch (e) {
+          meldung(`${n.nummer}: ${fehlerText(e)}`, 'fehler');
+        }
+      }
+      if (fertig) meldung(`${fertig} ${fertig === 1 ? 'Abrechnung' : 'Abrechnungen'} angenommen.`, 'erfolg');
+    });
+    neuLaden();
+  });
+
+  // ---- Prüfansicht
+  if (gewaehlt) {
+    const i = liste.findIndex((n) => n.id === gewaehlt.id);
+    await pruefungRendern(el.querySelector('#pruefung'), {
+      ...ctx, alle: daten, einstellungen,
+      vorige: i > 0 ? liste[i - 1] : null,
+      naechste: i >= 0 && i < liste.length - 1 ? liste[i + 1] : null,
+      // nach Annehmen/Zurückgeben: weiter zur nächsten in der Liste (die bearbeitete fällt aus „Zu prüfen“ heraus)
+      danach: (i >= 0 ? liste[i + 1] ?? liste[i - 1] : null) ?? null,
+    });
+  }
 }

@@ -271,6 +271,24 @@ test('Abgeschickte Note zurückziehen, solange sie nicht angenommen ist', async 
   assert.match((await k.bert.aufruf('abrechnungZurueckziehen', neu.id)).fehler, /schon geprüft/);
 });
 
+test('Redaktion: Haken „geprüft“ pro Leistung', async () => {
+  await k.bert.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Bruck', veroeffentlichung: '2026-09-06', betrag: 15 });
+  const note = await k.bert.ok('abrechnungAbschicken', (await k.bert.ok('meineLeistungen')).map((p) => p.id));
+  const pid = note.positionen[0].id;
+  assert.equal(note.positionen[0].geprueft_am, null);
+  assert.equal((await k.bert.aufruf('positionPruefen', note.id, pid, true)).status, 403);
+  await k.rita.ok('positionPruefen', note.id, pid, true);
+  await k.rita.ok('positionPruefen', note.id, pid, true); // zweimal geht auch (MySQL meldet dann 0 geänderte Zeilen)
+  let p = (await k.rita.ok('note', note.id)).positionen[0];
+  assert.equal(p.geprueft_von, 'Rita Redaktion');
+  assert.ok(p.geprueft_am);
+  await k.rita.ok('positionPruefen', note.id, pid, false);
+  p = (await k.rita.ok('note', note.id)).positionen[0];
+  assert.deepEqual([p.geprueft_von, p.geprueft_am], [null, null]);
+  assert.equal((await k.rita.aufruf('positionPruefen', note.id, 'gibt-es-nicht', true)).status, 404);
+  await k.rita.ok('annehmen', note.id);
+});
+
 test('Admin: Rollen, letzter Admin, Deaktivieren beendet Sitzungen', async () => {
   const ich = await k.admin.ok('aktuellerNutzer');
   assert.match((await k.admin.aufruf('rollenSetzen', ich.id, ['autor'])).fehler, /Admin-Konto/);
@@ -281,6 +299,24 @@ test('Admin: Rollen, letzter Admin, Deaktivieren beendet Sitzungen', async () =>
   assert.equal((await k.bert.aufruf('meineNoten')).status, 401);
   assert.equal((await client().aufruf('anmelden', 'bert@example.org', 'geheim12345')).status, 403);
   await k.admin.ok('nutzerAktivSetzen', bert.id, true);
+});
+
+test('Admin: E-Mail-Adresse ändern, alte und neue Adresse bekommen eine Info', async () => {
+  const bert = (await k.admin.ok('nutzerListe')).find((n) => n.email === 'bert@example.org');
+  assert.equal((await k.rita.aufruf('emailAendern', bert.id, 'b@example.org')).status, 403);
+  assert.match((await k.admin.aufruf('emailAendern', bert.id, 'kein-mail')).fehler, /gültige/);
+  assert.match((await k.admin.aufruf('emailAendern', bert.id, 'ANNA@example.org')).fehler, /schon verwendet/);
+  assert.match((await k.admin.aufruf('emailAendern', bert.id, 'bert@example.org')).fehler, /schon die E-Mail/);
+  const r = await k.admin.ok('emailAendern', bert.id, ' Bert.Neu@Example.org ');
+  assert.deepEqual(r, { email: 'bert.neu@example.org', mail: true });
+  assert.ok(await mailAbwarten(php.smtp, (m) => m.an === 'bert@example.org' && m.betreff === 'Deine E-Mail-Adresse wurde geändert'));
+  assert.ok(await mailAbwarten(php.smtp, (m) => m.an === 'bert.neu@example.org' && m.betreff === 'Deine E-Mail-Adresse wurde geändert'));
+  // angemeldet wird ab jetzt mit der neuen Adresse, das Passwort bleibt
+  assert.equal((await client().aufruf('anmelden', 'bert@example.org', 'geheim12345')).status, 401);
+  const neu = client();
+  await neu.ok('anmelden', 'bert.neu@example.org', 'geheim12345');
+  assert.equal((await neu.ok('aktuellerNutzer')).email, 'bert.neu@example.org');
+  await k.admin.ok('emailAendern', bert.id, 'bert@example.org');
 });
 
 test('Prämiensätze: Admin legt fest, alle sehen sie, ungültige Werte abgelehnt', async () => {

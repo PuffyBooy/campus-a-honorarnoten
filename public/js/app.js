@@ -8,7 +8,6 @@ import * as profil from './views/profil.js';
 import * as leistungen from './views/leistungen.js';
 import * as noten from './views/noten.js';
 import * as redaktion from './views/redaktion.js';
-import * as redaktionDetail from './views/redaktion-detail.js';
 import * as zahlung from './views/zahlung.js';
 import * as admin from './views/admin.js';
 import * as generator from './views/generator.js';
@@ -32,7 +31,7 @@ const ROUTEN = [
   { pfad: 'noten', view: noten, rolle: ['autor'], titel: 'Meine Abrechnungen' },
   { pfad: 'extern', view: generator, rolle: ['autor'], titel: 'Externe Honorarnote' },
   { pfad: 'redaktion', view: redaktion, rolle: ['redaktion', 'admin'], titel: 'Redaktion' },
-  { pfad: 'redaktion/:id', view: redaktionDetail, rolle: ['redaktion', 'admin'] },
+  { pfad: 'redaktion/:id', view: redaktion, rolle: ['redaktion', 'admin'] },
   { pfad: 'zahlung', view: zahlung, rolle: ['buchhaltung', 'admin'], titel: 'Buchhaltung' },
   { pfad: 'zahlung/:tab', view: zahlung, rolle: ['buchhaltung', 'admin'] },
   { pfad: 'admin', view: admin, rolle: ['admin'], titel: 'Admin' },
@@ -151,6 +150,7 @@ function hinweisBanner(nutzer, recht) {
 async function render() {
   const lauf = ++renderZaehler;
   const pfad = aktuellerPfad();
+  delete main.dataset.seite;
   let nutzer;
   try {
     nutzer = await store.aktuellerNutzer();
@@ -218,6 +218,7 @@ async function render() {
 
   const f = flash;
   flash = null;
+  main.dataset.seite = treffer.route.pfad.split('/')[0];
   ladeAnzeige(main);
   try {
     await treffer.route.view.render(main, {
