@@ -71,6 +71,8 @@ async function anfragen(inhalt, { store, neuLaden }) {
           <span class="klein">${esc(formatZeitpunkt(a.am))}</span></div>
         <p><a href="mailto:${esc(a.email)}">${esc(a.email)}</a></p>
         ${a.nachricht ? `<p class="notiz zitat">${esc(a.nachricht)}</p>` : ''}
+        <p class="klein">${a.zustimmung_am ? `✓ Datenschutzerklärung und Hinweis bestätigt am ${esc(formatZeitpunkt(a.zustimmung_am))}`
+          : 'Ältere Anfrage: Datenschutzerklärung wird beim ersten Anmelden bestätigt.'}</p>
         <p class="klein">Rollen beim Freischalten:</p>
         ${rollenAuswahl()}
         <div class="aktionen">

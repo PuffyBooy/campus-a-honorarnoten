@@ -3,7 +3,7 @@
 import { DEMO_KONTEN, DEMO_PASSWORT } from '../demo-konten.js';
 import { esc } from '../lib/format.js';
 import { fehlerText, mitSperre } from '../lib/ui.js';
-import { hinweisHtml } from '../lib/rechtliches.js';
+import { ZUSTIMMUNG_TEXT, hinweisHtml } from '../lib/rechtliches.js';
 
 export function render(el, { store, istDemo, recht, nachAnmeldung }) {
   el.innerHTML = `
@@ -43,10 +43,11 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
           <label for="r-nachricht">Nachricht an die Redaktion <span class="optional">(optional)</span></label>
           <textarea id="r-nachricht" name="nachricht" rows="2" maxlength="1000"
                     placeholder="z. B. Schule, Klasse oder wofür du schreibst"></textarea>
+          <label class="check bestaetigen"><input type="checkbox" name="zustimmung" required>
+            <span>${ZUSTIMMUNG_TEXT} <span class="pflicht" aria-hidden="true">*</span></span></label>
           <p class="feldfehler" role="alert"></p>
           <button class="btn btn-primaer btn-breit" type="submit">Zugang anfragen</button>
-          <p class="tipp">Die Redaktion schickt dir nach der Freischaltung ein Startpasswort.
-            Mit der Anfrage gelten die <a href="#/datenschutz">Datenschutzhinweise</a>.</p>
+          <p class="tipp">Die Redaktion schickt dir nach der Freischaltung ein Startpasswort.</p>
         </form>
         ${recht && hinweisHtml(recht) ? `<aside class="hinweis-betreiber">${hinweisHtml(recht)}</aside>` : ''}
       </section>
@@ -99,11 +100,16 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
     const f = ev.currentTarget;
     const fehler = f.querySelector('.feldfehler');
     fehler.textContent = '';
+    if (!f.zustimmung.checked) {
+      fehler.textContent = 'Bitte bestätige, dass du die Datenschutzerklärung und den Hinweis gelesen hast.';
+      f.zustimmung.focus();
+      return;
+    }
     const knopf = f.querySelector('button[type=submit]');
     knopf.disabled = true;
     try {
       await store.zugangAnfragen({
-        vorname: f.vorname.value, nachname: f.nachname.value, email: f.email.value, nachricht: f.nachricht.value,
+        vorname: f.vorname.value, nachname: f.nachname.value, email: f.email.value, nachricht: f.nachricht.value, zustimmung: true,
       });
     } catch (e) {
       fehler.textContent = fehlerText(e);

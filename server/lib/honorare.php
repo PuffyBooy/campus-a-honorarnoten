@@ -16,6 +16,7 @@ const BETREIBER_STANDARD = [
     'zusatz_impressum' => '', 'zusatz_datenschutz' => '', 'stand' => '',
 ];
 const ARTIKEL_DOPPELT = 'Dieser Artikel ist schon als Leistung gespeichert oder abgerechnet.';
+const ZUSTIMMUNG_FEHLT = 'Bitte bestätige, dass du die Datenschutzerklärung und den Hinweis zum Betreiber gelesen hast.';
 
 /** Kontext einer Anfrage */
 final class Ctx
@@ -260,6 +261,7 @@ final class Honorare
         $email = strtolower(tr($d['email'] ?? ''));
         pruefe(!leer($d['vorname'] ?? '') && !leer($d['nachname'] ?? ''), 'Bitte Vor- und Nachnamen angeben.');
         pruefe(ist_email($email) && strlen($email) <= 200, 'Bitte eine gültige E-Mail-Adresse angeben.');
+        pruefe(($d['zustimmung'] ?? null) === true, ZUSTIMMUNG_FEHLT);
         // bewusst dieselbe Antwort, ob ein Konto existiert oder nicht (kein Ausforschen von Konten)
         $vorhanden = wert($db, 'select 1 from nutzer where email = ?', [$email])
             || wert($db, "select 1 from anfragen where email = ? and status = 'offen'", [$email]);
@@ -270,8 +272,8 @@ final class Honorare
                 'vorname' => kuerze(tr($d['vorname']), 100), 'nachname' => kuerze(tr($d['nachname']), 100), 'email' => $email,
                 'nachricht' => kuerze(tr($d['nachricht'] ?? ''), 1000),
             ];
-            q($db, 'insert into anfragen (id, vorname, nachname, email, nachricht, am) values (?, ?, ?, ?, ?, ?)',
-                [neue_id(), $a['vorname'], $a['nachname'], $email, $a['nachricht'], jetzt()]);
+            q($db, 'insert into anfragen (id, vorname, nachname, email, nachricht, am, zustimmung_am) values (?, ?, ?, ?, ?, ?, ?)',
+                [neue_id(), $a['vorname'], $a['nachname'], $email, $a['nachricht'], jetzt(), jetzt()]);
             benachrichtigen($db, 'anfrage', mail_anfrage_admin($db, $a));
         }
         return true;

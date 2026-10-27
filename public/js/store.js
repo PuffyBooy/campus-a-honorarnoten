@@ -235,14 +235,15 @@ function neuePersonPruefen({ vorname, nachname, email }) {
 }
 
 /** Öffentlich (ohne Anmeldung): Zugang anfragen */
-export function zugangAnfragen({ vorname, nachname, email, nachricht }) {
+export function zugangAnfragen({ vorname, nachname, email, nachricht, zustimmung }) {
   email = trim(email).toLowerCase();
   neuePersonPruefen({ vorname, nachname, email });
+  pruefe(zustimmung === true, 'Bitte bestätige, dass du die Datenschutzerklärung und den Hinweis zum Betreiber gelesen hast.');
   pruefe(!db.anfragen.some((a) => a.email === email && a.status === 'offen'),
     'Für diese E-Mail-Adresse gibt es schon eine offene Anfrage. Bitte etwas Geduld.');
   db.anfragen.push({
     id: id(), vorname: trim(vorname), nachname: trim(nachname), email,
-    nachricht: trim(nachricht).slice(0, 1000), status: 'offen', am: jetzt(),
+    nachricht: trim(nachricht).slice(0, 1000), status: 'offen', am: jetzt(), zustimmung_am: jetzt(),
   });
   speichern();
 }

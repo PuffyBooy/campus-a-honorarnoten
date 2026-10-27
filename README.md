@@ -231,10 +231,21 @@ Ist der Haken **„Der Betreiber ist nicht bei der campus a Medien GmbH angestel
 sehen alle einen **Hinweis**: Wer die App betreibt, ist nicht bei campus a angestellt, hat aber als
 Admin Zugriff auf alle Daten (auch Adressen und IBANs), und die Daten liegen bei World4You.
 - auf der Anmeldeseite und in der Datenschutzerklärung,
-- beim Konto einrichten mit Pflicht-Häkchen „zur Kenntnis genommen“,
-- bei allen anderen als Banner, bis sie „Zur Kenntnis genommen“ klicken (Zeitpunkt wird gespeichert).
+- beim **Zugang anfragen** mit Pflicht-Häkchen „Datenschutzerklärung gelesen und Hinweis zur Kenntnis
+  genommen“ (ohne Häkchen lehnt auch der Server ab; der Zeitpunkt steht bei der Anfrage im Admin),
+- beim **Konto einrichten** (erstes Anmelden) mit demselben Pflicht-Häkchen,
+- bei allen anderen als Banner, bis sie „Gelesen und zur Kenntnis genommen“ klicken (Zeitpunkt wird gespeichert).
 
-Ändern sich Name, Anschrift, Hosting oder der Haken, müssen alle den Hinweis neu bestätigen.
+Die Bestätigung der Datenschutzerklärung fragt die App bei **allen Konten** ab, auch wenn kein Hinweis
+zum Betreiber nötig ist. Ändern sich Name, Anschrift, Hosting oder der Haken, müssen alle neu bestätigen.
+
+### Cookies
+
+Beim ersten Besuch erscheint unten die **Cookie-Auswahl** („Nur notwendige“ oder „Alle erlauben“, mit
+Details). Notwendig sind nur das Anmelde-Cookie und das Merken der Auswahl. Optional ist **„Komfort“**:
+Dabei merkt sich der Browser den Entwurf der Externen Honorarnote; ohne Zustimmung bleibt er nur, bis die
+Seite geschlossen wird. Unten auf jeder Seite kann man über **„Cookie-Einstellungen“** jederzeit ändern;
+beim Widerruf wird das Gespeicherte sofort gelöscht. Werbung, Tracking oder Analyse gibt es nicht.
 
 ### Automatische E-Mails
 

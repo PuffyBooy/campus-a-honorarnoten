@@ -99,13 +99,16 @@ test('Anmeldung: falsches Passwort und unbekannte E-Mail geben dieselbe Meldung'
 test('Zugang anfragen und freischalten', async () => {
   const gast = client();
   assert.equal((await gast.aufruf('nutzerListe')).status, 401);
-  await gast.ok('zugangAnfragen', { vorname: 'Anna', nachname: 'Autorin', email: 'anna@example.org', nachricht: 'Hallo' });
-  await gast.ok('zugangAnfragen', { vorname: 'Bert', nachname: 'Beispiel', email: 'bert@example.org' });
+  // ohne Bestätigung von Datenschutzerklärung und Hinweis keine Anfrage
+  assert.match((await gast.aufruf('zugangAnfragen', { vorname: 'Anna', nachname: 'Autorin', email: 'anna@example.org' })).fehler, /Datenschutzerklärung/);
+  await gast.ok('zugangAnfragen', { vorname: 'Anna', nachname: 'Autorin', email: 'anna@example.org', nachricht: 'Hallo', zustimmung: true });
+  await gast.ok('zugangAnfragen', { vorname: 'Bert', nachname: 'Beispiel', email: 'bert@example.org', zustimmung: true });
   // existierendes Konto: gleiche Antwort, aber keine Anfrage
-  await gast.ok('zugangAnfragen', { vorname: 'X', nachname: 'Y', email: 'admin@example.org' });
+  await gast.ok('zugangAnfragen', { vorname: 'X', nachname: 'Y', email: 'admin@example.org', zustimmung: true });
 
   const anfragen = await k.admin.ok('anfragen');
   assert.deepEqual(anfragen.map((a) => a.email).sort(), ['anna@example.org', 'bert@example.org']);
+  assert.ok(anfragen.every((a) => a.zustimmung_am), 'Zeitpunkt der Bestätigung wird gespeichert');
   assert.equal(await k.admin.ok('offeneAnfragenAnzahl'), 2);
 
   const zugang = {};
