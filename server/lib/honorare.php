@@ -747,7 +747,7 @@ final class Honorare
     public function nutzerListe(): array
     {
         brauche($this->ctx, 'admin');
-        return array_map('nutzer_aus_zeile', zeilen($this->db(), 'select * from nutzer order by nachname collate nocase, vorname collate nocase'));
+        return array_map('nutzer_aus_zeile', zeilen($this->db(), 'select * from nutzer order by lower(nachname), lower(vorname)'));
     }
 
     public function rollenSetzen(mixed $uid = null, mixed $rollen = []): bool
@@ -841,15 +841,15 @@ final class Honorare
         pruefe($kontakt === '' || ist_email($kontakt), 'Bitte eine gültige E-Mail-Adresse für Datenschutzanfragen angeben.');
         $saetze = saetze_normalisieren($d['honorarsaetze'] ?? einstellungen_laden($db)['honorarsaetze']);
         $betreiber = betreiber_pruefen(einstellungen_laden($db)['betreiber'], $d['betreiber'] ?? null);
-        $speichere = $db->prepare('insert into einstellungen (schluessel, wert) values (?, ?) on conflict(schluessel) do update set wert = excluded.wert');
+        $speichere = fn ($schluessel, $wert) => upsert($db, 'einstellungen', ['schluessel' => $schluessel, 'wert' => json_text($wert)], ['schluessel']);
         transaktion($db, function () use ($speichere, $e, $kontakt, $saetze, $betreiber) {
-            $speichere->execute(['betreiber', json_text($betreiber)]);
-            $speichere->execute(['empfaenger', json_text([
+            $speichere('betreiber', $betreiber);
+            $speichere('empfaenger', [
                 'name' => kuerze(tr($e['name']), 150), 'strasse' => kuerze(tr($e['strasse'] ?? ''), 150),
                 'plz_ort' => kuerze(tr($e['plz_ort'] ?? ''), 100), 'uid' => kuerze(tr($e['uid'] ?? ''), 30),
-            ])]);
-            $speichere->execute(['datenschutzKontakt', json_text($kontakt)]);
-            $speichere->execute(['honorarsaetze', json_text($saetze)]);
+            ]);
+            $speichere('datenschutzKontakt', $kontakt);
+            $speichere('honorarsaetze', $saetze);
         });
         return true;
     }
@@ -992,10 +992,10 @@ function zurueck_an_autor(PDO $db, array $note, array $akteur): void
  */
 function verwendete_artikel(PDO $db, string $autorId, ?string $ohnePosition = null): array
 {
-    $urls = q($db, "select artikel_url u from positionen where autor_id = ? and artikel_url <> '' and id is not ?
+    $urls = q($db, "select artikel_url u from positionen where autor_id = ? and artikel_url <> '' and (? is null or id <> ?)
         union select np.artikel_url from note_positionen np join noten n on n.id = np.note_id
         where n.autor_id = ? and np.artikel_url <> '' and not (n.status = 'abgelehnt' and n.zurueckgeholt_am is not null)",
-        [$autorId, $ohnePosition, $autorId])->fetchAll(PDO::FETCH_COLUMN);
+        [$autorId, $ohnePosition, $ohnePosition, $autorId])->fetchAll(PDO::FETCH_COLUMN);
     return array_flip($urls);
 }
 

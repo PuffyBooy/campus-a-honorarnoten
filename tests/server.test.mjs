@@ -1,12 +1,10 @@
 // Tests für den Server (PHP, wie auf World4You): Rollen, Rechte, Abläufe und E-Mails über die echte HTTP-API
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { DatabaseSync } from 'node:sqlite';
 import { phpServerStarten, mailAbwarten } from './php-server.mjs';
 import { CAMPUS_A_PROFIL, campusSeiten, campusHolen } from './campus-fixtures.mjs';
 
 let php;
-let db;
 let basis;
 
 before(async () => {
@@ -15,13 +13,10 @@ before(async () => {
 });
 
 after(async () => {
-  db?.close();
   await php.stop();
   assert.deepEqual(php.fehler, [], 'keine PHP-Fehler oder Warnungen');
 });
 
-/** Direkter Zugriff auf die Datenbank-Datei des PHP-Servers */
-const datenbank = () => (db ??= new DatabaseSync(php.datenbank));
 
 /** kleiner Client mit eigenem Cookie – wie ein Browser */
 function client() {
@@ -281,7 +276,7 @@ test('Prämiensätze: Admin legt fest, alle sehen sie, ungültige Werte abgelehn
     college: { kolumne: 17.5, ausserordentlich: null, redigieren: 2 }, 'campus-a': { kolumne: 25, ausserordentlich: 80 },
   });
   // ältere Einstellungen ohne Medium gelten für beide
-  datenbank().prepare("update einstellungen set wert = ? where schluessel = 'honorarsaetze'").run(JSON.stringify({ kolumne: 16, ausserordentlich: null }));
+  php.sql("update einstellungen set wert = ? where schluessel = 'honorarsaetze'", [JSON.stringify({ kolumne: 16, ausserordentlich: null })]);
   assert.equal((await k.anna.ok('einstellungen')).honorarsaetze['campus-a'].kolumne, 16);
 });
 

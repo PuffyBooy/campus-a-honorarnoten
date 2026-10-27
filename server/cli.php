@@ -40,8 +40,7 @@ try {
             echo wert($db, 'select count(*) from nutzer'), "\n";
             break;
         case 'backup':
-            $ziel = $args[0] ?? dirname(konfiguration()['datenbank']) . '/backups/honorarnoten-' . date('Y-m-d-His') . '.sqlite';
-            sichern($db, $ziel);
+            $ziel = sichern($db, $args[0] ?? daten_ordner() . '/backups/honorarnoten-' . date('Y-m-d-His') . '.sqlite');
             echo "Sicherung erstellt: $ziel\n";
             break;
         case 'mails':

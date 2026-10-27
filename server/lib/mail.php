@@ -57,8 +57,7 @@ function mail_einstellungen_speichern(PDO $db, array $d): void
         pruefe((bool) preg_match('~^https?://[^\s/]+(/[^\s]*)?$~', $e['adresse']), 'Die Adresse der App muss mit https:// beginnen.');
         if (!str_ends_with($e['adresse'], '/')) $e['adresse'] .= '/';
     }
-    q($db, "insert into einstellungen (schluessel, wert) values ('mail', ?) on conflict(schluessel) do update set wert = excluded.wert",
-        [json_text($e)]);
+    upsert($db, 'einstellungen', ['schluessel' => 'mail', 'wert' => json_text($e)], ['schluessel']);
 }
 
 /** Mail in die Warteschlange (wird nach der Antwort verschickt). Ohne aktiven Versand passiert nichts. */

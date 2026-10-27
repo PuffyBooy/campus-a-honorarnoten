@@ -90,16 +90,29 @@ async function smtpAttrappe() {
   return { server, port: server.address().port, mails, anmeldungen };
 }
 
-/** PHP-Server starten; liefert basis, Pfad der Datenbank, cli() und stop() */
+/**
+ * PHP-Server starten; liefert basis, cli(), sql() und stop().
+ * Mit MySQL statt SQLite: HONORARE_TEST_MYSQL='{"host":"127.0.0.1","benutzer":"…","passwort":"…"}' npm test
+ * (legt für jeden Lauf eine eigene, leere Datenbank an und löscht sie danach)
+ */
 export async function phpServerStarten({ campusHolen } = {}) {
   const ordner = mkdtempSync(join(tmpdir(), 'honorare-'));
-  const datenbank = join(ordner, 'honorarnoten.sqlite');
   const campus = campusHolen ? await campusErsatz(campusHolen) : null;
   const smtp = await smtpAttrappe();
   const port = await freierPort();
-  const env = {
-    ...process.env, HONORARE_DATENBANK: datenbank, HONORARE_CAMPUS_TEST: campus?.adresse ?? '',
-  };
+  const env = { ...process.env, HONORARE_DATEN: ordner, HONORARE_CAMPUS_TEST: campus?.adresse ?? '' };
+  delete env.HONORARE_DATENBANK;
+  delete env.HONORARE_MYSQL;
+  let mysql = null;
+  if (process.env.HONORARE_TEST_MYSQL) {
+    mysql = { ...JSON.parse(process.env.HONORARE_TEST_MYSQL), name: `hn_test_${process.pid}_${Date.now()}` };
+    const { name, ...ohneName } = mysql;
+    execFileSync(PHP, ['-r', `$k = json_decode(getenv('K'), true); (new PDO('mysql:host=' . $k['host'] . ';port=' . ($k['port'] ?? 3306), $k['benutzer'], $k['passwort']))->exec('create database ${'`'}${name}${'`'} character set utf8mb4');`],
+      { env: { ...env, K: JSON.stringify(ohneName) } });
+    env.HONORARE_MYSQL = JSON.stringify(mysql);
+  } else {
+    env.HONORARE_DATENBANK = join(ordner, 'honorarnoten.sqlite');
+  }
   const php = spawn(PHP, ['-d', 'display_errors=stderr', '-d', 'log_errors=0', '-S', `127.0.0.1:${port}`, join(WURZEL, 'server/router.php')],
     { env, stdio: ['ignore', 'ignore', 'pipe'] });
   const fehler = [];
@@ -111,14 +124,18 @@ export async function phpServerStarten({ campusHolen } = {}) {
     try { await fetch(`${basis}/js/modus.js`); break; } catch { await new Promise((ok) => setTimeout(ok, 50)); }
   }
   const cli = (...args) => execFileSync(PHP, [join(WURZEL, 'server/cli.php'), ...args], { env, encoding: 'utf8' });
+  /** SQL direkt in der Datenbank des Servers (für Sonderfälle in den Tests) */
+  const sql = (anweisung, params = []) => JSON.parse(execFileSync(PHP, [join(WURZEL, 'tests/php/sql.php')],
+    { env, encoding: 'utf8', input: JSON.stringify({ sql: anweisung, params }) }));
   const stop = async () => {
     php.kill();
     smtp.server.close();
     campus?.server.close();
     await new Promise((ok) => php.once('exit', ok));
+    if (mysql) sql(`drop database \`${mysql.name}\``);
     rmSync(ordner, { recursive: true, force: true });
   };
-  return { basis, datenbank, cli, stop, smtp, fehler };
+  return { basis, cli, sql, stop, smtp, fehler, mysql: Boolean(mysql), ordner };
 }
 
 /** Wartet, bis eine passende Mail angekommen ist (die Mails gehen nach der Antwort hinaus) */

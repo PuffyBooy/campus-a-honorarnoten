@@ -11,7 +11,7 @@ Die App läuft in zwei Betriebsarten – derselbe Code, nur die Datenhaltung ist
 | | **Demo** (GitHub Pages) | **Server** (World4You-Webspace) |
 |---|---|---|
 | Wofür | Herzeigen, Ausprobieren | echter Betrieb |
-| Daten | nur im jeweiligen Browser | gemeinsame Datenbank (SQLite) auf dem Webspace |
+| Daten | nur im jeweiligen Browser | gemeinsame Datenbank (MySQL oder SQLite) auf dem Webspace |
 | Rechte | nur im Browser geprüft | auf dem Server geprüft, nicht umgehbar |
 | E-Mails | keine | automatisch (neue Prämienabrechnungen, Bestätigungen, Zugangsdaten …) |
 | Anleitung | [Ausprobieren](#ausprobieren-demo) | [Auf World4You installieren](#auf-world4you-installieren-echter-betrieb) |
@@ -159,8 +159,8 @@ dann weiterhin von Hand eintragen.
 ## Auf World4You installieren (echter Betrieb)
 
 Der Server-Teil ist in **PHP** geschrieben und läuft auf normalem Webspace mit Apache und PHP 8.1+
-– also auch auf dem **Webhosting von World4You**. Er braucht **keinen Datenbankserver** (die
-Datenbank ist eine einzelne SQLite-Datei), keine Zusatzpakete und keinen Cronjob.
+– also auch auf dem **Webhosting von World4You**. Als Datenbank nimmt er **MySQL** (bei World4You
+dabei) oder – wo verfügbar – eine einzelne SQLite-Datei. Keine Zusatzpakete, kein Cronjob.
 
 ### 1. Im World4You-Kundenbereich ([my.world4you.com](https://my.world4you.com))
 
@@ -191,9 +191,12 @@ app/daten/           Datenbank und tägliche Sicherungen (entsteht automatisch)
 
 ### 3. Einrichten
 
-`https://deine-domain.at/einrichten.php` öffnen. Die Seite prüft den Webspace (PHP-Version, SQLite,
+`https://deine-domain.at/einrichten.php` öffnen. Die Seite prüft den Webspace (PHP-Version, Datenbank,
 HTTPS, Schreibrechte) und fragt dann nach:
 
+- den **MySQL-Zugangsdaten** (Server, Name der Datenbank, Benutzer, Passwort) – stehen im
+  World4You-Kundenbereich unter **Datenbanken**; gibt es noch keine, dort zuerst eine anlegen. Die
+  Tabellen legt die App selbst an. (Fehlt nur, wenn der Webspace SQLite kann – dann braucht es nichts.)
 - **deinem Admin-Konto** (Name, E-Mail) – danach wird das **Startpasswort** angezeigt,
 - den **Zugangsdaten des E-Mail-Postfachs** (Adresse und Passwort; Server `smtp.world4you.com`,
   Port 587, STARTTLS sind schon eingetragen) und der **Antwortadresse** (optional).
@@ -248,7 +251,66 @@ Die Mails gehen über das World4You-Postfach (SMTP) hinaus, nachdem die App dem 
 geantwortet hat – niemand wartet darauf. Klappt der Versand nicht (Passwort falsch, Server kurz
 weg), wird es bis zu 5-mal erneut versucht; den letzten Fehler zeigt **Admin → E-Mail**.
 
-### Updates
+### Automatisch veröffentlichen (empfohlen)
+
+Einmal eingerichtet, kommt **jede Änderung von selbst auf den Webspace**: Sobald etwas auf `main`
+landet (z. B. ein gemergter Pull Request), testet GitHub die App und spielt sie per SSH auf
+World4You ein ([`scripts/world4you-deploy.sh`](scripts/world4you-deploy.sh)). Vorher wird die
+Datenbank gesichert, `app/daten` bleibt unangetastet. Nichts mehr von Hand hochladen.
+
+**Einmalig einrichten:**
+
+1. **Schlüssel erzeugen** – am eigenen Rechner im Terminal (Windows: PowerShell), zweimal Enter
+   drücken (ohne Passphrase):
+   ```bash
+   ssh-keygen -t ed25519 -C github-world4you -f world4you-github
+   ```
+   Das ergibt zwei Dateien: `world4you-github` (privat, geheim) und `world4you-github.pub` (öffentlich).
+2. **Öffentlichen Schlüssel bei World4You hinterlegen:** Kundenbereich → *Dein Paket → Webspace → SSH*
+   → *Public-Key hinzufügen* → den Inhalt von `world4you-github.pub` hineinkopieren. Dort stehen auch
+   **SSH-Server** und **Benutzername**.
+3. **Hauptordner herausfinden:** per SSH anmelden, in den Ordner der Domain wechseln und `pwd`
+   eingeben – das ist der Pfad (z. B. `/home/…/html`).
+4. **In GitHub eintragen:** Repository → *Settings → Secrets and variables → Actions →
+   New repository secret*:
+
+   | Name | Inhalt |
+   |---|---|
+   | `W4Y_HOST` | SSH-Server aus dem Kundenbereich |
+   | `W4Y_BENUTZER` | SSH-Benutzername |
+   | `W4Y_SSH_KEY` | kompletter Inhalt der Datei `world4you-github` (privater Schlüssel) |
+   | `W4Y_ZIEL` | Pfad des Hauptordners aus Schritt 3 |
+   | `W4Y_ADRESSE` | optional: `https://deine-domain.at` – danach wird geprüft, ob die Seite antwortet |
+
+5. Fertig. Ab jetzt: **Änderung mergen → nach 2–3 Minuten ist sie online.** Den Stand sieht man unter
+   *Actions → „Tests, Demo und Paket“* (Schritt „Auf World4You veröffentlichen“). Von Hand neu
+   veröffentlichen: dort *Run workflow*. Schlagen die Tests fehl, wird **nichts** veröffentlicht.
+
+Die private Schlüsseldatei danach sicher aufbewahren oder löschen – GitHub speichert sie verschlüsselt.
+Wird der Schlüssel nicht mehr gebraucht, im World4You-Kundenbereich wieder entfernen.
+
+### Hochladen und Updates per SSH (statt FTP)
+
+SSH gibt es bei World4You in allen Webhosting-Paketen (im Kundenbereich aktivieren; Server, Benutzer
+und Passwort stehen dort). Am eigenen Rechner im Terminal (Windows: PowerShell):
+
+```bash
+# 1. Paket auf den Webspace kopieren (landet im Home-Ordner)
+scp anerkennungspraemien-world4you.zip BENUTZER@SERVER:
+
+# 2. Anmelden und zum Hauptordner der Domain wechseln (mit ls nachsehen, wie er heißt)
+ssh BENUTZER@SERVER
+ls
+cd HAUPTORDNER
+
+# 3a. Erstes Mal: auspacken, dann im Browser /einrichten.php öffnen
+unzip -o ~/anerkennungspraemien-world4you.zip -d .
+
+# 3b. Jedes Update danach: sichert zuerst die Datenbank, lässt app/daten unangetastet
+bash app/aktualisieren.sh ~/anerkennungspraemien-world4you.zip
+```
+
+### Updates per FTP
 
 Neues Paket herunterladen und einfach drüber hochladen (alte Dateien überschreiben). **Den Ordner
 `app/daten/` nie löschen** – dort liegen Datenbank und Sicherungen. Die Datenbank wird beim ersten
@@ -256,16 +318,20 @@ Aufruf nach einem Update automatisch angepasst.
 
 ### Backups
 
-- Jeden Tag legt die App beim ersten Aufruf eine Kopie der Datenbank in `app/daten/backups/` an
-  und hebt sie 30 Tage auf. **Ab und zu per FTP auf den eigenen Rechner kopieren!**
+- Jeden Tag legt die App beim ersten Aufruf eine Sicherung in `app/daten/backups/` an und hebt sie
+  30 Tage auf – bei MySQL als `.sql`-Datei, bei SQLite als Kopie der Datenbank-Datei. **Ab und zu per
+  FTP/scp auf den eigenen Rechner kopieren!** World4You sichert MySQL-Datenbanken zusätzlich selbst.
 - Zusätzlich: **Admin → Daten → Datenexport** (JSON, enthält IBANs – vertraulich).
-- Wiederherstellen: `app/daten/honorarnoten.sqlite` per FTP durch eine Sicherung ersetzen
-  (Datei umbenennen auf `honorarnoten.sqlite`).
+- Wiederherstellen (MySQL): im World4You-Kundenbereich **phpMyAdmin** öffnen, die Datenbank wählen,
+  *Importieren* und die `.sql`-Datei hochladen (sie ersetzt alle Tabellen).
+  SQLite: `app/daten/honorarnoten.sqlite` durch eine Sicherung ersetzen.
+- Die MySQL-Zugangsdaten stehen in `app/daten/konfig.php` (per `.htaccess` gesperrt). Ändert sich das
+  Passwort der Datenbank, dort eintragen – oder die Datei löschen und `/einrichten.php` erneut öffnen.
 
 ### Passwort vergessen
 
 Andere Konten setzt der Admin unter **Admin → Benutzer → Passwort zurücksetzen** zurück. Für das
-Admin-Konto selbst per SSH (bei World4You in allen Paketen möglich, im Kundenbereich aktivieren):
+Admin-Konto selbst per SSH (im Hauptordner der Domain):
 
 ```bash
 php app/cli.php passwort deine@email.at      # neues Startpasswort
@@ -274,7 +340,8 @@ php app/cli.php testmail an@beispiel.at      # Test-E-Mail
 php app/cli.php mails                        # wartende E-Mails sofort verschicken
 ```
 
-(Falls `php` auf der Kommandozeile eine alte Version ist: `php83` bzw. `php84` verwenden.)
+Auf der Kommandozeile ist `php` bei World4You oft eine alte Version – mit `php -v` prüfen und sonst
+`php84` bzw. `php83` statt `php` schreiben. Sicherungen holen: `scp -r BENUTZER@SERVER:HAUPTORDNER/app/daten/backups .`
 
 ### Andere Webspaces
 
@@ -339,6 +406,7 @@ npm run dev          # Demo lokal auf Port 5173
 npm run dev:server   # Server-Modus lokal auf Port 3000 (braucht PHP 8.1+)
 npm test             # alle Tests: Hilfsfunktionen, Server (Rechte, Abläufe, Schutz, E-Mails)
 HONORARE_PHP=php8.1 npm test   # dieselben Tests mit einer anderen PHP-Version
+HONORARE_TEST_MYSQL='{"host":"127.0.0.1","benutzer":"…","passwort":"…"}' npm test   # Server-Tests mit MySQL
 npm run paket        # Paket für World4You bauen
 bash scripts/vendor.sh   # JSZip und pdf-lib aktualisieren
 ```

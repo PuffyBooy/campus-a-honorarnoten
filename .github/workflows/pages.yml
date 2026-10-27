@@ -12,9 +12,10 @@ permissions:
   pages: write
   id-token: write
 
+# nie mitten in einer Veröffentlichung abbrechen – neue Läufe warten
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   test:
@@ -27,9 +28,14 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.1'
-          extensions: pdo_sqlite, mbstring, curl, openssl
+          extensions: pdo_sqlite, pdo_mysql, mbstring, curl, openssl
           coverage: none
       - run: npm test
+      # dieselben Tests noch einmal mit MySQL (wie bei World4You); MySQL ist auf dem Runner vorinstalliert
+      - run: sudo systemctl start mysql
+      - run: npm test
+        env:
+          HONORARE_TEST_MYSQL: '{"host":"127.0.0.1","benutzer":"root","passwort":"root"}'
 
   # Paket zum Hochladen auf World4You (unter Actions -> dieser Lauf -> Artifacts herunterladen)
   world4you:
@@ -43,6 +49,33 @@ jobs:
           name: honorarnoten-world4you
           path: dist/world4you/
           include-hidden-files: true
+
+  # Automatisch auf World4You veröffentlichen – sobald die Zugangsdaten als Secrets hinterlegt sind
+  # (Anleitung: README → „Automatisch veröffentlichen“). Ohne Secrets wird der Schritt übersprungen.
+  world4you-veroeffentlichen:
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      W4Y_HOST: ${{ secrets.W4Y_HOST }}
+      W4Y_BENUTZER: ${{ secrets.W4Y_BENUTZER }}
+      W4Y_SSH_KEY: ${{ secrets.W4Y_SSH_KEY }}
+      W4Y_ZIEL: ${{ secrets.W4Y_ZIEL || vars.W4Y_ZIEL }}
+      W4Y_PORT: ${{ secrets.W4Y_PORT || vars.W4Y_PORT }}
+      W4Y_ADRESSE: ${{ secrets.W4Y_ADRESSE || vars.W4Y_ADRESSE }}
+    steps:
+      - name: Zugangsdaten vorhanden?
+        id: pruefen
+        run: |
+          if [ -n "$W4Y_HOST" ] && [ -n "$W4Y_BENUTZER" ] && [ -n "$W4Y_SSH_KEY" ] && [ -n "$W4Y_ZIEL" ]; then
+            echo "an=1" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::Keine World4You-Zugangsdaten hinterlegt – Veröffentlichen übersprungen (README → Automatisch veröffentlichen)."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.pruefen.outputs.an == '1'
+      - name: Auf World4You veröffentlichen
+        if: steps.pruefen.outputs.an == '1'
+        run: scripts/world4you-deploy.sh "${GITHUB_SHA::8}"
 
   deploy:
     needs: test

@@ -11,10 +11,19 @@ Anerkennungsprämien – Paket für World4You
    der Domain hochladen – auch die versteckten Dateien ".htaccess" (in FileZilla:
    Server -> Versteckte Dateien anzeigen).
 
-3. Im Browser https://deine-domain.at/einrichten.php öffnen, Admin-Konto anlegen und
-   die Zugangsdaten des E-Mail-Postfachs eintragen. Fertig.
+3. Im Browser https://deine-domain.at/einrichten.php öffnen und eintragen:
+   - die MySQL-Zugangsdaten (Kundenbereich -> Datenbanken; ggf. zuerst eine Datenbank anlegen),
+   - dein Admin-Konto,
+   - das E-Mail-Postfach office@… mit Passwort. Fertig.
 
-Updates: neues Paket hochladen und die alten Dateien überschreiben. Der Ordner app/daten
+Mit SSH statt FTP:
+   scp anerkennungspraemien-world4you.zip BENUTZER@SERVER:
+   ssh BENUTZER@SERVER   und dann im Hauptordner der Domain:
+   erstes Mal:  unzip -o ~/anerkennungspraemien-world4you.zip -d .
+   Updates:     bash app/aktualisieren.sh ~/anerkennungspraemien-world4you.zip
+                (sichert vorher die Datenbank, lässt app/daten unangetastet)
+
+Updates per FTP: neues Paket hochladen und die alten Dateien überschreiben. Der Ordner app/daten
 (Datenbank und Sicherungen) bleibt dabei erhalten – NIE löschen!
 
 Tägliche Sicherungen liegen in app/daten/backups (30 Tage). Ab und zu per FTP auf den
