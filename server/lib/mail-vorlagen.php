@@ -237,7 +237,7 @@ function mail_abgelehnt_autor(PDO $db, array $note, string $grund): array
         'vorschau' => 'Die Redaktion hat deine Prämienabrechnung zurückgegeben: ' . kuerze($grund, 80),
         'titel' => 'Bitte überarbeite deine Prämienabrechnung',
         'medium' => $note['medium'],
-        'absaetze' => ["Hallo $vorname,", 'die Redaktion hat deine Prämienabrechnung zurückgegeben. Die Leistungen stehen wieder unter „Meine Leistungen“ – dort kannst du sie korrigieren und neu abschicken.'],
+        'absaetze' => ["Hallo $vorname,", 'die Redaktion hat deine Prämienabrechnung zurückgegeben. Die Leistungen stehen wieder unter „Mein Monat“ – dort kannst du sie korrigieren und neu abschicken.'],
         'hinweis' => ["Begründung der Redaktion:\n$grund", 'gefahr'],
         'tabelle' => [['Prämienabrechnung', $note['nummer']]],
         'knopf' => ['Leistungen überarbeiten', app_link($db, 'leistungen')],

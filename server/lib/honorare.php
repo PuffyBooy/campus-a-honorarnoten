@@ -204,7 +204,7 @@ final class Honorare
     public const FUNKTIONEN = [
         'aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'erstesPasswortSetzen', 'passwortAendern',
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'meineArtikel',
-        'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen',
+        'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'kommentieren', 'kommentare', 'verlaufVon',
         'offeneZahlungen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
@@ -537,6 +537,26 @@ final class Honorare
             pruefe($note['status'] === 'abgelehnt', 'Nur abgelehnte Prämienabrechnungen können überarbeitet werden.');
             pruefe(!$note['zurueckgeholt_am'], 'Die Leistungen wurden bereits zurückgeholt.');
             zurueck_an_autor($db, $note, $n);
+            return true;
+        });
+    }
+
+    /**
+     * Abgeschickte Prämienabrechnung zurückziehen, solange die Redaktion sie noch nicht angenommen hat: die Leistungen
+     * kommen zurück zu den gespeicherten Leistungen, die Abrechnung verschwindet (Vermerk im Löschprotokoll).
+     */
+    public function abrechnungZurueckziehen(mixed $noteId = null): bool
+    {
+        $db = $this->db();
+        $n = brauche($this->ctx, 'autor');
+        return transaktion($db, function () use ($db, $n, $noteId) {
+            $note = note_holen($db, $noteId);
+            pruefe($note['autor_id'] === $n['id'], 'Dafür fehlt dir die Berechtigung.', 403);
+            pruefe($note['status'] === 'eingereicht', 'Diese Prämienabrechnung wurde schon geprüft und kann nicht mehr zurückgezogen werden. Bitte schreib der Redaktion.');
+            zurueck_an_autor($db, ['ablehnungsgrund' => ''] + $note, $n);
+            q($db, 'delete from noten where id = ?', [$note['id']]);
+            q($db, 'insert into loeschprotokoll (id, nummer, geloescht_von, am) values (?, ?, ?, ?)',
+                [neue_id(), $note['nummer'], anzeigename($n) . ' (zurückgezogen)', jetzt()]);
             return true;
         });
     }
@@ -967,7 +987,7 @@ function zugang_melden(PDO $db, array $z, bool $neu = true): array
 }
 
 /**
- * Leistungen einer abgelehnten Note zurück in „Meine Leistungen“ der Autor:in (mit eingereichtem Betrag,
+ * Leistungen einer abgelehnten Note zurück in „Mein Monat“ der Autor:in (mit eingereichtem Betrag,
  * Medium, Artikel-Link und der Begründung als Hinweis). Die Note gilt danach als zurückgeholt.
  */
 function zurueck_an_autor(PDO $db, array $note, array $akteur): void

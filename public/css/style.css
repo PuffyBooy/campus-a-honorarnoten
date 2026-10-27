@@ -508,3 +508,37 @@ body.modus-demo .fuss-demo { display: block; }
 .medium-fest { margin: 0 0 .5rem; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }
 .demo-frisch { border-color: var(--marke); border-style: dashed; }
 .zurueck-hinweis { display: inline-block; margin: .15rem 0; padding: .1rem .45rem; border-radius: 6px; font-size: .8rem; background: var(--gefahr-hell); color: #7a1a12; }
+
+/* ---- Mein Monat: Kennzahlen, Verlauf, Bestätigungsdialog */
+.h1-zusatz { font-weight: 400; color: var(--text-leise); font-size: .8em; margin-left: .35rem; }
+.kennzahlen { display: grid; gap: .75rem; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); margin-bottom: 1rem; }
+.kennzahl {
+  display: flex; flex-direction: column; gap: .15rem; background: var(--flaeche); border-radius: var(--radius);
+  box-shadow: var(--schatten); padding: .9rem 1.1rem;
+}
+.kennzahl strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.kennzahl-titel { font-size: .8rem; font-weight: 600; color: var(--text-leise); }
+.kennzahl-marke { background: var(--marke); color: #fff; }
+.kennzahl-marke .kennzahl-titel, .kennzahl-marke .klein { color: rgb(255 255 255 / 85%); }
+.kennzahl-wahl select { margin-top: .25rem; }
+.monat-hinweis { font-size: .9rem; }
+.unterwegs h2 { margin: 0; }
+.schritte { list-style: none; display: flex; flex-wrap: wrap; gap: .35rem; padding: 0; margin: .5rem 0; font-size: .8rem; }
+.schritte li {
+  display: flex; align-items: center; gap: .3rem; padding: .2rem .6rem; border-radius: 999px;
+  background: #eef2f1; color: var(--text-leise);
+}
+.schritte .schritt-erledigt { background: var(--marke-hell); color: var(--marke-dunkel); font-weight: 600; }
+.schritte .schritt-erledigt::after { content: "✓"; }
+.schritte .schritt-jetzt { background: var(--warnung-hell); color: var(--warnung); font-weight: 700; box-shadow: inset 0 0 0 1.5px currentColor; }
+.schritte .schritt-fehler { background: var(--gefahr-hell); color: var(--gefahr); font-weight: 600; }
+.dialog {
+  border: 0; border-radius: var(--radius); padding: 1.25rem; width: min(560px, calc(100vw - 2rem));
+  box-shadow: 0 10px 40px rgb(0 0 0 / 25%); color: var(--text); background: var(--flaeche);
+}
+.dialog::backdrop { background: rgb(15 40 38 / 45%); }
+.dialog h2 { margin-top: 0; }
+.dialog-inhalt { max-height: 60vh; overflow: auto; }
+.dialog-aktionen { justify-content: flex-end; margin-bottom: 0; }
+.dialog-liste { list-style: none; padding: 0; margin: .75rem 0; border-top: 1px solid var(--rand); }
+.dialog-liste li { display: flex; justify-content: space-between; gap: 1rem; padding: .45rem 0; border-bottom: 1px solid var(--rand); }

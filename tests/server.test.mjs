@@ -250,6 +250,24 @@ test('Abgelehnte Note überarbeiten', async () => {
   assert.equal(neu.positionen[0].titel, 'Graz (korrigiert)');
 });
 
+test('Abgeschickte Note zurückziehen, solange sie nicht angenommen ist', async () => {
+  await k.bert.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Leoben', veroeffentlichung: '2026-09-05', betrag: 15 });
+  const ids = (await k.bert.ok('meineLeistungen')).map((p) => p.id);
+  const note = await k.bert.ok('abrechnungAbschicken', ids);
+  assert.equal((await k.rita.aufruf('abrechnungZurueckziehen', note.id)).status, 403);
+  await k.bert.ok('abrechnungZurueckziehen', note.id);
+  assert.ok(!(await k.bert.ok('meineNoten')).some((n) => n.id === note.id), 'die Abrechnung ist weg');
+  assert.equal((await k.rita.aufruf('note', note.id)).status, 404);
+  const zurueck = await k.bert.ok('meineLeistungen');
+  assert.deepEqual(zurueck.map((p) => [p.titel, p.zurueck_nummer, p.zurueck_grund]), [['Leoben', note.nummer, '']]);
+  assert.ok((await k.admin.ok('loeschprotokoll')).some((l) => l.nummer === note.nummer && /zurückgezogen/.test(l.geloescht_von)));
+  // neu einreichen: die Nummer wird wieder verwendet, weil es die letzte war
+  const neu = await k.bert.ok('abrechnungAbschicken', zurueck.map((p) => p.id));
+  assert.equal(neu.nummer, note.nummer);
+  await k.rita.ok('annehmen', neu.id);
+  assert.match((await k.bert.aufruf('abrechnungZurueckziehen', neu.id)).fehler, /schon geprüft/);
+});
+
 test('Admin: Rollen, letzter Admin, Deaktivieren beendet Sitzungen', async () => {
   const ich = await k.admin.ok('aktuellerNutzer');
   assert.match((await k.admin.aufruf('rollenSetzen', ich.id, ['autor'])).fehler, /Admin-Konto/);

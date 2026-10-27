@@ -45,7 +45,7 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
         </fieldset>
         <fieldset>
           <legend>Profil auf der Webseite</legend>
-          <p class="hinweis">Mindestens einen Link angeben. „Meine Leistungen“ zeigt dann alle deine Artikel zum Übernehmen an.</p>
+          <p class="hinweis">Mindestens einen Link angeben. „Mein Monat“ zeigt dann alle deine Artikel zum Übernehmen an.</p>
           ${MEDIUM_KEYS.map((m) => feld(PROFIL_FELD[m], `${MEDIEN[m].seite} (${MEDIEN[m].name})`, profilLink(p[PROFIL_FELD[m]], m), {
             typ: 'url',
             pflicht: false,

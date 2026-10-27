@@ -585,7 +585,7 @@ export function meineNoten() {
 
 /** Abgelehnte Note: Leistungen zurück in die Entwürfe holen, um sie korrigiert neu abzuschicken */
 /**
- * Leistungen einer abgelehnten Note zurück in „Meine Leistungen“ der Autor:in (mit eingereichtem Betrag,
+ * Leistungen einer abgelehnten Note zurück in „Mein Monat“ der Autor:in (mit eingereichtem Betrag,
  * Medium, Artikel-Link und der Begründung als Hinweis). Die Note gilt danach als zurückgeholt.
  */
 function zurueckAnAutor(note, akteur) {
@@ -611,6 +611,20 @@ export function leistungenZurueckholen(noteId) {
   pruefe(note.status === 'abgelehnt', 'Nur abgelehnte Prämienabrechnungen können überarbeitet werden.');
   pruefe(!note.zurueckgeholt_am, 'Die Leistungen wurden bereits zurückgeholt.');
   zurueckAnAutor(note, n);
+  speichern();
+}
+
+/** Abgeschickte Prämienabrechnung zurückziehen, solange die Redaktion sie noch nicht angenommen hat */
+export function abrechnungZurueckziehen(noteId) {
+  const n = brauche('autor');
+  const note = noteHolen(noteId);
+  pruefe(note.autor_id === n.id, 'Dafür fehlt dir die Berechtigung.');
+  pruefe(note.status === 'eingereicht', 'Diese Prämienabrechnung wurde schon geprüft und kann nicht mehr zurückgezogen werden. Bitte schreib der Redaktion.');
+  zurueckAnAutor({ ...note, ablehnungsgrund: '' }, n);
+  db.noten = db.noten.filter((y) => y.id !== noteId);
+  db.kommentare = db.kommentare.filter((k) => k.note_id !== noteId);
+  db.verlauf = db.verlauf.filter((v) => v.note_id !== noteId);
+  db.loeschprotokoll.push({ id: id(), nummer: note.nummer, geloescht_von: `${anzeigename(n)} (zurückgezogen)`, am: jetzt() });
   speichern();
 }
 

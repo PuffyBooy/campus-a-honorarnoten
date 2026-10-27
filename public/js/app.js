@@ -27,7 +27,7 @@ const banner = document.getElementById('banner');
 let flash = null;
 
 const ROUTEN = [
-  { pfad: 'leistungen', view: leistungen, rolle: ['autor'], titel: 'Meine Leistungen' },
+  { pfad: 'leistungen', view: leistungen, rolle: ['autor'], titel: 'Mein Monat' },
   { pfad: 'noten', view: noten, rolle: ['autor'], titel: 'Meine Abrechnungen' },
   { pfad: 'extern', view: generator, rolle: ['autor'], titel: 'Externe Honorarnote' },
   { pfad: 'redaktion', view: redaktion, rolle: ['redaktion', 'admin'], titel: 'Redaktion' },
