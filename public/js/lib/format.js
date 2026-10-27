@@ -17,7 +17,7 @@ const ART_LABEL = {
 
 export const KATEGORIE_LABEL = {
   kolumne: 'Kolumne',
-  ausserordentlich: 'Außerordentliches Honorar',
+  ausserordentlich: 'Außerordentliche Anerkennungsprämie',
   redigieren: 'Redigieren',
 };
 
@@ -62,7 +62,7 @@ export function formatBetragPlain(betrag) {
   return zahl.format(Number(betrag));
 }
 
-/** 1234.5 -> "1.234,50" (für die Honorarnote) */
+/** 1234.5 -> "1.234,50" (für die Prämienabrechnung) */
 export function formatBetragDokument(betrag) {
   const [ganz, komma] = Number(betrag).toFixed(2).split('.');
   return `${ganz.replace(/\B(?=(\d{3})+(?!\d))/g, '.')},${komma}`;
@@ -120,8 +120,8 @@ export function esc(value) {
 }
 
 /**
- * „Art“ einer Leistung für die Anzeige: bei Kolumnen die Art der Kolumne, sonst die Art des
- * Honorars (freier Text; ältere Einträge mit festen Werten wie „foto“ werden schön benannt).
+ * „Art“ einer Leistung für die Anzeige: bei Kolumnen die Art der Kolumne, sonst die Art der
+ * Anerkennungsprämie (freier Text; ältere Einträge mit festen Werten wie „foto“ werden schön benannt).
  */
 export function artText(p) {
   if (p.kategorie === 'redigieren') return textAnzahl(p.anzahl);
@@ -132,8 +132,8 @@ export function artText(p) {
 export const textAnzahl = (n) => `${Number(n) || 0} ${Number(n) === 1 ? 'Text' : 'Texte'}`;
 
 /**
- * Bezeichnung einer Redigier-Leistung auf der Honorarnote (Word und PDF, bei den außerordentlichen
- * Honoraren): immer mit Anzahl der Texte, z. B. „Redigieren (7 Texte)“ oder „Redigieren September (7 Texte)“
+ * Bezeichnung einer Redigier-Leistung auf der Prämienabrechnung (Word und PDF, bei den außerordentlichen
+ * Anerkennungsprämien): immer mit Anzahl der Texte, z. B. „Redigieren (7 Texte)“ oder „Redigieren September (7 Texte)“
  */
 export function redigierText(p) {
   const anzahl = `Redigieren (${textAnzahl(p.anzahl)})`;
@@ -141,7 +141,7 @@ export function redigierText(p) {
   return /^redigier/i.test(p.titel) ? `${p.titel} (${textAnzahl(p.anzahl)})` : `${anzahl}: ${p.titel}`;
 }
 
-/** Freitext für Art der Kolumne / Art des Honorars: Leerraum zusammenfassen, max. 100 Zeichen */
+/** Freitext für Art der Kolumne / Art der Anerkennungsprämie: Leerraum zusammenfassen, max. 100 Zeichen */
 export function artNormalisieren(text) {
   return String(text ?? '').replace(/\s+/g, ' ').trim().slice(0, 100);
 }
@@ -150,7 +150,7 @@ export function vollerName(note) {
   return `${note.vorname ?? ''} ${note.nachname ?? ''}`.trim();
 }
 
-/** Positionen für „2. Außerordentliche Honorare“ – Redigieren steht dort mit der Anzahl der Texte. */
+/** Positionen für „2. Außerordentliche Anerkennungsprämien“ – Redigieren steht dort mit der Anzahl der Texte. */
 export function ausserordentlichePositionen(positionen) {
   return positionen
     .filter((p) => p.kategorie === 'ausserordentlich' || p.kategorie === 'redigieren')

@@ -1,0 +1,23 @@
+Anerkennungsprämien – Paket für World4You
+==================================
+
+1. Im World4You-Kundenbereich (my.world4you.com):
+   - SSL-Zertifikat für die Domain aktivieren (kostenlos).
+   - PHP-Version 8.1 oder neuer wählen (Webspace -> Einstellungen).
+   - Ein E-Mail-Postfach für den Versand anlegen: office@deine-domain.at
+     (eine zweite Adresse, z. B. kontakt@…, kann Antworten bekommen).
+
+2. ALLE Dateien und Ordner aus diesem Paket per FTP (z. B. FileZilla) in den Hauptordner
+   der Domain hochladen – auch die versteckten Dateien ".htaccess" (in FileZilla:
+   Server -> Versteckte Dateien anzeigen).
+
+3. Im Browser https://deine-domain.at/einrichten.php öffnen, Admin-Konto anlegen und
+   die Zugangsdaten des E-Mail-Postfachs eintragen. Fertig.
+
+Updates: neues Paket hochladen und die alten Dateien überschreiben. Der Ordner app/daten
+(Datenbank und Sicherungen) bleibt dabei erhalten – NIE löschen!
+
+Tägliche Sicherungen liegen in app/daten/backups (30 Tage). Ab und zu per FTP auf den
+eigenen Rechner kopieren.
+
+Mehr dazu in der README auf GitHub: https://github.com/PuffyBooy/campus-a-honorarnoten

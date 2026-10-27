@@ -12,6 +12,8 @@ import * as redaktionDetail from './views/redaktion-detail.js';
 import * as zahlung from './views/zahlung.js';
 import * as admin from './views/admin.js';
 import * as generator from './views/generator.js';
+import * as rechtlichesSeite from './views/rechtliches.js';
+import { hinweisHtml, hinweisOffen } from './lib/rechtliches.js';
 
 // Demo: Daten im Browser (store.js). Server: Daten über die API (api.js).
 const IST_DEMO = MODUS !== 'server';
@@ -21,11 +23,12 @@ const demoDaten = demoModul?.demoDaten ?? null;
 
 const main = document.getElementById('app');
 const nav = document.getElementById('nav');
+const banner = document.getElementById('banner');
 let flash = null;
 
 const ROUTEN = [
   { pfad: 'leistungen', view: leistungen, rolle: ['autor'], titel: 'Meine Leistungen' },
-  { pfad: 'noten', view: noten, rolle: ['autor'], titel: 'Meine Honorarnoten' },
+  { pfad: 'noten', view: noten, rolle: ['autor'], titel: 'Meine Prämienabrechnungen' },
   { pfad: 'extern', view: generator, rolle: ['autor'], titel: 'Externe Honorarnote' },
   { pfad: 'redaktion', view: redaktion, rolle: ['redaktion', 'admin'], titel: 'Redaktion' },
   { pfad: 'redaktion/:id', view: redaktionDetail, rolle: ['redaktion', 'admin'] },
@@ -121,6 +124,26 @@ async function renderNav(nutzer, pfad) {
 
 let renderZaehler = 0;
 
+/**
+ * Hinweis „Betreiber nicht bei campus a angestellt“: nach dem Anmelden oben, bis er zur Kenntnis genommen
+ * wurde (beim Konto einrichten steht er im Formular). Ändern sich die Angaben, erscheint er erneut.
+ */
+function hinweisBanner(nutzer, recht) {
+  const zeigen = recht && nutzer && !kontoEinrichten(nutzer) && hinweisOffen(nutzer, recht.betreiber);
+  banner.innerHTML = zeigen ? `<aside class="hinweis-betreiber" role="note"><span>${hinweisHtml(recht)}</span>
+    <button type="button" class="btn btn-klein" id="hinweis-ok">Zur Kenntnis genommen</button></aside>` : '';
+  banner.querySelector('#hinweis-ok')?.addEventListener('click', async (ev) => {
+    ev.currentTarget.disabled = true;
+    try {
+      await store.hinweisBestaetigen();
+      banner.innerHTML = '';
+    } catch (e) {
+      ev.currentTarget.disabled = false;
+      alert(fehlerText(e));
+    }
+  });
+}
+
 async function render() {
   const lauf = ++renderZaehler;
   const pfad = aktuellerPfad();
@@ -135,9 +158,20 @@ async function render() {
   }
   if (lauf !== renderZaehler) return; // inzwischen wurde neu navigiert
   await renderNav(nutzer, pfad);
+  // Impressum und Datenschutz: für alle lesbar, auch ohne Anmeldung
+  const recht = await Promise.resolve(store.rechtliches()).catch(() => null);
+  if (lauf !== renderZaehler) return;
+  hinweisBanner(nutzer, recht);
+  if (pfad === 'impressum' || pfad === 'datenschutz') {
+    ladeAnzeige(main);
+    await rechtlichesSeite.render(main, { store, istDemo: IST_DEMO, seite: pfad, angemeldet: Boolean(nutzer) }).catch((e) => {
+      main.innerHTML = `<section class="karte fehlerbox" role="alert"><p>${esc(fehlerText(e))}</p></section>`;
+    });
+    return;
+  }
 
   if (!nutzer) {
-    login.render(main, { store, istDemo: IST_DEMO, nachAnmeldung: (ziel) => {
+    login.render(main, { store, istDemo: IST_DEMO, recht, nachAnmeldung: (ziel) => {
       history.replaceState(null, '', ziel ? '#/' + ziel : location.pathname + location.search);
       render();
     } });
@@ -149,6 +183,7 @@ async function render() {
     einrichtung.render(main, {
       store,
       nutzer,
+      recht,
       weiter: () => {
         const ziel = startseite(nutzer);
         if (aktuellerPfad() === ziel) render();

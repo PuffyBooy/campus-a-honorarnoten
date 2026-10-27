@@ -1,13 +1,14 @@
-// Admin-Terminal: Benutzer & Rollen, Honorarnoten löschen, Einstellungen, Datensicherung
+// Admin-Terminal: Benutzer & Rollen, Prämienabrechnungen löschen, Einstellungen, Datensicherung
 import {
   ROLLEN_LABEL, STATUS_LABEL, esc, formatBetragPlain, formatEuro, formatMonat, formatZeitpunkt, parseBetrag, vollerName,
 } from '../lib/format.js';
 import { downloadText } from '../lib/csv.js';
 import { MEDIEN, MEDIUM_KEYS } from '../lib/campus.js';
 import { fehlerText, kopierenMitFeedback, meldung, mitSperre, statusBadge } from '../lib/ui.js';
+import { STANDARD_HOSTER, betreiberOder } from '../lib/rechtliches.js';
 
 const REITER = {
-  anfragen: 'Anfragen', benutzer: 'Benutzer', noten: 'Honorarnoten', einstellungen: 'Einstellungen', daten: 'Daten',
+  anfragen: 'Anfragen', benutzer: 'Benutzer', noten: 'Prämienabrechnungen', einstellungen: 'Einstellungen', mail: 'E-Mail', daten: 'Daten',
 };
 
 // Zuletzt erzeugte Zugangsdaten – bleiben sichtbar, bis der Admin sie wegklickt
@@ -15,17 +16,18 @@ let zugangsdaten = null;
 
 function zugangsText(z) {
   const adresse = location.origin + location.pathname;
-  return `Hallo ${z.vorname},\n\ndein Zugang zu den Honorarnoten von campus a college ist bereit.\n\n`
+  return `Hallo ${z.vorname},\n\ndein Zugang zu den Anerkennungsprämien von campus a college ist bereit.\n\n`
     + `Adresse: ${adresse}\nE-Mail: ${z.email}\nStartpasswort: ${z.passwort}\n\n`
     + 'Beim ersten Anmelden legst du dein eigenes Passwort fest.\n\nLiebe Grüße\ndeine Redaktion';
 }
 
 function zugangsdatenHtml(z) {
-  const mailto = `mailto:${encodeURIComponent(z.email)}?subject=${encodeURIComponent('Dein Zugang zu den Honorarnoten')}`
+  const mailto = `mailto:${encodeURIComponent(z.email)}?subject=${encodeURIComponent('Dein Zugang zu den Anerkennungsprämien')}`
     + `&body=${encodeURIComponent(zugangsText(z))}`;
   return `
     <section class="karte zugangsdaten" role="status">
       <h2>Zugangsdaten für ${esc(z.vorname)}</h2>
+      ${z.mail ? `<p class="erfolgbox">Die Zugangsdaten werden automatisch per E-Mail an ${esc(z.email)} geschickt.</p>` : ''}
       <p>Das Startpasswort wird nur jetzt angezeigt.</p>
       <div class="kopierblock">
         <div class="kopierzeile"><span class="kopier-label">E-Mail</span><span class="kopier-wert">${esc(z.email)}</span><span></span></div>
@@ -34,7 +36,7 @@ function zugangsdatenHtml(z) {
           <button type="button" class="btn btn-klein" data-z="pw">Kopieren</button></div>
       </div>
       <div class="aktionen">
-        <a class="btn btn-primaer" href="${esc(mailto)}">E-Mail vorbereiten</a>
+        <a class="btn${z.mail ? '' : ' btn-primaer'}" href="${esc(mailto)}">E-Mail vorbereiten</a>
         <button type="button" class="btn" data-z="text">Text kopieren</button>
         <button type="button" class="btn" data-z="fertig">Erledigt</button>
       </div>
@@ -197,7 +199,7 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
       versuche(() => store.nutzerAktivSetzen(n.id, !n.aktiv), n.aktiv ? 'Konto deaktiviert.' : 'Konto aktiviert.', neuLaden);
     } else if (knopf.dataset.aktion === 'loeschen') {
       if (!confirm(`Konto von ${vollerName(n)} löschen?\n\nGespeicherte, nicht abgeschickte Leistungen werden mitgelöscht. `
-        + 'Abgeschickte Honorarnoten bleiben für die Buchhaltung erhalten.')) return;
+        + 'Abgeschickte Prämienabrechnungen bleiben für die Buchhaltung erhalten.')) return;
       versuche(() => store.nutzerLoeschen(n.id), 'Konto gelöscht.', neuLaden);
     } else if (knopf.dataset.aktion === 'pw') {
       if (!confirm(`Passwort von ${vollerName(n)} zurücksetzen? Es wird ein neues Startpasswort erzeugt.`)) return;
@@ -224,8 +226,8 @@ async function noten(inhalt, { store, neuLaden }) {
           <td data-label="Betrag" class="rechts">${esc(formatEuro(n.betrag))}</td>
           <td data-label="Status">${statusBadge(n.status)}</td>
           <td data-label=""><button type="button" class="btn btn-klein btn-gefahr" data-loeschen>Löschen</button></td>
-        </tr>`).join('')}</tbody></table>` : '<section class="karte"><p>Keine Honorarnoten vorhanden.</p></section>'}
-    <p class="tipp">Löschen ist endgültig – bezahlte Honorarnoten vorher sichern.</p>
+        </tr>`).join('')}</tbody></table>` : '<section class="karte"><p>Keine Prämienabrechnungen vorhanden.</p></section>'}
+    <p class="tipp">Löschen ist endgültig – bezahlte Prämienabrechnungen vorher sichern.</p>
     <section class="karte">
       <h2>Löschprotokoll</h2>
       ${protokoll.length ? `<ul class="verlauf">${protokoll.map((p) => `<li><strong class="nummer">${esc(p.nummer)}</strong>
@@ -244,6 +246,7 @@ async function noten(inhalt, { store, neuLaden }) {
 
 async function einstellungen(inhalt, { store, neuLaden }) {
   const e = await store.einstellungen();
+  const b = betreiberOder(e.betreiber);
   inhalt.innerHTML = `
     <form class="karte" id="e-form" novalidate>
       <h2>Rechnungsempfänger</h2>
@@ -251,7 +254,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <label for="e-strasse">Straße und Hausnummer</label><input id="e-strasse" name="strasse" value="${esc(e.empfaenger.strasse)}">
       <label for="e-plz">PLZ und Ort</label><input id="e-plz" name="plz_ort" value="${esc(e.empfaenger.plz_ort)}">
       <label for="e-uid">UID-Nummer</label><input id="e-uid" name="uid" value="${esc(e.empfaenger.uid)}">
-      <h2 class="abstand-oben">Honorarsätze</h2>
+      <h2 class="abstand-oben">Prämiensätze</h2>
       <p class="tipp">Wird als Betrag vorausgefüllt, getrennt für campus a college und campus a. Leer = kein Standardsatz.</p>
       ${MEDIUM_KEYS.map((m) => {
         const s = e.honorarsaetze?.[m] ?? {};
@@ -261,7 +264,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <div class="zeile">
         <div class="feld"><label for="e-satz-${m}-kolumne">Kolumne (EUR)</label>
           <input id="e-satz-${m}-kolumne" name="satz_${m}_kolumne" inputmode="decimal" autocomplete="off" value="${wert('kolumne')}"></div>
-        <div class="feld"><label for="e-satz-${m}-ausser">Außerordentliches Honorar (EUR)</label>
+        <div class="feld"><label for="e-satz-${m}-ausser">Außerordentliche Anerkennungsprämie (EUR)</label>
           <input id="e-satz-${m}-ausser" name="satz_${m}_ausserordentlich" inputmode="decimal" autocomplete="off" placeholder="individuell"
                  value="${wert('ausserordentlich')}"></div>
         ${Object.hasOwn(s, 'redigieren') ? `
@@ -273,6 +276,29 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <h2 class="abstand-oben">Datenschutz</h2>
       <label for="e-kontakt">Kontakt für Datenschutzanfragen (E-Mail)</label>
       <input id="e-kontakt" name="kontakt" type="email" value="${esc(e.datenschutzKontakt)}">
+      <h2 class="abstand-oben" id="betreiber">Betreiber der App (Impressum und Datenschutz)</h2>
+      <p class="tipp">Daraus entstehen <a href="#/impressum" target="_blank">Impressum</a> und
+        <a href="#/datenschutz" target="_blank">Datenschutzerklärung</a>. Die Texte sind eine Vorlage, keine
+        Rechtsberatung – am besten einmal prüfen lassen.</p>
+      <label for="e-b-name">Name (Person oder Verein, der die App betreibt)</label>
+      <input id="e-b-name" name="b_name" maxlength="150" value="${esc(b.name)}">
+      <label for="e-b-anschrift">Anschrift</label>
+      <textarea id="e-b-anschrift" name="b_anschrift" rows="2" maxlength="300">${esc(b.anschrift)}</textarea>
+      <div class="zeile">
+        <div class="feld"><label for="e-b-email">E-Mail</label><input id="e-b-email" name="b_email" type="email" value="${esc(b.email)}"></div>
+        <div class="feld"><label for="e-b-telefon">Telefon <span class="optional">(optional)</span></label>
+          <input id="e-b-telefon" name="b_telefon" maxlength="50" value="${esc(b.telefon)}"></div>
+      </div>
+      <label class="check bestaetigen"><input type="checkbox" name="b_extern" ${b.extern ? 'checked' : ''}>
+        Der Betreiber ist <strong>nicht</strong> bei der ${esc(e.empfaenger.name || 'campus a Medien GmbH')} angestellt – alle
+        bekommen einen Hinweis, den sie zur Kenntnis nehmen müssen.</label>
+      <label for="e-b-hoster">Hosting</label>
+      <input id="e-b-hoster" name="b_hoster" maxlength="300" value="${esc(b.hoster)}" placeholder="${esc(STANDARD_HOSTER)}">
+      <label for="e-b-zi">Zusätzlicher Text fürs Impressum <span class="optional">(optional)</span></label>
+      <textarea id="e-b-zi" name="b_zusatz_impressum" rows="2" maxlength="5000">${esc(b.zusatz_impressum)}</textarea>
+      <label for="e-b-zd">Zusätzlicher Text für die Datenschutzerklärung <span class="optional">(optional)</span></label>
+      <textarea id="e-b-zd" name="b_zusatz_datenschutz" rows="2" maxlength="5000">${esc(b.zusatz_datenschutz)}</textarea>
+      <p class="tipp">Ändern sich Name, Anschrift, Hosting oder „nicht angestellt“, müssen alle den Hinweis neu bestätigen.</p>
       <p class="feldfehler" role="alert"></p>
       <button type="submit" class="btn btn-primaer">Speichern</button>
     </form>`;
@@ -285,7 +311,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       const roh = feld.value.trim();
       if (!roh) return null;
       const b = parseBetrag(roh);
-      if (!b) throw new Error(`Ungültiger Honorarsatz: „${roh}“ (z. B. 15 oder 15,50)`);
+      if (!b) throw new Error(`Ungültiger Prämiensatz: „${roh}“ (z. B. 15 oder 15,50)`);
       return b;
     };
     let honorarsaetze;
@@ -305,8 +331,85 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       empfaenger: { name: form.name.value, strasse: form.strasse.value, plz_ort: form.plz_ort.value, uid: form.uid.value },
       datenschutzKontakt: form.kontakt.value,
       honorarsaetze,
+      betreiber: {
+        name: form.b_name.value, anschrift: form.b_anschrift.value, email: form.b_email.value, telefon: form.b_telefon.value,
+        extern: form.b_extern.checked, hoster: form.b_hoster.value,
+        zusatz_impressum: form.b_zusatz_impressum.value, zusatz_datenschutz: form.b_zusatz_datenschutz.value,
+      },
     }), 'Einstellungen gespeichert.', neuLaden);
   });
+}
+
+/** E-Mail-Versand (SMTP, z. B. World4You): wer bekommt welche Benachrichtigung, Test-E-Mail */
+async function mail(inhalt, { store, nutzer: ich, neuLaden, istDemo }) {
+  const e = await store.mailEinstellungen();
+  const w = e.warteschlange ?? {};
+  const feld = (name, label, { typ = 'text', tipp = '', wert = e[name] ?? '', platzhalter = '' } = {}) => `
+      <label for="m-${name}">${esc(label)}</label>
+      <input id="m-${name}" name="${name}" type="${typ}" autocomplete="off" value="${esc(wert)}"${platzhalter ? ` placeholder="${esc(platzhalter)}"` : ''}>
+      ${tipp ? `<p class="tipp">${esc(tipp)}</p>` : ''}`;
+  inhalt.innerHTML = `
+    ${istDemo ? '<p class="hinweisbox">In der Demo werden keine E-Mails verschickt. Auf dem eigenen Server (z. B. World4You) gehen die Benachrichtigungen automatisch hinaus.</p>' : ''}
+    <div class="spalten">
+      <form class="karte" id="m-form" novalidate>
+        <h2>E-Mail-Benachrichtigungen</h2>
+        <label class="check"><input type="checkbox" name="aktiv" ${e.aktiv ? 'checked' : ''}> E-Mails automatisch verschicken</label>
+        <h3>Wer bekommt was?</h3>
+        <p class="tipp">Benachrichtigungen gehen an die <strong>Konten selbst</strong>: neue Prämienabrechnungen an alle mit der
+          Rolle Redaktion, angenommene an die Buchhaltung, Zugangsanfragen an Admins, Bestätigungen an die Autor:innen.
+          Jede:r kann im <a href="#/profil">Profil</a> auswählen, welche E-Mails sie bekommen will.</p>
+        <label class="check"><input type="checkbox" name="zugangsdaten" ${e.zugangsdaten ? 'checked' : ''}> Startpasswörter neuer Konten automatisch per E-Mail schicken</label>
+        <h3 class="abstand-oben">Absender (SMTP)</h3>
+        <p class="tipp">Bei World4You: Server <strong>smtp.world4you.com</strong>, Port <strong>587</strong>, als Benutzer die
+          E-Mail-Adresse des Postfachs und dessen Passwort.</p>
+        ${feld('absender', 'Absender-Adresse', { typ: 'email', platzhalter: 'office@deine-domain.at' })}
+        ${feld('absender_name', 'Absendername')}
+        ${feld('antwort_an', 'Antworten gehen an (optional)', { typ: 'email', tipp: 'Wer auf eine automatische E-Mail antwortet, schreibt an diese Adresse, z. B. deine zweite Adresse. Leer = an die Absender-Adresse.' })}
+        <div class="zeile">
+          <div class="feld">${feld('host', 'SMTP-Server')}</div>
+          <div class="feld">${feld('port', 'Port', { wert: String(e.port ?? 587) })}</div>
+        </div>
+        <label for="m-verschluesselung">Verschlüsselung</label>
+        <select id="m-verschluesselung" name="verschluesselung">
+          ${[['starttls', 'STARTTLS (Port 587)'], ['ssl', 'SSL/TLS (Port 465)'], ['keine', 'keine (nicht empfohlen)']]
+            .map(([v, l]) => `<option value="${v}"${e.verschluesselung === v ? ' selected' : ''}>${esc(l)}</option>`).join('')}
+        </select>
+        ${feld('benutzer', 'Benutzername', { tipp: 'Meist die Absender-Adresse.' })}
+        ${feld('passwort', 'Passwort des Postfachs', { typ: 'password', wert: '', platzhalter: e.passwort_gesetzt ? '•••••••• (gespeichert – leer lassen = unverändert)' : '' })}
+        ${feld('adresse', 'Adresse der App (für Links in den E-Mails)', { platzhalter: e.adresse_vorschlag ?? 'https://deine-domain.at/' })}
+        <p class="feldfehler" role="alert"></p>
+        <button type="submit" class="btn btn-primaer">Speichern</button>
+      </form>
+      <section class="karte">
+        <h2>Testen</h2>
+        <p>Schickt sofort eine Test-E-Mail mit den gespeicherten Einstellungen.</p>
+        <label for="m-test">An</label>
+        <input id="m-test" type="email" value="${esc(ich.email)}">
+        <button type="button" class="btn abstand-oben" id="m-test-knopf">Test-E-Mail senden</button>
+        ${istDemo ? '' : `
+        <h3 class="abstand-oben">Versand</h3>
+        <p>${w.gesendet ?? 0} verschickt · ${w.offen ?? 0} warten${w.fehlgeschlagen ? ` · <strong>${w.fehlgeschlagen} fehlgeschlagen</strong>` : ''}</p>
+        ${w.letzter_fehler ? `<p class="fehlerbox">Letzter Fehler: ${esc(w.letzter_fehler)}</p>` : ''}`}
+      </section>
+    </div>`;
+  const form = inhalt.querySelector('#m-form');
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const daten = Object.fromEntries(['absender', 'absender_name', 'antwort_an', 'host', 'port', 'verschluesselung',
+      'benutzer', 'passwort', 'adresse'].map((k) => [k, form.elements[k].value]));
+    daten.aktiv = form.elements.aktiv.checked;
+    daten.zugangsdaten = form.elements.zugangsdaten.checked;
+    if (!daten.benutzer) daten.benutzer = daten.absender;
+    mitSperre(form.querySelector('button[type=submit]'), () => versuche(() => store.mailEinstellungenSpeichern(daten), 'E-Mail-Einstellungen gespeichert.', neuLaden));
+  });
+  inhalt.querySelector('#m-test-knopf').addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    try {
+      const r = await store.testMail(inhalt.querySelector('#m-test').value);
+      meldung(`Test-E-Mail an ${r.an} verschickt.`, 'erfolg');
+    } catch (f) {
+      meldung(fehlerText(f), 'fehler');
+    }
+  }));
 }
 
 function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
@@ -336,7 +439,7 @@ function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
   inhalt.querySelector('#d-export').addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
     try {
       const name = istDemo ? 'sicherung' : 'datenexport';
-      downloadText(`honorarnoten-${name}-${new Date().toISOString().slice(0, 10)}.json`, await store.exportieren(), 'application/json');
+      downloadText(`anerkennungspraemien-${name}-${new Date().toISOString().slice(0, 10)}.json`, await store.exportieren(), 'application/json');
     } catch (e) {
       meldung(fehlerText(e), 'fehler');
     }
@@ -384,5 +487,5 @@ export async function render(el, ctx) {
     <div id="a-inhalt"></div>`;
   zugangsdatenBinden(el.querySelector('#a-zugang'), ctx.neuLaden);
   const inhalt = el.querySelector('#a-inhalt');
-  await ({ anfragen, benutzer, noten, einstellungen, daten })[tab](inhalt, ctx);
+  await ({ anfragen, benutzer, noten, einstellungen, mail, daten })[tab](inhalt, ctx);
 }

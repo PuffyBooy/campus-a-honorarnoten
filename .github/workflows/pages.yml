@@ -1,6 +1,6 @@
-# Veröffentlicht den Ordner public/ auf GitHub Pages.
+# Testet alles, veröffentlicht die Demo (Ordner public/) auf GitHub Pages und baut das Paket für World4You.
 # Einmalig in GitHub: Settings → Pages → Source: "GitHub Actions".
-name: GitHub Pages
+name: Tests, Demo und Paket
 
 on:
   push:
@@ -24,7 +24,25 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.1'
+          extensions: pdo_sqlite, mbstring, curl, openssl
+          coverage: none
       - run: npm test
+
+  # Paket zum Hochladen auf World4You (unter Actions -> dieser Lauf -> Artifacts herunterladen)
+  world4you:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: scripts/world4you-paket.sh "${GITHUB_SHA::8}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: honorarnoten-world4you
+          path: dist/world4you/
+          include-hidden-files: true
 
   deploy:
     needs: test

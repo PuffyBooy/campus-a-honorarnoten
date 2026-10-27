@@ -1,4 +1,4 @@
-// Autor:in: Leistungen laufend speichern und einmal im Monat als Honorarnote abschicken
+// Autor:in: Leistungen laufend speichern und einmal im Monat als Prämienabrechnung abschicken
 import {
   KATEGORIE_LABEL, artText, esc, formatBetragPlain, formatDatum, formatEuro, formatMonat, heuteIso, parseBetrag, summe,
 } from '../lib/format.js';
@@ -97,7 +97,7 @@ function formularHtml(p, einstellungen, nutzer) {
         <label class="radio"><input type="radio" name="kategorie" value="kolumne" ${kat === 'kolumne' ? 'checked' : ''}>
           <span><strong>Kolumne</strong></span></label>
         <label class="radio"><input type="radio" name="kategorie" value="ausserordentlich" ${kat === 'ausserordentlich' ? 'checked' : ''}>
-          <span><strong>Außerordentliches Honorar</strong></span></label>
+          <span><strong>Außerordentliche Anerkennungsprämie</strong></span></label>
         ${redigierenMoeglich ? `
         <label class="radio"><input type="radio" name="kategorie" value="redigieren" ${red ? 'checked' : ''}>
           <span><strong>Redigieren</strong><br><span class="klein">campus a college · ${esc(formatEuro(satzFuer(saetze, 'college', 'redigieren')))} pro Text</span></span></label>` : ''}
@@ -118,7 +118,7 @@ function formularHtml(p, einstellungen, nutzer) {
       </div>
       <div class="zeile">
         <div class="feld" id="l-art-feld" ${kat === 'ausserordentlich' ? '' : 'hidden'}>
-          <label for="l-art">Art des Honorars <span class="pflicht" aria-hidden="true">*</span></label>
+          <label for="l-art">Art der Anerkennungsprämie <span class="pflicht" aria-hidden="true">*</span></label>
           <input id="l-art" name="art" maxlength="100" autocomplete="off" placeholder="z. B. Interview, Reportage, Fotostrecke"
                  value="${esc(p ? artText(p) : '')}">
           <p class="feldfehler" data-fehler="art"></p>
@@ -181,7 +181,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
   el.innerHTML = `
     <div class="kopfzeile">
       <h1>Meine Leistungen</h1>
-      <a href="#/noten" class="btn">Meine Honorarnoten</a>
+      <a href="#/noten" class="btn">Meine Prämienabrechnungen</a>
     </div>
     <p class="tipp">Beiträge speichern, sobald sie erschienen sind – einmal im Monat gesammelt abschicken,
       getrennt für campus a college und campus a.</p>
@@ -229,7 +229,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
             <dt>An</dt><dd>${esc(einstellungen.empfaenger.name)}</dd>
             <dt>Überweisung an</dt><dd>${esc(nutzer.profil.kontoinhaber)}<br><span class="mono">${esc(formatIban(nutzer.profil.iban))}</span></dd>
           </dl>
-          <button type="button" class="btn btn-primaer btn-breit" data-abschicken>Honorarnote ${esc(mediumName(medium))} abschicken</button>
+          <button type="button" class="btn btn-primaer btn-breit" data-abschicken>Prämienabrechnung ${esc(mediumName(medium))} abschicken</button>
         </section>`;
         }).join('') : '<section class="karte"><h2>Noch nicht abgerechnet</h2><p class="klein">Noch keine Leistungen gespeichert.</p></section>'}
       </div>
@@ -346,7 +346,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     if (!red && !form.titel.value.trim()) f.titel = 'Bitte den Titel angeben.';
     if (!form.veroeffentlichung.value) f.veroeffentlichung = 'Bitte Datum wählen.';
     if (!red && !betrag) f.betrag = 'Bitte einen Betrag wie 15 oder 15,50 eingeben.';
-    if (form.kategorie.value === 'ausserordentlich' && !form.art.value.trim()) f.art = 'Bitte die Art des Honorars angeben.';
+    if (form.kategorie.value === 'ausserordentlich' && !form.art.value.trim()) f.art = 'Bitte die Art der Anerkennungsprämie angeben.';
     if (form.kategorie.value === 'ausserordentlich' && !form.vereinbart_mit.value.trim()) {
       f.vereinbart_mit = 'Mit wem aus der Redaktion wurde das vereinbart?';
     }
@@ -409,8 +409,8 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
       const auswahl = liste.filter((p) => ids.includes(p.id));
       const schon = diesenMonat.some((n) => mediumOder(n.medium) === medium);
       const text = `${auswahl.length} ${auswahl.length === 1 ? 'Leistung' : 'Leistungen'} über ${formatEuro(summe(auswahl))} `
-        + `als Honorarnote ${mediumName(medium)} (${naechste.nummer}) abschicken?`
-        + (schon ? `\n\nHinweis: Du hast diesen Monat schon eine Honorarnote für ${mediumName(medium)} abgeschickt.` : '');
+        + `als Prämienabrechnung ${mediumName(medium)} (${naechste.nummer}) abschicken?`
+        + (schon ? `\n\nHinweis: Du hast diesen Monat schon eine Prämienabrechnung für ${mediumName(medium)} abgeschickt.` : '');
       if (!confirm(text)) return;
       await mitSperre(a, async () => {
         try {

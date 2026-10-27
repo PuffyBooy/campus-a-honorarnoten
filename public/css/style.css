@@ -1,4 +1,4 @@
-/* campus a college – Honorarnoten
+/* campus a college – Prämienabrechnungen
    Farben: nur diese Variablen anpassen, um das Design an das CI anzupassen. */
 :root {
   --marke: #8a5370;          /* Beere/Mauve wie campus-a-college.at: Buttons, aktive Navigation */
@@ -395,9 +395,31 @@ tr.inaktiv { opacity: .6; }
 label.btn { margin: 0; font-weight: 600; }
 
 /* ---------- Fußzeile ---------- */
-.fuss { display: none; }
-body.modus-demo .fuss { display: block; }
+/* Einrichtungsseite (einrichten.php auf dem Server) */
+.einrichtung-seite { max-width: 720px; }
+.pruefliste { list-style: none; padding: 0; margin: 0; }
+.pruefliste li { padding: .45rem 0; border-bottom: 1px solid var(--rand); }
+.pruefliste li:last-child { border-bottom: 0; }
+.pruefliste .ok strong { color: var(--erfolg); }
+.pruefliste .fehlt strong { color: var(--gefahr); }
+
 .fuss { max-width: 1100px; margin: 2rem auto 5rem; padding: 0 1rem; color: var(--text-leise); font-size: .8rem; }
+.fuss-demo { display: none; }
+body.modus-demo .fuss-demo { display: block; }
+.fuss-links a { color: var(--text-leise); }
+
+/* Impressum, Datenschutz und der Hinweis zum Betreiber */
+.rechtliches { max-width: 820px; }
+.rechtliches h2 { font-size: 1.1rem; margin-top: 1.5rem; }
+.rechtliches li { margin-bottom: .35rem; }
+.hinweis-betreiber { background: var(--warnung-hell); color: #4a3200; border-left: 4px solid var(--warnung);
+  border-radius: 8px; padding: .75rem 1rem; margin: .75rem 0; font-size: .92rem; line-height: 1.5; }
+.hinweis-betreiber a { color: inherit; }
+.banner-bereich { max-width: 1100px; margin: 0 auto; padding: 0 1rem; }
+.banner-bereich:empty { display: none; }
+.check.bestaetigen { white-space: normal; align-items: flex-start; margin: .75rem 0 .25rem; font-size: .95rem; }
+.banner-bereich .hinweis-betreiber { margin-top: 1rem; display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: center; }
+.banner-bereich .hinweis-betreiber > span { flex: 1 1 26rem; }
 
 @media print {
   .kopf, .meldungen, .aktionen, form, .fuss, .gen-vorschau-titel { display: none !important; }
@@ -409,7 +431,7 @@ body.modus-demo .fuss { display: block; }
   .kopfzeile { display: none; }
 }
 
-/* ---------- Honorarnoten-Generator ---------- */
+/* ---------- Prämienabrechnungen-Generator ---------- */
 @media (min-width: 1000px) {
   .gen-spalten { grid-template-columns: 1fr 1fr; }
   .gen-vorschau-bereich { position: sticky; top: 1rem; }
@@ -464,7 +486,7 @@ body.modus-demo .fuss { display: block; }
 #neu-anlegen form { margin-top: .75rem; }
 #neu-anlegen summary { font-size: 1rem; }
 
-/* ---------- Honorarsätze ---------- */
+/* ---------- Prämiensätze ---------- */
 .abweichung { display: inline-block; margin-top: .15rem; font-size: .8rem; font-weight: 600; color: var(--warnung); }
 .medium-fest-hinweis { margin: -.25rem 0 1rem; }
 .medium-fest { margin: 0 0 .5rem; display: flex; flex-wrap: wrap; align-items: center; gap: .35rem; }

@@ -1,4 +1,5 @@
 // Beispieldaten für die Vorführung. Alle Demo-Konten haben das Passwort "demo1234".
+import { BETREIBER_STANDARD } from './lib/rechtliches.js';
 import { honorarnoteNummer } from './lib/nummer.js';
 import { STANDARD_EMPFAENGER } from './store.js';
 
@@ -42,6 +43,11 @@ export function demoKontenAktualisieren(db) {
       }
     }
     if (!n.profil.kontoinhaber) n.profil.kontoinhaber = `${n.vorname} ${n.nachname}`.trim();
+  }
+  // ältere Demo-Daten: Beispiel-Betreiber für Impressum, Datenschutz und Hinweis
+  if (db.einstellungen && !db.einstellungen.betreiber) {
+    db.einstellungen.betreiber = BEISPIEL_BETREIBER();
+    geaendert = true;
   }
   // ältere Demo-Daten: Maria bekommt einmalig die Rolle „Redigieren“ (danach entscheidet der Admin)
   if (!db.demoRedigierenRolle) {
@@ -167,4 +173,11 @@ export async function demoDaten(db, { passwortHash }) {
   );
 
   db.einstellungen.datenschutzKontakt = 'office@campus-a-college.at';
+  db.einstellungen.betreiber = BEISPIEL_BETREIBER();
 }
+
+// Beispiel-Betreiber der Demo: zeigt den Hinweis „nicht bei campus a angestellt“, Impressum und Datenschutz
+const BEISPIEL_BETREIBER = () => ({
+  ...BETREIBER_STANDARD, name: 'Max Muster (Beispiel)', anschrift: 'Musterweg 1\n1010 Wien', email: 'max@example.org',
+  extern: true, stand: new Date().toISOString(),
+});

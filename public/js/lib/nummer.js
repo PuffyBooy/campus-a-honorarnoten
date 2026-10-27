@@ -1,6 +1,6 @@
-// Nummer der Honorarnote laut Vorlage:
+// Nummer der Prämienabrechnung laut Vorlage:
 // NACHNAME-Initialen des Vornamens-Jahr-laufende Nummer, z. B. MUSTERFRAU-MA-2026-01
-// Die laufende Nummer zählt die eigenen Honorarnoten im Jahr, beginnend bei 01.
+// Die laufende Nummer zählt die eigenen Prämienabrechnungen im Jahr, beginnend bei 01.
 
 const ERSETZEN = { Ä: 'AE', Ö: 'OE', Ü: 'UE', ß: 'SS', ẞ: 'SS' };
 

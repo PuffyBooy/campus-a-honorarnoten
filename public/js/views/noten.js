@@ -1,4 +1,4 @@
-// Autor:in: abgeschickte Honorarnoten mit Status, Download als Word
+// Autor:in: abgeschickte Prämienabrechnungen mit Status, Download als Word
 import {
   KATEGORIE_LABEL, artText, esc, formatDatum, formatEuro, formatMonat, formatZeitpunkt,
 } from '../lib/format.js';
@@ -8,7 +8,7 @@ import { hatArtikel, mediumBadge, titelLink } from '../lib/campus.js';
 import { fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 
 /**
- * Tabelle der Leistungen einer Honorarnote. Jeder Titel ist ein Link (neuer Tab): zum verknüpften
+ * Tabelle der Leistungen einer Prämienabrechnung. Jeder Titel ist ein Link (neuer Tab): zum verknüpften
  * Artikel oder zur Suche nach dem Titel auf campus-a-college.at.
  * saetze: wenn angegeben, wird markiert, wo der eingereichte Betrag vom Standardsatz abweicht (für die Redaktion)
  * pruefen: Leistungen ohne Artikel-Link kennzeichnen (für Redaktion und Buchhaltung)
@@ -47,10 +47,10 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
 
   el.innerHTML = `
     <div class="kopfzeile">
-      <h1>Meine Honorarnoten</h1>
+      <h1>Meine Prämienabrechnungen</h1>
       <a class="btn btn-primaer" href="#/leistungen">+ Leistung speichern</a>
     </div>
-    ${flash?.neu ? `<p class="erfolgbox" role="status">Danke! Deine Honorarnote <strong>${esc(flash.neu)}</strong>
+    ${flash?.neu ? `<p class="erfolgbox" role="status">Danke! Deine Prämienabrechnung <strong>${esc(flash.neu)}</strong>
       wurde abgeschickt. Die Redaktion prüft sie.</p>` : ''}
     ${noten.length ? `<ul class="liste">${noten.map((n) => `
       <li class="karte note-karte${flash?.neu === n.nummer ? ' neu' : ''}" data-id="${esc(n.id)}">
@@ -72,10 +72,10 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
           ${positionenTabelle(n)}
         </details>
         <div class="aktionen">
-          <button type="button" class="btn btn-klein" data-word>Honorarnote (Word) herunterladen</button>
+          <button type="button" class="btn btn-klein" data-word>Prämienabrechnung (Word) herunterladen</button>
         </div>
       </li>`).join('')}</ul>`
-    : '<section class="karte"><p>Noch keine Honorarnoten.</p></section>'}
+    : '<section class="karte"><p>Noch keine Prämienabrechnungen.</p></section>'}
     <p class="tipp">Abgeschickt → Angenommen → Bezahlt</p>`;
 
   el.querySelector('.liste')?.addEventListener('click', async (ev) => {

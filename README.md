@@ -1,23 +1,23 @@
-# campus a college – Honorarnoten
+# campus a college – Anerkennungsprämien
 
-Web-App für die Honorarnoten von **campus a college** (Schüler*innenzeitung) und **campus a**
+Web-App für die Prämienabrechnungen von **campus a college** (Schüler*innenzeitung) und **campus a**
 (Studentenmagazin). Beide Medien werden getrennt abgerechnet:
 Autor:innen speichern ihre Beiträge laufend und schicken sie **einmal im Monat gesammelt
-als Honorarnote** ab. Die Redaktion prüft, die Buchhaltung lädt jede Woche alle angenommenen
-Honorarnoten als **ein PDF** herunter, überweist und markiert die Woche als bezahlt.
+als Prämienabrechnung** ab. Die Redaktion prüft, die Buchhaltung lädt jede Woche alle angenommenen
+Prämienabrechnungen als **ein PDF** herunter, überweist und markiert die Woche als bezahlt.
 
 Die App läuft in zwei Betriebsarten – derselbe Code, nur die Datenhaltung ist anders:
 
-| | **Demo** (GitHub Pages) | **Server** (eigener VPS) |
+| | **Demo** (GitHub Pages) | **Server** (World4You-Webspace) |
 |---|---|---|
 | Wofür | Herzeigen, Ausprobieren | echter Betrieb |
-| Daten | nur im jeweiligen Browser | gemeinsame Datenbank (SQLite) auf dem Server |
+| Daten | nur im jeweiligen Browser | gemeinsame Datenbank (SQLite) auf dem Webspace |
 | Rechte | nur im Browser geprüft | auf dem Server geprüft, nicht umgehbar |
-| Kosten | gratis | Software gratis, nur der Server (VPS) kostet |
-| Anleitung | [Ausprobieren](#ausprobieren-demo) | [Auf einem VPS installieren](#auf-einem-vps-installieren-echter-betrieb) |
+| E-Mails | keine | automatisch (neue Prämienabrechnungen, Bestätigungen, Zugangsdaten …) |
+| Anleitung | [Ausprobieren](#ausprobieren-demo) | [Auf World4You installieren](#auf-world4you-installieren-echter-betrieb) |
 
-Welche Betriebsart aktiv ist, steht in `public/js/modus.js`. Der Server liefert diese Datei
-automatisch mit `MODUS = 'server'` aus – man muss nichts umstellen.
+Welche Betriebsart aktiv ist, steht in `public/js/modus.js`. Das Paket für World4You stellt diese
+Datei automatisch auf `MODUS = 'server'` – man muss nichts umstellen.
 
 ## Ausprobieren (Demo)
 
@@ -26,7 +26,7 @@ Auf der Startseite gibt es **Demo-Zugänge** für jede Rolle (Passwort jeweils `
 | Rolle | Konto | Was man sieht |
 |---|---|---|
 | Erstes Anmelden | `neu@demo.at` | „Konto einrichten“ wie mit einem Startpasswort – startet bei jedem Klick frisch |
-| Autor:in | `maria@demo.at` | Meine Leistungen (mit Rolle Redigieren), Meine Honorarnoten, Profil |
+| Autor:in | `maria@demo.at` | Meine Leistungen (mit Rolle Redigieren), Meine Prämienabrechnungen, Profil |
 | Redaktion | `redaktion@demo.at` | Bearbeiter-Terminal |
 | Buchhaltung | `buchhaltung@demo.at` | Bezahl-Terminal |
 | Admin | `admin@demo.at` | Admin-Terminal + alles andere |
@@ -44,8 +44,9 @@ Lokal starten: `npm run dev` → http://localhost:5173
 
 1. **Zugang anfragen:** Selbst registrieren geht nicht. Neue Personen schicken auf der Startseite
    eine Anfrage (Name, E-Mail, optional eine Nachricht). Ein Admin schaltet sie im Reiter
-   „Anfragen“ frei, wählt die Rollen und bekommt ein **Startpasswort**. Das gibt er weiter, per
-   „E-Mail vorbereiten“ oder „Text kopieren“.
+   „Anfragen“ frei, wählt die Rollen und bekommt ein **Startpasswort**. Auf dem Server geht es
+   automatisch per E-Mail an die neue Person (abschaltbar unter Admin → E-Mail); sonst gibt der
+   Admin es per „E-Mail vorbereiten“ oder „Text kopieren“ weiter.
 
    **Konto einrichten (Pflicht beim ersten Anmelden):** Mit dem Startpasswort kommt man nur auf die
    Seite „Konto einrichten“ und muss dort alles auf einmal anlegen: eigenes Passwort, Name, Adresse,
@@ -54,61 +55,61 @@ Lokal starten: `npm run dev` → http://localhost:5173
    anderes, auch nicht über die API (der Server prüft es). Redaktion, Buchhaltung und Admin ohne
    Autor:innen-Rolle legen nur das Passwort fest. Fehlt einer bestehenden Autor:in etwas (z. B. nach
    dem Update der Profil-Link), erscheint die Seite beim nächsten Anmelden ebenfalls, mit den
-   vorhandenen Daten vorausgefüllt. Die Daten werden für jede Honorarnote automatisch übernommen.
+   vorhandenen Daten vorausgefüllt. Die Daten werden für jede Prämienabrechnung automatisch übernommen.
 2. **Meine Leistungen:** Jeden Beitrag speichern, sobald er erschienen ist – **für campus a college
    oder campus a**. Wählen kann man nur, wenn beide Profil-Links hinterlegt sind; sonst gilt immer das
    verbundene Medium (das prüft auch der Server). Als *Kolumne* oder
-   *außerordentliches Honorar* (mit „Vereinbart mit“), jeweils mit Titel, Veröffentlichungsdatum
+   *außerordentliche Anerkennungsprämie* (mit „Vereinbart mit“), jeweils mit Titel, Veröffentlichungsdatum
    und Betrag. Bei Kolumnen kann man die **Art der Kolumne** als freien Text dazuschreiben (optional),
-   bei außerordentlichen Honoraren die **Art des Honorars** (freier Text, Pflicht). Der Betrag ist mit dem **Honorarsatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin
+   bei außerordentlichen Anerkennungsprämien die **Art der Anerkennungsprämie** (freier Text, Pflicht). Der Betrag ist mit dem **Prämiensatz** vorausgefüllt (z. B. Kolumne 15 €, vom Admin
    **pro Medium** einstellbar). Gespeicherte Leistungen kann man bearbeiten oder löschen.
    **Artikel übernehmen:** Unter „Meine Leistungen“ stehen **alle eigenen Artikel** von
    campus-a-college.at und campus-a.at (je nach hinterlegten Profil-Links) mit Medium, Datum, Ressort
    und Kategorie (z. B. „Meinung“). „Übernehmen“ füllt Medium, Titel und Veröffentlichungsdatum aus
    und verknüpft die Leistung mit dem Artikel.
    Jeder Artikel lässt sich nur einmal abrechnen, schon erfasste sind markiert. Die Redaktion sieht in
-   der Honorarnote bei jeder Leistung den Link zum Artikel.
+   der Prämienabrechnung bei jeder Leistung den Link zum Artikel.
 3. **Monatsabrechnung:** Einmal im Monat die gesammelten Leistungen auswählen und als
-   Honorarnote abschicken – **getrennt pro Medium**: Es gibt eine Karte für campus a college und eine
-   für campus a, jede mit eigenem Knopf. Die Honorarnote heißt dann „Honorarnote campus a college“
-   bzw. „Honorarnote campus a“ (Word und PDF). Die Nummer folgt der Vorlage: `NACHNAME-VO-JAHR-NN`
+   Prämienabrechnung abschicken – **getrennt pro Medium**: Es gibt eine Karte für campus a college und eine
+   für campus a, jede mit eigenem Knopf. Die Prämienabrechnung heißt dann „Prämienabrechnung campus a college“
+   bzw. „Prämienabrechnung campus a“ (Word und PDF). Die Nummer folgt der Vorlage: `NACHNAME-VO-JAHR-NN`
    (z. B. `MUSTERFRAU-MA-2026-01`). Wurde im Monat schon eine abgeschickt, kommt ein Hinweis.
 4. **Redaktion:** Filter nach Status und Medium, Suche nach Name oder Nummer, Sortierung nach Datum und
    Betrag. Annehmen, Ablehnen (Begründung Pflicht), Betrag pro Leistung korrigieren (Vermerk
    Pflicht), interne Kommentare, Verlauf. **IBAN und Adresse sind ausgeblendet.**
 5. **Abgelehnt?** Beim Ablehnen (Begründung Pflicht) gehen die Leistungen **sofort zurück an die
    Autor:in**: Sie stehen wieder unter „Meine Leistungen“, mit dem Hinweis „Zurück aus <Nummer> zum
-   Überarbeiten“ und der Begründung. Die Autor:in korrigiert sie und schickt sie als neue Honorarnote
+   Überarbeiten“ und der Begründung. Die Autor:in korrigiert sie und schickt sie als neue Prämienabrechnung
    ab; die abgelehnte Note bleibt mit ihrer Nummer als „Abgelehnt“ stehen und kann nicht mehr
    angenommen werden (damit nichts doppelt abgerechnet wird).
-   **Redigieren (campus a college):** Neben *Kolumne* und *außerordentlichem Honorar* gibt es die
+   **Redigieren (campus a college):** Neben *Kolumne* und *außerordentlicher Anerkennungsprämie* gibt es die
    Kategorie *Redigieren* – auswählbar nur für Konten, denen der Admin die Rolle **„Redigieren“**
    gegeben hat (Admin → Nutzer:innen; die Rolle bringt „Autor:in“ automatisch mit). Redigieren
    erscheint nicht auf der Webseite, es wird nur verrechnet und zählt immer zu campus a college: Man
    gibt die **Anzahl der Texte** ein (Beschreibung optional), der Betrag wird berechnet: Anzahl × Satz
-   pro Text (Standard **2 €**, im Admin unter „Honorarsätze“ einstellbar); der Server rechnet selbst
-   nach. Auf der Honorarnote (Word und PDF) steht es unter **„2. Außerordentliche Honorare“**, z. B.
+   pro Text (Standard **2 €**, im Admin unter „Prämiensätze“ einstellbar); der Server rechnet selbst
+   nach. Auf der Prämienabrechnung (Word und PDF) steht es unter **„2. Außerordentliche Anerkennungsprämien“**, z. B.
    „Redigieren (7 Texte): September“.
-6. **Buchhaltung:** Das Bezahl-Terminal zeigt die angenommenen Honorarnoten **nach Kalenderwoche**
+6. **Buchhaltung:** Das Bezahl-Terminal zeigt die angenommenen Prämienabrechnungen **nach Kalenderwoche**
    (der Woche, in der die Redaktion sie angenommen hat), mit Summe pro Woche. Pro Woche gibt es zwei
    Knöpfe:
-   - **„PDF herunterladen“:** alle Honorarnoten der Woche in einer PDF-Datei, jede Note ab einer
+   - **„PDF herunterladen“:** alle Prämienabrechnungen der Woche in einer PDF-Datei, jede Note ab einer
      neuen Seite, im Aufbau der offiziellen Vorlage (mit Adresse und IBAN zum Überweisen).
-   - **„Woche als bezahlt markieren“:** markiert alle Honorarnoten der Woche mit heutigem Datum als
+   - **„Woche als bezahlt markieren“:** markiert alle Prämienabrechnungen der Woche mit heutigem Datum als
      bezahlt (alle oder keine).
 
    Im Reiter „Bezahlt“ stehen die bezahlten Wochen der letzten 12 Wochen, das PDF lässt sich dort
    erneut herunterladen.
 7. **Admin-Terminal:** Zugangsanfragen freischalten oder ablehnen (offene Anfragen werden in der
    Navigation gezählt), Personen direkt anlegen, Rollen vergeben (Checkboxen), Konten
-   deaktivieren oder löschen, Passwort zurücksetzen (neues Startpasswort). Honorarnoten löschen
-   (mit Löschprotokoll), Rechnungsempfänger, **Honorarsätze** und Datenschutzkontakt einstellen,
+   deaktivieren oder löschen, Passwort zurücksetzen (neues Startpasswort). Prämienabrechnungen löschen
+   (mit Löschprotokoll), Rechnungsempfänger, **Prämiensätze** und Datenschutzkontakt einstellen,
    Sicherung herunterladen/einspielen, Demo zurücksetzen. Weicht ein eingereichter Betrag vom
    Standardsatz ab, sieht die Redaktion in der Detailansicht einen Hinweis.
 
-8. **Externe Honorarnote (Generator):** Für Aufträge von **anderen Firmen** erstellt man unter
+8. **Externe Honorarnote (Generator):** Für bezahlte Aufträge von **anderen Firmen** (dort ist es weiterhin ein Honorar) erstellt man unter
    „Externe Honorarnote“ eine allgemeine Honorarnote: Empfänger und Leistungen eingeben, die
-   eigenen Daten kommen aus dem Profil. Die Honorarnote ist immer umsatzsteuerfrei
+   eigenen Daten kommen aus dem Profil. Sie ist immer umsatzsteuerfrei
    (Kleinunternehmerregelung, § 6 Abs 1 Z 27 UStG). Ergebnis als Word-Datei oder über
    „Drucken / als PDF speichern“. Die Nummer wird als eigene Serie vorgeschlagen
    (z. B. `MUSTERFRAU-MA-2026-E01`). Der Entwurf bleibt nur im eigenen Browser gespeichert und wird
@@ -116,11 +117,11 @@ Lokal starten: `npm run dev` → http://localhost:5173
 
 Status: **Eingereicht → Angenommen / Abgelehnt → Bezahlt**
 
-## Honorarnote aus der Vorlage
+## Prämienabrechnung aus der Vorlage
 
 [`public/js/lib/honorarnote-docx.js`](public/js/lib/honorarnote-docx.js) öffnet die Vorlage im
 Browser (JSZip), ersetzt die Beispielwerte (Maria Musterfrau, Musterstraße …, Nummer, Ort und
-Datum), befüllt die Tabellen *Kolumnen* und *Außerordentliche Honorare* mit beliebig vielen
+Datum), befüllt die Tabellen *Kolumnen* und *Außerordentliche Anerkennungsprämien* mit beliebig vielen
 Zeilen, rechnet Zwischensummen und Gesamtbetrag und entfernt die grauen Ausfüllhinweise.
 Layout und Formatierung der Vorlage bleiben erhalten.
 
@@ -138,7 +139,7 @@ PDF-Layout dort mit angepasst werden.
 
 Beide Seiten laufen mit TYPO3 (gleiches System, aber **eigene Profile**: dieselbe Person hat auf jeder
 Seite eine andere Profil-ID) und haben keine Schnittstelle für Artikeldaten. Der Server liest deshalb
-die normalen Seiten aus ([`server/campus-artikel.js`](server/campus-artikel.js)):
+die normalen Seiten aus ([`server/lib/artikel.php`](server/lib/artikel.php)):
 
 - `/profil/<ID>?fetchNews=1` – Artikelliste der Profilseite (12 pro Seite, der Server blättert alle Seiten durch)
 - `/news/detail/<name>` (campus-a-college.at) bzw. `/news/news-detail/<name>` (campus-a.at) –
@@ -146,7 +147,8 @@ die normalen Seiten aus ([`server/campus-artikel.js`](server/campus-artikel.js))
 
 Die Adressen beider Seiten stehen in [`public/js/lib/campus.js`](public/js/lib/campus.js).
 
-Beim ersten Aufruf pro Person werden alle Artikelseiten gelesen (bei 150 Artikeln ca. 20 Sekunden).
+Beim ersten Aufruf pro Person werden die Artikelseiten gelesen (6 gleichzeitig, höchstens 20 Sekunden
+pro Aufruf – bei sehr vielen Artikeln kommen die restlichen Daten beim nächsten Mal dazu).
 Die Artikeldaten landen in der Datenbank, danach wird nur noch die Liste auf neue Artikel geprüft
 (höchstens alle 10 Minuten oder über „Liste aktualisieren“). Der Abruf läuft über den Server, weil der
 Browser fremde Seiten nicht auslesen darf. **In der Demo** (GitHub Pages) gibt es deshalb nur Beispielartikel.
@@ -154,85 +156,151 @@ Browser fremde Seiten nicht auslesen darf. **In der Demo** (GitHub Pages) gibt e
 Baut campus-a-college.at seine Seiten um, muss das Auslesen angepasst werden. Leistungen lassen sich
 dann weiterhin von Hand eintragen.
 
-## Auf einem VPS installieren (echter Betrieb)
+## Auf World4You installieren (echter Betrieb)
 
-Die Server-Variante braucht **keine npm-Pakete und keinen Datenbankserver**: nur Node.js (ab 22.13).
-Die Datenbank ist eine einzelne Datei (SQLite). Davor läuft [Caddy](https://caddyserver.com), das
-automatisch ein kostenloses HTTPS-Zertifikat (Let's Encrypt) holt und erneuert.
+Der Server-Teil ist in **PHP** geschrieben und läuft auf normalem Webspace mit Apache und PHP 8.1+
+– also auch auf dem **Webhosting von World4You**. Er braucht **keinen Datenbankserver** (die
+Datenbank ist eine einzelne SQLite-Datei), keine Zusatzpakete und keinen Cronjob.
 
-**Du brauchst:**
-- einen VPS mit **Debian 12 oder Ubuntu 22.04/24.04** – z. B. Hetzner (ab ca. 4 € im Monat) oder den
-  „Always Free“-Tarif von Oracle Cloud; 1 CPU und 1 GB RAM reichen
-- eine **(Sub-)Domain**, z. B. `honorare.campus-a-college.at`, deren DNS-Eintrag (A-Record) auf die
-  IP-Adresse des Servers zeigt
-- offene Ports **80 und 443**
+### 1. Im World4You-Kundenbereich ([my.world4you.com](https://my.world4you.com))
 
-**Installation** (auf dem Server, als Benutzer mit sudo-Rechten):
+- **SSL-Zertifikat** für die Domain aktivieren (kostenlos) – die App läuft nur über `https://`.
+- **PHP-Version** auf 8.1 oder neuer stellen (*Webspace → Einstellungen*; am besten die neueste).
+- Ein **E-Mail-Postfach** für den Versand anlegen: `office@deine-domain.at`. Eine zweite Adresse
+  (z. B. `kontakt@deine-domain.at`) bekommt die Antworten auf die automatischen E-Mails und steht im
+  Impressum und in der Datenschutzerklärung.
 
-```bash
-sudo git clone https://github.com/PuffyBooy/campus-a-honorarnoten.git /opt/honorarnoten
-sudo bash /opt/honorarnoten/deploy/install.sh honorare.campus-a-college.at deine@email.at
+### 2. Paket hochladen
+
+Das fertige Paket baut GitHub bei jedem Update auf `main` automatisch: unter **Actions → „Tests, Demo
+und Paket“ → letzter Lauf → Artifacts → `honorarnoten-world4you`** herunterladen und entpacken.
+(Selbst bauen: `npm run paket` → `dist/world4you/` bzw. `dist/honorarnoten-world4you.zip`.)
+
+Den **gesamten Inhalt** per FTP (z. B. [FileZilla](https://filezilla-project.org), Zugangsdaten im
+Kundenbereich unter *FTP*) in den Hauptordner der Domain hochladen – **auch die versteckten Dateien
+`.htaccess`** (FileZilla: *Server → Versteckte Dateien anzeigen*).
+
+```
+.htaccess            HTTPS erzwingen, api/… weiterleiten, Sicherheits-Header
+index.html, css/, js/, vendor/, img/, vorlage/   die App
+api.php              Schnittstelle (ruft app/api.php auf)
+einrichten.php       Einrichtung nach dem Hochladen
+app/                 PHP-Code – per .htaccess gesperrt, nie über das Web erreichbar
+app/daten/           Datenbank und tägliche Sicherungen (entsteht automatisch)
 ```
 
-Das Skript installiert Node.js und Caddy, richtet den Dienst mit Autostart ein
-([`deploy/honorarnoten.service`](deploy/honorarnoten.service)), plant eine tägliche Sicherung und
-legt das **erste Admin-Konto** an. Am Ende steht das **Startpasswort** im Terminal. Damit unter
-`https://honorare.campus-a-college.at` anmelden und ein eigenes Passwort festlegen. Alle weiteren
-Personen fragen auf der Startseite einen Zugang an und werden im Admin-Terminal freigeschaltet.
+### 3. Einrichten
 
-**Wichtige Befehle:**
+`https://deine-domain.at/einrichten.php` öffnen. Die Seite prüft den Webspace (PHP-Version, SQLite,
+HTTPS, Schreibrechte) und fragt dann nach:
 
-| Was | Befehl |
+- **deinem Admin-Konto** (Name, E-Mail) – danach wird das **Startpasswort** angezeigt,
+- den **Zugangsdaten des E-Mail-Postfachs** (Adresse und Passwort; Server `smtp.world4you.com`,
+  Port 587, STARTTLS sind schon eingetragen) und der **Antwortadresse** (optional).
+
+Welche Adressen? **`office@deine-domain.at`** ist der Absender – die App verschickt damit alle
+E-Mails. Ein eigenes Postfach für die Redaktion braucht es nicht: Die Mails gehen direkt an die Konten
+(an die E-Mail-Adresse, mit der sich jemand anmeldet). Die **zweite Adresse** (z. B.
+`kontakt@deine-domain.at`) als Antwortadresse eintragen – wer auf eine automatische Mail antwortet,
+landet dort – und unter Admin → Einstellungen als Kontakt für Datenschutz und im Impressum.
+
+Zum Schluss geht eine **Test-E-Mail** hinaus. Die Einrichtung funktioniert nur, solange es noch kein
+Konto gibt – deshalb direkt nach dem Hochladen erledigen. Danach unter `https://deine-domain.at`
+mit dem Startpasswort anmelden und ein eigenes Passwort festlegen.
+
+### Impressum, Datenschutz und Hinweis zum Betreiber
+
+Unter **Admin → Einstellungen → Betreiber der App** Name, Anschrift und E-Mail der Person eintragen, die
+die App betreibt. Daraus entstehen automatisch das **Impressum** (`#/impressum`) und die
+**Datenschutzerklärung** (`#/datenschutz`). Beide sind ohne Anmeldung erreichbar und unten auf jeder Seite
+verlinkt. Eigene Ergänzungen sind möglich. Die Texte sind eine Vorlage und **keine Rechtsberatung** –
+am besten einmal prüfen lassen.
+
+Ist der Haken **„Der Betreiber ist nicht bei der campus a Medien GmbH angestellt“** gesetzt (Standard),
+sehen alle einen **Hinweis**: Wer die App betreibt, ist nicht bei campus a angestellt, hat aber als
+Admin Zugriff auf alle Daten (auch Adressen und IBANs), und die Daten liegen bei World4You.
+- auf der Anmeldeseite und in der Datenschutzerklärung,
+- beim Konto einrichten mit Pflicht-Häkchen „zur Kenntnis genommen“,
+- bei allen anderen als Banner, bis sie „Zur Kenntnis genommen“ klicken (Zeitpunkt wird gespeichert).
+
+Ändern sich Name, Anschrift, Hosting oder der Haken, müssen alle den Hinweis neu bestätigen.
+
+### Automatische E-Mails
+
+Alle Mails kommen von `office@…`, haben das campus-a-Design (Kopf in der Markenfarbe, Übersicht,
+Knopf zur App) und eine reine Textfassung. Versand einstellen und testen unter **Admin → E-Mail**.
+
+Die Mails gehen an die **Konten selbst**. Jede:r wählt im **Profil → E-Mail-Benachrichtigungen**, was
+sie bekommen will (ohne eigene Wahl ist alles für die eigenen Rollen an):
+
+| Wann | an wen |
 |---|---|
-| Status | `systemctl status honorarnoten` |
-| Protokoll ansehen | `journalctl -u honorarnoten -f` |
-| Neu starten | `sudo systemctl restart honorarnoten` |
-| Update auf neueste Version | `sudo bash /opt/honorarnoten/deploy/update.sh` |
-| Passwort vergessen (auch Admin) | `sudo bash /opt/honorarnoten/deploy/passwort.sh email@beispiel.at` |
-| Sicherung sofort | `sudo systemctl start honorarnoten-backup` |
+| Prämienabrechnung eingereicht | alle mit der Rolle Redaktion (mit Leistungen und Summe) + Eingangsbestätigung an die Autor:in |
+| angenommen | Autor:in (inkl. geänderter Beträge mit Vermerk) + alle mit der Rolle Buchhaltung |
+| abgelehnt | Autor:in mit Begründung („Leistungen überarbeiten“) |
+| als bezahlt markiert | Autor:in mit Betrag und Zahlungsdatum |
+| neue Zugangsanfrage | alle Admins |
+| Konto angelegt / Passwort zurückgesetzt | die Person, mit Startpasswort (unter Admin → E-Mail abschaltbar) |
+
+Admins können sich zusätzlich die Mails von Redaktion und Buchhaltung einschalten.
+
+Die Mails gehen über das World4You-Postfach (SMTP) hinaus, nachdem die App dem Browser schon
+geantwortet hat – niemand wartet darauf. Klappt der Versand nicht (Passwort falsch, Server kurz
+weg), wird es bis zu 5-mal erneut versucht; den letzten Fehler zeigt **Admin → E-Mail**.
+
+### Updates
+
+Neues Paket herunterladen und einfach drüber hochladen (alte Dateien überschreiben). **Den Ordner
+`app/daten/` nie löschen** – dort liegen Datenbank und Sicherungen. Die Datenbank wird beim ersten
+Aufruf nach einem Update automatisch angepasst.
 
 ### Backups
 
-- Jede Nacht um 3:15 Uhr landet eine Kopie der Datenbank in `/var/lib/honorarnoten/backups/`,
-  30 Tage lang (änderbar über `BACKUP_TAGE` in `/etc/honorarnoten.env`). `update.sh` sichert vor
-  jedem Update zusätzlich.
-- **Zusätzlich außer Haus sichern!** Liegt nur auf dem Server eine Kopie, ist bei einem Serverausfall
-  alles weg. Einfachste Lösung: regelmäßig vom eigenen Rechner holen, z. B.
-  `scp -r benutzer@server:/var/lib/honorarnoten/backups ./honorar-backups`, oder die Backup-Funktion
-  des VPS-Anbieters einschalten.
-- **Wiederherstellen:**
-  ```bash
-  sudo systemctl stop honorarnoten
-  sudo cp /var/lib/honorarnoten/backups/honorarnoten-DATUM.sqlite /var/lib/honorarnoten/honorarnoten.sqlite
-  sudo rm -f /var/lib/honorarnoten/honorarnoten.sqlite-wal /var/lib/honorarnoten/honorarnoten.sqlite-shm
-  sudo chown honorarnoten:honorarnoten /var/lib/honorarnoten/honorarnoten.sqlite
-  sudo systemctl start honorarnoten
-  ```
+- Jeden Tag legt die App beim ersten Aufruf eine Kopie der Datenbank in `app/daten/backups/` an
+  und hebt sie 30 Tage auf. **Ab und zu per FTP auf den eigenen Rechner kopieren!**
+- Zusätzlich: **Admin → Daten → Datenexport** (JSON, enthält IBANs – vertraulich).
+- Wiederherstellen: `app/daten/honorarnoten.sqlite` per FTP durch eine Sicherung ersetzen
+  (Datei umbenennen auf `honorarnoten.sqlite`).
 
-### Ohne Installationsskript starten
+### Passwort vergessen
 
-Zum Ausprobieren auf dem eigenen Rechner (Node.js 22.13 oder neuer):
+Andere Konten setzt der Admin unter **Admin → Benutzer → Passwort zurücksetzen** zurück. Für das
+Admin-Konto selbst per SSH (bei World4You in allen Paketen möglich, im Kundenbereich aktivieren):
 
 ```bash
-npm run dev:server             # http://127.0.0.1:3000, ohne HTTPS
-npm run admin -- deine@email.at  # erstes Admin-Konto, zeigt das Startpasswort
+php app/cli.php passwort deine@email.at      # neues Startpasswort
+php app/cli.php backup                       # Sicherung sofort
+php app/cli.php testmail an@beispiel.at      # Test-E-Mail
+php app/cli.php mails                        # wartende E-Mails sofort verschicken
 ```
 
-Oder mit Einstellungen aus einer `.env`-Datei: `./start.sh` (siehe Kommentare in [`start.sh`](start.sh)).
+(Falls `php` auf der Kommandozeile eine alte Version ist: `php83` bzw. `php84` verwenden.)
+
+### Andere Webspaces
+
+Das Paket läuft auf jedem Webspace mit **Apache, PHP 8.1+ und der Erweiterung pdo_sqlite**. Bei
+nginx statt Apache müssen die Regeln aus `.htaccess` in die Server-Konfiguration übernommen werden
+(`app/` sperren, `api/<Funktion>` → `api.php?f=<Funktion>`).
+
+### Lokal ausprobieren
+
+```bash
+npm run dev:server                 # http://127.0.0.1:3000 (PHP-Entwicklungsserver, ohne HTTPS)
+npm run admin -- deine@email.at    # erstes Admin-Konto, zeigt das Startpasswort
+```
 
 ### Sicherheit im Server-Modus
 
 - Alle Rechte (Rollen, Statuswechsel, wer IBAN und Adresse sehen darf) prüft der Server
-  ([`server/honorare.js`](server/honorare.js)); die Redaktion bekommt IBAN und Adresse gar nicht
-  erst ausgeliefert.
-- Passwörter mit scrypt gehasht, Startpasswörter müssen beim ersten Login geändert werden.
+  ([`server/lib/honorare.php`](server/lib/honorare.php)); die Redaktion bekommt IBAN und Adresse gar
+  nicht erst ausgeliefert – auch nicht in den E-Mails.
+- Passwörter mit bcrypt gehasht, Startpasswörter müssen beim ersten Login geändert werden.
 - Anmeldung über ein Sitzungs-Cookie (`HttpOnly`, `Secure`, `SameSite=Strict`), in der Datenbank
   nur als Hash gespeichert; Abmelden, Deaktivieren und Passwort-Reset beenden Sitzungen.
 - Schutz vor gefälschten Anfragen fremder Seiten (CSRF), Begrenzung von Anmeldeversuchen,
   strenge Content-Security-Policy, HTTPS mit HSTS.
-- Der Dienst läuft als eigener Benutzer ohne Rechte und darf nur in `/var/lib/honorarnoten` schreiben.
-- E-Mails verschickt der Server nicht (damit er gratis bleibt): Startpasswörter gibt der Admin über
-  „E-Mail vorbereiten“ weiter.
+- Programmcode, Datenbank und Sicherungen liegen in `app/` und sind per `.htaccess` gesperrt.
+- Das Passwort des E-Mail-Postfachs wird nie an den Browser geschickt und ist nicht im Datenexport.
 
 ## Demo auf GitHub Pages veröffentlichen
 
@@ -268,11 +336,18 @@ Das Logo in [`public/index.html`](public/index.html) an der markierten Stelle ei
 
 ```bash
 npm run dev          # Demo lokal auf Port 5173
-npm run dev:server   # Server-Modus lokal auf Port 3000
-npm test             # alle Tests: Hilfsfunktionen und Server (Rechte, Abläufe, Schutz)
+npm run dev:server   # Server-Modus lokal auf Port 3000 (braucht PHP 8.1+)
+npm test             # alle Tests: Hilfsfunktionen, Server (Rechte, Abläufe, Schutz, E-Mails)
+HONORARE_PHP=php8.1 npm test   # dieselben Tests mit einer anderen PHP-Version
+npm run paket        # Paket für World4You bauen
 bash scripts/vendor.sh   # JSZip und pdf-lib aktualisieren
 ```
 
-Aufbau: `public/` ist die Oberfläche (ohne Framework, ohne Build-Schritt), `server/` der Server
-(`server.js` HTTP und Schutz, `honorare.js` Geschäftslogik, `db.js` Datenbank, `auth.js`
-Passwörter und Sitzungen, `cli.js` Verwaltung), `deploy/` die Installationsskripte.
+Aufbau: `public/` ist die Oberfläche (ohne Framework, ohne Build-Schritt), `server/` der Server in
+PHP (`api.php` Schnittstelle und Schutz, `lib/honorare.php` Geschäftslogik, `lib/db.php` Datenbank,
+`lib/auth.php` Passwörter und Sitzungen, `lib/artikel.php` Artikel von campus-a-college.at,
+`lib/mail.php` und `lib/mail-vorlagen.php` E-Mails, `einrichten.php` Einrichtung, `cli.php`
+Verwaltung, `router.php` nur für die Entwicklung), `deploy/world4you/` die Dateien fürs Paket.
+Die Regeln, die Browser und Server beide kennen (IBAN, Nummer, Medien, Prämiensätze …), gibt es in
+JavaScript (`public/js/lib/`) und PHP (`server/lib/regeln.php`); `tests/php-gleich.test.mjs` prüft,
+dass beide gleich rechnen.

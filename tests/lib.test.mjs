@@ -71,7 +71,7 @@ test('Ort aus PLZ und Ort', () => {
   assert.equal(ortAusPlzOrt(''), 'Wien');
 });
 
-test('Art der Kolumne / Art des Honorars', () => {
+test('Art der Kolumne / Art der Anerkennungsprämie', () => {
   assert.equal(artText({ kategorie: 'kolumne', kolumnenart: 'Kultur', art: 'foto' }), 'Kultur');
   assert.equal(artText({ kategorie: 'ausserordentlich', art: 'foto' }), 'Foto', 'alte feste Werte schön benannt');
   assert.equal(artText({ kategorie: 'ausserordentlich', art: 'Reportage' }), 'Reportage', 'freier Text');
@@ -92,7 +92,7 @@ test('Kalenderwochen (ISO 8601)', () => {
   assert.deepEqual(gruppen.map((g) => [g.woche.kw, g.noten.length]), [[39, 1], [40, 2]]);
 });
 
-test('Honorarnoten als PDF: eine Datei, jede Note ab neuer Seite', async () => {
+test('Prämienabrechnungen als PDF: eine Datei, jede Note ab neuer Seite', async () => {
   const note = (nummer, anzahl) => ({
     nummer, eingereicht_am: '2026-09-22T10:00:00Z',
     autor: { vorname: 'Maria', nachname: 'Musterfrau', strasse: 'Musterstraße 1/2', plz_ort: '1010 Wien' },
@@ -107,12 +107,12 @@ test('Honorarnoten als PDF: eine Datei, jede Note ab neuer Seite', async () => {
   assert.equal(new TextDecoder().decode(bytes.slice(0, 5)), '%PDF-');
   const pdf = await PDFLib.PDFDocument.load(bytes);
   assert.ok(pdf.getPageCount() >= 3, 'zweite Note mit 60 Kolumnen braucht mehr als eine Seite');
-  assert.equal(pdf.getTitle(), 'Honorarnoten (2)');
+  assert.equal(pdf.getTitle(), 'Prämienabrechnungen (2)');
   // Titel je Medium
   const nurCampusA = await PDFLib.PDFDocument.load(await honorarnotenPdf([{ ...note('C-3', 1), medium: 'campus-a' }], PDFLib));
-  assert.equal(nurCampusA.getTitle(), 'Honorarnote campus a C-3');
+  assert.equal(nurCampusA.getTitle(), 'Prämienabrechnung campus a C-3');
   const ohneMedium = await PDFLib.PDFDocument.load(await honorarnotenPdf([note('D-4', 1)], PDFLib));
-  assert.equal(ohneMedium.getTitle(), 'Honorarnote campus a college D-4', 'ältere Noten: campus a college');
+  assert.equal(ohneMedium.getTitle(), 'Prämienabrechnung campus a college D-4', 'ältere Noten: campus a college');
   // Redigieren bekommt einen eigenen Abschnitt; die PDF lässt sich erzeugen und hat eine Seite
   const mitRedigieren = await honorarnotenPdf([{ ...note('E-5', 1), positionen: [
     ...note('E-5', 1).positionen, { kategorie: 'redigieren', titel: 'Redigieren (7 Texte)', anzahl: 7, veroeffentlichung: '2026-09-30', betrag: 14 },

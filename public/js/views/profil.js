@@ -1,8 +1,9 @@
-// Profil: Name, Adresse und Bankverbindung einmal speichern – wird für jede Honorarnote übernommen
+// Profil: Name, Adresse und Bankverbindung einmal speichern – wird für jede Prämienabrechnung übernommen
 import { ROLLEN_LABEL, esc } from '../lib/format.js';
 import { formatIban, ibanFehler, bicIstGueltig } from '../lib/iban.js';
 import { MEDIEN, MEDIUM_KEYS, PROFIL_FELD, profilIdAusLink, profilLink } from '../lib/campus.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
+import { bekommt, verfuegbareBenachrichtigungen } from '../lib/benachrichtigungen.js';
 
 function feld(name, label, wert, { typ = 'text', pflicht = true, attrs = '' } = {}) {
   return `
@@ -13,7 +14,7 @@ function feld(name, label, wert, { typ = 'text', pflicht = true, attrs = '' } = 
     </div>`;
 }
 
-export async function render(el, { store, nutzer, navigate, neuLaden }) {
+export async function render(el, { store, nutzer, navigate, neuLaden, istDemo }) {
   const p = nutzer.profil;
   const istAutor = nutzer.rollen.includes('autor');
   const vollstaendig = store.profilVollstaendig(nutzer);
@@ -52,7 +53,7 @@ export async function render(el, { store, nutzer, navigate, neuLaden }) {
           })).join('')}
         </fieldset>
         <aside class="datenschutz" aria-label="Datenschutzhinweis">
-          <strong>Datenschutz:</strong> Adresse und Bankverbindung sieht nur die Buchhaltung, sie dienen nur der Auszahlung.
+          <strong>Datenschutz:</strong> Adresse und Bankverbindung sieht nur die Buchhaltung, sie dienen nur der Auszahlung. Mehr in der <a href="#/datenschutz">Datenschutzerklärung</a>.
           ${kontakt ? `Fragen, Auskunft oder Löschung: <a href="mailto:${esc(kontakt)}">${esc(kontakt)}</a>.` : ''}
         </aside>` : ''}
         <p class="feldfehler" id="pe-formular" role="alert"></p>
@@ -64,6 +65,15 @@ export async function render(el, { store, nutzer, navigate, neuLaden }) {
           <h2>Meine Rollen</h2>
           <p>${nutzer.rollen.map((r) => `<span class="badge badge-rolle">${esc(ROLLEN_LABEL[r])}</span>`).join(' ') || '–'}</p>
         </section>
+        ${verfuegbareBenachrichtigungen(nutzer).length ? `
+        <form class="karte" id="mail-form">
+          <h2>E-Mail-Benachrichtigungen</h2>
+          <p class="tipp">An ${esc(nutzer.email)}. Wähle aus, worüber du per E-Mail informiert werden willst.</p>
+          ${istDemo ? '<p class="hinweisbox">In der Demo werden keine E-Mails verschickt – die Auswahl wird nur gespeichert.</p>' : ''}
+          ${verfuegbareBenachrichtigungen(nutzer).map((b) => `
+            <label class="check bestaetigen"><input type="checkbox" name="${esc(b.typ)}" ${bekommt(nutzer, b.typ) ? 'checked' : ''}> ${esc(b.text)}</label>`).join('')}
+          <p><button class="btn abstand-oben" type="submit">Auswahl speichern</button></p>
+        </form>` : ''}
         <form class="karte" id="pw-form" novalidate>
           <h2>Passwort ändern</h2>
           <input type="text" name="username" value="${esc(nutzer.email)}" autocomplete="username" hidden>
@@ -138,6 +148,21 @@ export async function render(el, { store, nutzer, navigate, neuLaden }) {
   });
 
   const pwForm = el.querySelector('#pw-form');
+  const mailForm = el.querySelector('#mail-form');
+  mailForm?.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const wahl = Object.fromEntries(verfuegbareBenachrichtigungen(nutzer).map((b) => [b.typ, mailForm.elements[b.typ].checked]));
+    mitSperre(mailForm.querySelector('button'), async () => {
+      try {
+        await store.benachrichtigungenSpeichern(wahl);
+        meldung('Auswahl gespeichert.', 'erfolg');
+        neuLaden();
+      } catch (e) {
+        meldung(fehlerText(e), 'fehler');
+      }
+    });
+  });
+
   pwForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const fehler = pwForm.querySelector('.feldfehler');

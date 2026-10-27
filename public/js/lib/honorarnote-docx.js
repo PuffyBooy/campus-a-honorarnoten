@@ -1,4 +1,4 @@
-// Erzeugt die Honorarnote als Word-Datei aus der offiziellen Vorlage
+// Erzeugt die Prämienabrechnung als Word-Datei aus der offiziellen Vorlage
 // (public/vorlage/honorarnote-vorlage.docx). Die Vorlage wird nicht verändert,
 // nur ihre Beispielwerte werden ersetzt und die Tabellenzeilen befüllt.
 import { ausserordentlichePositionen, formatBetragDokument, formatDatum, summe } from './format.js';
@@ -26,8 +26,8 @@ const BEISPIEL = {
   empfUid: 'ATU81242718',
 };
 
-// Hinweis-Absätze der Vorlage, die in der fertigen Honorarnote nichts verloren haben
-const HINWEISE = ['Bitte nur die grauen Felder', 'Nummer der Honorarnote:', 'Nur ausfüllen, wenn'];
+// Hinweis-Absätze der Vorlage, die in der fertigen Prämienabrechnung nichts verloren haben
+const HINWEISE = ['Bitte nur die grauen Felder', 'Nummer der Prämienabrechnung:', 'Nur ausfüllen, wenn'];
 
 const kinder = (el, name) => Array.from(el.childNodes).filter((n) => n.namespaceURI === W && n.localName === name);
 const alle = (el, name) => Array.from(el.getElementsByTagNameNS(W, name));
@@ -101,7 +101,7 @@ function positionsTabelle(tbl, positionen, spalten) {
 /**
  * Befüllt document.xml der Vorlage.
  * @param {string} xml   Inhalt von word/document.xml
- * @param {object} note  Honorarnote (mit autor, zahlung, empfaenger, positionen)
+ * @param {object} note  Prämienabrechnung (mit autor, zahlung, empfaenger, positionen)
  * @param {{DOMParser, XMLSerializer}} dom
  */
 function dokumentBefuellen(xml, note, dom = globalThis) {
@@ -117,9 +117,9 @@ function dokumentBefuellen(xml, note, dom = globalThis) {
     }
   }
 
-  // Titel der Vorlage („Honorarnote campus a college“) an das Medium der Note anpassen
+  // Titel der Vorlage („Prämienabrechnung campus a college“) an das Medium der Note anpassen
   for (const t of alle(doc, 't')) {
-    if (t.textContent.trim() === 'Honorarnote campus a college') t.textContent = `Honorarnote ${mediumName(note.medium)}`;
+    if (t.textContent.trim() === 'Prämienabrechnung campus a college') t.textContent = `Prämienabrechnung ${mediumName(note.medium)}`;
   }
 
   const a = note.autor;
@@ -141,7 +141,7 @@ function dokumentBefuellen(xml, note, dom = globalThis) {
   for (const [tc, t] of treffer) zelleSetzen(tc, werte[t]);
 
   const kolumnen = note.positionen.filter((p) => p.kategorie === 'kolumne');
-  // Redigieren steht bei den außerordentlichen Honoraren (Titel mit Anzahl der Texte)
+  // Redigieren steht bei den außerordentlichen Anerkennungsprämien (Titel mit Anzahl der Texte)
   const ausserord = ausserordentlichePositionen(note.positionen);
   const tabellen = kinder(body, 'tbl');
   for (const tbl of tabellen) {
@@ -172,5 +172,5 @@ export async function honorarnoteDocx(note, { JSZip, vorlage }) {
 }
 
 export function docxDateiname(note) {
-  return `Honorarnote_${note.nummer}.docx`;
+  return `Praemienabrechnung_${note.nummer}.docx`;
 }
