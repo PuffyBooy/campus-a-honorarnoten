@@ -44,8 +44,15 @@ $fehler = '';
 $ergebnis = null;
 $istPost = ($_SERVER['REQUEST_METHOD'] ?? '') === 'POST';
 $f = fn ($k) => tr($_POST[$k] ?? '');
-$origin = $_SERVER['HTTP_ORIGIN'] ?? '';
-$herkunftOk = $origin === '' || parse_url($origin, PHP_URL_HOST) === parse_url('http://' . ($_SERVER['HTTP_HOST'] ?? ''), PHP_URL_HOST);
+// Schutz vor fremden Seiten: Zufallswert im Cookie und im Formular (Doppel-Absende-Token). Funktioniert auch
+// hinter Proxys und wenn der Browser keinen brauchbaren Origin-Header schickt (z. B. „Origin: null“).
+$token = is_string($_COOKIE['hn_einrichten'] ?? null) && preg_match('/^[a-f0-9]{32}$/', $_COOKIE['hn_einrichten'])
+    ? $_COOKIE['hn_einrichten'] : bin2hex(random_bytes(16));
+setcookie('hn_einrichten', $token, ['path' => '/', 'httponly' => true, 'samesite' => 'Lax', 'secure' => ist_https()]);
+$herkunftOk = isset($_COOKIE['hn_einrichten']) && hash_equals($_COOKIE['hn_einrichten'], (string) ($_POST['token'] ?? ''));
+if ($istPost && !$herkunftOk) {
+    $fehler = 'Das Formular konnte nicht bestätigt werden. Bitte Cookies für diese Seite erlauben, die Seite neu laden und noch einmal absenden.';
+}
 // MySQL, wenn so eingerichtet oder wenn SQLite fehlt (z. B. bei World4You)
 $mitMysql = is_array(konfiguration()['datenbank']) || !extension_loaded('pdo_sqlite');
 $mysqlFormular = false;
@@ -86,7 +93,7 @@ if ($mysqlFormular && $istPost && $herkunftOk) {
 
 if ($db && $anzahl === 0 && $istPost) {
     try {
-        pruefe($herkunftOk, 'Anfrage abgelehnt.');
+        pruefe($herkunftOk, $fehler ?: 'Anfrage abgelehnt.');
         pruefe(!leer($f('vorname')) && !leer($f('nachname')), 'Bitte Vor- und Nachnamen angeben.');
         pruefe(ist_email(strtolower($f('email'))), 'Bitte eine gültige E-Mail-Adresse für das Admin-Konto angeben.');
         $mailAn = $f('absender') !== '' || ($_POST['passwort'] ?? '') !== '';
@@ -122,6 +129,16 @@ if ($db && $anzahl === 0 && $istPost) {
     } catch (Fehler $e) {
         $fehler = $e->getMessage();
     }
+}
+
+// Abgeschickt, aber nichts passiert? Nie wortlos zurück zum Formular – sagen, woran es hängt
+if ($istPost && !$ergebnis && $fehler === '') {
+    $fehler = match (true) {
+        !$grundlagenOk => 'Der Webspace erfüllt die Voraussetzungen oben noch nicht (rote Punkte).',
+        $anzahl > 0 => '',
+        default => 'Es wurde nichts gespeichert. Bitte die Seite neu laden und noch einmal absenden.',
+    };
+    error_log('Anerkennungsprämien: Einrichtung ohne Ergebnis abgeschickt');
 }
 
 $wert = fn ($k, $standard = '') => h($_POST[$k] ?? $standard);
@@ -184,6 +201,7 @@ $wert = fn ($k, $standard = '') => h($_POST[$k] ?? $standard);
       </section>
     <?php elseif ($db || $mysqlFormular): ?>
       <form class="karte" method="post" action="einrichten.php" novalidate>
+        <input type="hidden" name="token" value="<?= h($token) ?>">
         <?php if ($mysqlFormular): ?>
           <h2>Datenbank (MySQL)</h2>
           <p class="tipp">Die Zugangsdaten stehen im World4You-Kundenbereich unter <strong>Datenbanken</strong> (MySQL).
