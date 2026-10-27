@@ -20,7 +20,7 @@ function verlaufDetails(e) {
 }
 
 /** Hinweise zu einer Leistung: Satz, Artikel-Link, schon anderswo abgerechnet */
-function hinweise(p, n, alle, saetze) {
+function hinweise(p, n, info, saetze) {
   const h = [];
   const pos = { ...p, medium: n.medium };
   if (weichtAb(pos, saetze)) {
@@ -32,15 +32,14 @@ function hinweise(p, n, alle, saetze) {
       h.push(['warn', 'ohne Artikel-Link']);
     } else {
       // derselbe Artikel in einer anderen Abrechnung (zurückgegebene zählen nicht, deren Leistungen kommen neu)
-      const doppelt = alle.find((x) => x.id !== n.id && x.status !== 'abgelehnt'
-        && x.positionen.some((y) => y.artikel_url === p.artikel_url));
-      h.push(doppelt ? ['fehler', `schon in ${doppelt.nummer}`] : ['ok', 'Artikel verknüpft']);
+      const doppelt = info.doppelt?.[p.artikel_url];
+      h.push(doppelt ? ['fehler', `schon in ${doppelt}`] : ['ok', 'Artikel verknüpft']);
     }
   }
   return h;
 }
 
-function positionenHtml(n, alle, saetze, aenderbar) {
+function positionenHtml(n, info, saetze, aenderbar) {
   return `
     <table class="tabelle pruef-tabelle">
       <thead><tr><th class="spalte-haken">Geprüft</th><th>Leistung</th><th>Datum</th><th>Hinweis</th><th class="rechts">Betrag</th></tr></thead>
@@ -57,7 +56,7 @@ function positionenHtml(n, alle, saetze, aenderbar) {
             ${p.notiz ? `<br><span class="notiz-autor">Notiz: ${esc(p.notiz)}</span>` : ''}
             ${p.betrag_vermerk ? `<br><span class="hinweisbox klein">Betrag angepasst: ${esc(p.betrag_vermerk)}</span>` : ''}</span></td>
           <td data-label="Datum">${esc(formatDatum(p.veroeffentlichung))}</td>
-          <td data-label="Hinweis"><span class="hinweise">${hinweise(p, n, alle, saetze)
+          <td data-label="Hinweis"><span class="hinweise">${hinweise(p, n, info, saetze)
             .map(([art, t]) => `<span class="zeichen zeichen-${art}">${esc(t)}</span>`).join('') || '–'}</span></td>
           <td data-label="Betrag" class="rechts"><span>${esc(formatEuro(p.betrag))}
             ${p.betrag !== p.betrag_eingereicht ? `<br><span class="durchgestrichen">${esc(formatEuro(p.betrag_eingereicht))}</span>` : ''}
@@ -67,7 +66,7 @@ function positionenHtml(n, alle, saetze, aenderbar) {
     </table>`;
 }
 
-export async function pruefungRendern(el, { store, nutzer, params, alle, einstellungen, vorige, naechste, danach, neuLaden, istAktuell }) {
+export async function pruefungRendern(el, { store, nutzer, params, einstellungen, vorige, naechste, danach, neuLaden, istAktuell }) {
   let n;
   try {
     n = await store.note(params.id);
@@ -75,13 +74,12 @@ export async function pruefungRendern(el, { store, nutzer, params, alle, einstel
     el.innerHTML = '<div class="pruefung-leer"><p><strong>Diese Prämienabrechnung gibt es nicht (mehr).</strong></p></div>';
     return;
   }
-  const [kommentare, verlauf] = await Promise.all([store.kommentare(n.id), store.verlaufVon(n.id)]);
+  // Jahressumme der Person und doppelt abgerechnete Artikel rechnet der Server aus
+  const [kommentare, verlauf, info] = await Promise.all([store.kommentare(n.id), store.verlaufVon(n.id), store.pruefInfo(n.id)]);
   if (!istAktuell()) return;
   const kannAnnehmen = ['eingereicht', 'abgelehnt'].includes(n.status) && !n.zurueckgeholt_am;
   const kannAblehnen = ['eingereicht', 'angenommen'].includes(n.status);
   const aenderbar = n.status !== 'bezahlt';
-  const jahr = n.monat.slice(0, 4);
-  const imJahr = alle.filter((x) => x.autor_id && x.autor_id === n.autor_id && x.monat.startsWith(jahr) && x.status !== 'abgelehnt');
   const geprueft = () => n.positionen.filter((p) => p.geprueft_am).length;
 
   el.innerHTML = `
@@ -97,13 +95,13 @@ export async function pruefungRendern(el, { store, nutzer, params, alle, einstel
     <div class="kennzahlen kennzahlen-klein">
       <div class="kennzahl"><span class="kennzahl-titel">Betrag</span><strong>${esc(formatEuro(n.betrag))}</strong></div>
       <div class="kennzahl"><span class="kennzahl-titel">Geprüft</span><strong id="p-geprueft">${geprueft()} / ${n.positionen.length}</strong></div>
-      <div class="kennzahl"><span class="kennzahl-titel">${esc(jahr)} bisher (Person)</span>
-        <strong>${esc(formatEuro(imJahr.reduce((s, x) => s + Math.round(x.betrag * 100), 0) / 100))}</strong>
-        <span class="klein">${imJahr.length} ${imJahr.length === 1 ? 'Abrechnung' : 'Abrechnungen'}</span></div>
+      <div class="kennzahl"><span class="kennzahl-titel">${esc(info.jahr)} bisher (Person)</span>
+        <strong>${esc(formatEuro(info.jahr_summe))}</strong>
+        <span class="klein">${info.jahr_anzahl} ${info.jahr_anzahl === 1 ? 'Abrechnung' : 'Abrechnungen'}</span></div>
     </div>
     ${n.status === 'abgelehnt' ? `<p class="fehlerbox"><strong>Zurückgegeben:</strong> ${esc(n.ablehnungsgrund)}</p>` : ''}
     ${n.zurueckgeholt_am ? '<p class="hinweisbox">Die Leistungen sind zur Überarbeitung zurück bei der Autor:in. Sie kommen als neue Prämienabrechnung wieder.</p>' : ''}
-    ${positionenHtml(n, alle, einstellungen.honorarsaetze, aenderbar)}
+    ${positionenHtml(n, info, einstellungen.honorarsaetze, aenderbar)}
     <form id="d-betrag-form" class="unterkarte" hidden novalidate>
       <h3 id="d-betrag-titel">Betrag ändern</h3>
       <div class="zeile">

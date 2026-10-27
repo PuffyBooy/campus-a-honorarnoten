@@ -255,6 +255,11 @@ const MIGRATIONEN = [
     );
     create index protokoll_zeit on protokoll(zeit);
     SQL,
+    // Version 13: schneller bei vielen Abrechnungen (Sortierung, Suche nach schon abgerechneten Artikeln)
+    <<<'SQL'
+    create index noten_eingereicht on noten(eingereicht_am);
+    create index note_positionen_artikel on note_positionen(artikel_url);
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -478,6 +483,11 @@ const MYSQL_MIGRATIONEN = [
       index protokoll_zeit (zeit),
       check (stufe in ('info', 'warnung', 'fehler'))
     ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    SQL,
+    // Version 6 = SQLite-Version 13
+    <<<'SQL'
+    create index noten_eingereicht on noten(eingereicht_am);
+    create index note_positionen_artikel on note_positionen(artikel_url);
     SQL,
 ];
 

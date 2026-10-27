@@ -12,12 +12,11 @@ const REITER = [
   ['eingereicht', 'Zu prüfen'], ['angenommen', 'Angenommen'], ['abgelehnt', 'Zurückgegeben'], ['bezahlt', 'Bezahlt'], ['', 'Alle'],
 ];
 
+// Sortiert und gefiltert wird am Server; die Liste kommt in Seiten zu je SEITE Abrechnungen
 const SORTIERUNGEN = {
-  eingereicht_asc: ['Älteste zuerst', (a, b) => a.eingereicht_am.localeCompare(b.eingereicht_am)],
-  eingereicht_desc: ['Neueste zuerst', (a, b) => b.eingereicht_am.localeCompare(a.eingereicht_am)],
-  betrag_desc: ['Höchster Betrag', (a, b) => b.betrag - a.betrag],
-  name: ['Name A–Z', (a, b) => vollerName(a.autor).localeCompare(vollerName(b.autor), 'de')],
+  eingereicht_asc: 'Älteste zuerst', eingereicht_desc: 'Neueste zuerst', betrag_desc: 'Höchster Betrag', name: 'Name A–Z',
 };
+const SEITE = 100;
 
 const euroSumme = (noten) => noten.reduce((s, n) => s + Math.round(n.betrag * 100), 0) / 100;
 
@@ -25,17 +24,6 @@ const euroSumme = (noten) => noten.reduce((s, n) => s + Math.round(n.betrag * 10
 export function wieLange(iso) {
   const tage = Math.floor((Date.now() - new Date(iso).getTime()) / 86400000);
   return tage <= 0 ? 'heute' : tage === 1 ? 'gestern' : `vor ${tage} Tagen`;
-}
-
-function gefiltert(daten) {
-  const q = filter.suche.trim().toLowerCase();
-  return daten
-    .filter((n) => !filter.status || n.status === filter.status)
-    .filter((n) => !filter.medium || mediumOder(n.medium) === filter.medium)
-    .filter((n) => !filter.monat || n.monat === filter.monat)
-    .filter((n) => !q || n.nummer.toLowerCase().includes(q) || vollerName(n.autor).toLowerCase().includes(q)
-      || `${n.autor.nachname} ${n.autor.vorname}`.toLowerCase().includes(q))
-    .sort(SORTIERUNGEN[filter.sortierung][1]);
 }
 
 function eintragHtml(n, aktiv, mitAuswahl) {
@@ -51,13 +39,12 @@ function eintragHtml(n, aktiv, mitAuswahl) {
 
 export async function render(el, ctx) {
   const { store, params, neuLaden, istAktuell } = ctx;
-  const [daten, einstellungen] = await Promise.all([store.alleNoten(), store.einstellungen()]);
+  const [daten, einstellungen] = await Promise.all([store.redaktionListe({ ...filter, limit: SEITE }), store.einstellungen()]);
   if (!istAktuell()) return;
-  const zaehler = Object.fromEntries(REITER.map(([s]) => [s, s ? daten.filter((n) => n.status === s).length : daten.length]));
-  const monate = [...new Set(daten.map((n) => n.monat))].sort().reverse();
-  if (filter.monat && !monate.includes(filter.monat)) filter.monat = '';
-  const liste = gefiltert(daten);
-  const gewaehlt = params.id ? daten.find((n) => n.id === params.id) : null;
+  const zaehler = { ...daten.zaehler, '': Object.values(daten.zaehler).reduce((a, b) => a + b, 0) };
+  const { monate } = daten;
+  const liste = daten.noten; // wird mit „Weitere laden“ länger
+  const gewaehlt = params.id ? { id: params.id } : null;
   const mitAuswahl = filter.status === 'eingereicht' && liste.length > 1;
 
   el.innerHTML = `
@@ -76,17 +63,18 @@ export async function render(el, ctx) {
       <div class="feld"><label for="r-suche">Suche</label>
         <input id="r-suche" type="search" placeholder="Name oder Nummer" autocomplete="off"></div>
       <div class="feld"><label for="r-sort">Sortierung</label>
-        <select id="r-sort">${Object.entries(SORTIERUNGEN).map(([w, [l]]) => `<option value="${w}">${esc(l)}</option>`).join('')}</select></div>
+        <select id="r-sort">${Object.entries(SORTIERUNGEN).map(([w, l]) => `<option value="${w}">${esc(l)}</option>`).join('')}</select></div>
     </section>
     <div class="arbeitsplatz${gewaehlt ? ' mit-auswahl' : ''}">
       <aside class="posteingang" aria-label="Prämienabrechnungen">
-        <p class="treffer" aria-live="polite"><strong>${liste.length}</strong> ${liste.length === 1 ? 'Abrechnung' : 'Abrechnungen'}
-          · ${esc(formatEuro(euroSumme(liste)))}</p>
+        <p class="treffer" aria-live="polite"><strong>${daten.anzahl}</strong> ${daten.anzahl === 1 ? 'Abrechnung' : 'Abrechnungen'}
+          · ${esc(formatEuro(daten.summe))}</p>
         ${mitAuswahl ? `<div class="sammel">
           <label class="check"><input type="checkbox" id="r-alle"> alle</label>
           <button type="button" class="btn btn-klein btn-erfolg" id="r-sammel" disabled>Ausgewählte annehmen</button></div>` : ''}
         ${liste.length ? `<ul class="eingang-liste">${liste.map((n) => eintragHtml(n, n.id === gewaehlt?.id, mitAuswahl)).join('')}</ul>`
           : `<p class="leer">${filter.status === 'eingereicht' ? 'Alles geprüft. 🎉' : 'Nichts gefunden.'}</p>`}
+        ${daten.anzahl > liste.length ? `<button type="button" class="btn btn-klein btn-breit" id="r-mehr">Weitere laden (${daten.anzahl - liste.length} übrig)</button>` : ''}
       </aside>
       <section class="pruefung" id="pruefung" aria-live="polite">
         ${gewaehlt ? '<p class="laden">Wird geladen …</p>'
@@ -122,6 +110,16 @@ export async function render(el, ctx) {
       neu?.setSelectionRange(neu.value.length, neu.value.length);
     }, 250);
   });
+
+  // ---- Weitere Seite der Liste anhängen
+  el.querySelector('#r-mehr')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    const mehr = await store.redaktionListe({ ...filter, limit: SEITE, offset: liste.length });
+    liste.push(...mehr.noten);
+    el.querySelector('.eingang-liste').insertAdjacentHTML('beforeend', mehr.noten.map((n) => eintragHtml(n, false, mitAuswahl)).join(''));
+    const rest = daten.anzahl - liste.length;
+    if (rest > 0) ev.target.textContent = `Weitere laden (${rest} übrig)`;
+    else ev.target.remove();
+  }));
 
   // ---- Mehrere auf einmal annehmen
   const sammel = el.querySelector('#r-sammel');
@@ -164,7 +162,7 @@ export async function render(el, ctx) {
   if (gewaehlt) {
     const i = liste.findIndex((n) => n.id === gewaehlt.id);
     await pruefungRendern(el.querySelector('#pruefung'), {
-      ...ctx, alle: daten, einstellungen,
+      ...ctx, einstellungen,
       vorige: i > 0 ? liste[i - 1] : null,
       naechste: i >= 0 && i < liste.length - 1 ? liste[i + 1] : null,
       // nach Annehmen/Zurückgeben: weiter zur nächsten in der Liste (die bearbeitete fällt aus „Zu prüfen“ heraus)
