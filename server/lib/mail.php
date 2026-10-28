@@ -60,13 +60,58 @@ function mail_einstellungen_speichern(PDO $db, array $d): void
     upsert($db, 'einstellungen', ['schluessel' => 'mail', 'wert' => json_text($e)], ['schluessel']);
 }
 
-/** Mail in die Warteschlange (wird nach der Antwort verschickt). Ohne aktiven Versand passiert nichts. */
-function mail_einreihen(PDO $db, string $an, array $mail): void
+/**
+ * Mail in die Warteschlange (wird nach der Antwort verschickt). Ohne aktiven Versand passiert nichts.
+ * Liefert die ID der Mail (für mail_jetzt_senden) oder null.
+ */
+function mail_einreihen(PDO $db, string $an, array $mail): ?string
 {
     $e = mail_einstellungen($db);
-    if (!$e['aktiv'] || !ist_email($an)) return;
+    if (!$e['aktiv'] || !ist_email($an)) return null;
+    $id = neue_id();
     q($db, 'insert into mails (id, an, betreff, html, text, erstellt_am) values (?, ?, ?, ?, ?, ?)',
-        [neue_id(), $an, $mail['betreff'], $mail['html'], $mail['text'], jetzt()]);
+        [$id, $an, $mail['betreff'], $mail['html'], $mail['text'], jetzt()]);
+    return $id;
+}
+
+/**
+ * Eine Mail aus der Warteschlange sofort verschicken (z. B. Zugangsdaten), damit der Admin gleich sieht, ob es
+ * geklappt hat. Liefert null bei Erfolg, sonst die Fehlermeldung; die Mail bleibt dann für weitere Versuche in der Schlange.
+ */
+function mail_jetzt_senden(PDO $db, string $id): ?string
+{
+    $e = mail_einstellungen($db);
+    $m = zeile($db, 'select * from mails where id = ? and gesendet_am is null', [$id]);
+    if (!$e['aktiv'] || !$m) return $m ? 'Der E-Mail-Versand ist ausgeschaltet.' : null;
+    $smtp = null;
+    $fehler = mail_versuchen($db, $e, $m, $smtp);
+    $smtp?->beenden();
+    return $fehler;
+}
+
+/** Eine Mail senden (gesperrt gegen doppeltes Senden); null bei Erfolg, sonst die Fehlermeldung */
+function mail_versuchen(PDO $db, array $e, array $m, ?Smtp &$smtp): ?string
+{
+    // sperren, damit eine gleichzeitige Anfrage dieselbe Mail nicht auch schickt
+    $r = q($db, 'update mails set gesperrt_bis = ? where id = ? and gesperrt_bis < ? and gesendet_am is null', [time() + 300, $m['id'], time()]);
+    if ($r->rowCount() !== 1) return 'Die E-Mail wird gerade schon verschickt.';
+    try {
+        $smtp ??= new Smtp($e);
+        $smtp->senden($m['an'], $m['betreff'], $m['html'], $m['text']);
+        q($db, 'update mails set gesendet_am = ?, fehler = \'\' where id = ?', [jetzt(), $m['id']]);
+        return null;
+    } catch (Throwable $f) {
+        // nächster Versuch nach 5, 10, 20 … Minuten
+        $warten = 300 * (2 ** (int) $m['versuche']);
+        q($db, 'update mails set versuche = versuche + 1, fehler = ?, gesperrt_bis = ? where id = ?',
+            [kuerze($f->getMessage(), 500), time() + $warten, $m['id']]);
+        $smtp = null;
+        error_log('Prämienabrechnungen: E-Mail an ' . $m['an'] . ' nicht verschickt: ' . $f->getMessage());
+        $letzter = (int) $m['versuche'] + 1 >= 5;
+        protokoll($db, $letzter ? 'fehler' : 'warnung', 'mail', 'E-Mail „' . $m['betreff'] . '“ an ' . $m['an'] . ' nicht verschickt'
+            . ($letzter ? ' (aufgegeben nach 5 Versuchen)' : ' (Versuch ' . ((int) $m['versuche'] + 1) . ' von 5)') . ': ' . $f->getMessage());
+        return $f->getMessage();
+    }
 }
 
 /** Offene Mails verschicken (nach der Antwort, per Cronjob oder Kommandozeile). Liefert die Anzahl verschickter Mails. */
@@ -79,25 +124,7 @@ function mails_verschicken(PDO $db, int $max = 20): int
     $smtp = null;
     $gesendet = 0;
     foreach ($offen as $m) {
-        // sperren, damit eine gleichzeitige Anfrage dieselbe Mail nicht auch schickt
-        $r = q($db, 'update mails set gesperrt_bis = ? where id = ? and gesperrt_bis < ? and gesendet_am is null', [time() + 300, $m['id'], time()]);
-        if ($r->rowCount() !== 1) continue;
-        try {
-            $smtp ??= new Smtp($e);
-            $smtp->senden($m['an'], $m['betreff'], $m['html'], $m['text']);
-            q($db, 'update mails set gesendet_am = ?, fehler = \'\' where id = ?', [jetzt(), $m['id']]);
-            $gesendet++;
-        } catch (Throwable $f) {
-            // nächster Versuch nach 5, 10, 20 … Minuten
-            $warten = 300 * (2 ** (int) $m['versuche']);
-            q($db, 'update mails set versuche = versuche + 1, fehler = ?, gesperrt_bis = ? where id = ?',
-                [kuerze($f->getMessage(), 500), time() + $warten, $m['id']]);
-            $smtp = null;
-            error_log('Prämienabrechnungen: E-Mail an ' . $m['an'] . ' nicht verschickt: ' . $f->getMessage());
-            $letzter = (int) $m['versuche'] + 1 >= 5;
-            protokoll($db, $letzter ? 'fehler' : 'warnung', 'mail', 'E-Mail „' . $m['betreff'] . '“ an ' . $m['an'] . ' nicht verschickt'
-                . ($letzter ? ' (aufgegeben nach 5 Versuchen)' : ' (Versuch ' . ((int) $m['versuche'] + 1) . ' von 5)') . ': ' . $f->getMessage());
-        }
+        if (mail_versuchen($db, $e, $m, $smtp) === null) $gesendet++;
     }
     $smtp?->beenden();
     q($db, 'delete from mails where gesendet_am is not null and gesendet_am < ?', [zeit_iso(time() - 90 * 86400)]);

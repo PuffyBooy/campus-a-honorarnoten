@@ -141,9 +141,12 @@ function zugangsdatenHtml(z) {
   return `
     <section class="karte zugangsdaten" role="status">
       <h2>Zugangsdaten für ${esc(z.vorname)}</h2>
-      ${z.mail ? `<p class="erfolgbox">Die Zugangsdaten gehen automatisch per E-Mail an <strong>${esc(z.email)}</strong>,
+      ${z.mail && !z.mail_fehler ? `<p class="erfolgbox">Die Zugangs-Mail wurde an <strong>${esc(z.email)}</strong> verschickt,
         mit einem Knopf, der direkt anmeldet. Du musst nichts weiter tun.</p>`
-        : '<p>Der E-Mail-Versand ist nicht eingerichtet. Bitte die Zugangsdaten selbst weitergeben. Sie werden nur jetzt angezeigt.</p>'}
+        : z.mail ? `<p class="fehlerbox"><strong>Die E-Mail an ${esc(z.email)} konnte nicht verschickt werden.</strong>
+          Meldung des Mailservers: ${esc(z.mail_fehler)}<br>Die App versucht es später automatisch noch einmal.
+          Sicherer: Zugangsdaten jetzt selbst weitergeben und unter Admin → E-Mail die Einstellungen prüfen.</p>`
+        : '<p>Der E-Mail-Versand ist nicht eingerichtet (Admin → E-Mail). Bitte die Zugangsdaten selbst weitergeben. Sie werden nur jetzt angezeigt.</p>'}
       <div class="kopierblock">
         <div class="kopierzeile"><span class="kopier-label">E-Mail</span><span class="kopier-wert">${esc(z.email)}</span><span></span></div>
         <div class="kopierzeile"><span class="kopier-label">Startpasswort</span>
@@ -154,9 +157,9 @@ function zugangsdatenHtml(z) {
           <button type="button" class="btn btn-klein" data-z="link">Kopieren</button></div>` : ''}
       </div>
       <div class="aktionen">
-        ${z.mail ? '' : `<a class="btn btn-primaer" href="${esc(mailto)}">E-Mail vorbereiten</a>
+        ${z.mail && !z.mail_fehler ? '' : `<a class="btn btn-primaer" href="${esc(mailto)}">E-Mail vorbereiten</a>
         <button type="button" class="btn" data-z="text">Text kopieren</button>`}
-        <button type="button" class="btn" data-z="fertig">${z.mail ? 'Ok' : 'Erledigt'}</button>
+        <button type="button" class="btn" data-z="fertig">${z.mail && !z.mail_fehler ? 'Ok' : 'Erledigt'}</button>
       </div>
     </section>`;
 }
@@ -190,7 +193,9 @@ async function einladen(inhalt, { store, neuLaden, istDemo }) {
   inhalt.innerHTML = `
     ${neuerLink ? `<section class="karte zugangsdaten" role="status">
       <h2>Registrierungslink erstellt</h2>
-      ${neuerLink.mail ? '<p class="erfolgbox">Die Einladung geht per E-Mail hinaus.</p>' : ''}
+      ${neuerLink.mail && !neuerLink.mail_fehler ? '<p class="erfolgbox">Die Einladung wurde per E-Mail verschickt.</p>' : ''}
+      ${neuerLink.mail_fehler ? `<p class="fehlerbox"><strong>Die Einladung konnte nicht per E-Mail verschickt werden.</strong>
+        Meldung des Mailservers: ${esc(neuerLink.mail_fehler)}. Bitte den Link selbst weitergeben.</p>` : ''}
       <p>Gilt ${esc(LINK_GUELTIG[neuerLink.tage])}, ${neuerLink.max == null ? 'beliebig oft' : neuerLink.max === 1 ? 'für eine Person' : `für ${neuerLink.max} Personen`}.
         <strong>Der Link wird nur jetzt angezeigt.</strong></p>
       <div class="kopierblock"><div class="kopierzeile"><span class="kopier-label">Link</span>
