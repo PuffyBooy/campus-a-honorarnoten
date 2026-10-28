@@ -190,6 +190,7 @@ export function notenAktionen(liste, noten, { store, neuLaden }) {
 let gewaehltesJahr = null; // bleibt beim Neuladen der Seite erhalten
 
 export async function render(el, { store, flash, neuLaden, istAktuell }) {
+  const neu = [].concat(flash?.neu ?? []); // eine Nummer oder mehrere (beide Medien auf einmal eingereicht)
   const [alle, zeiten] = await Promise.all([store.meineNoten(), Promise.resolve(store.ablaufZeiten()).catch(() => null)]);
   if (!istAktuell()) return;
   const diesesJahr = new Date().getFullYear();
@@ -204,8 +205,9 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
       <h1>Meine Abrechnungen</h1>
       <a class="btn" href="#/leistungen">Zu Mein Monat</a>
     </div>
-    ${flash?.neu ? `<p class="erfolgbox" role="status">Danke! Deine Prämienabrechnung <strong>${esc(flash.neu)}</strong>
-      wurde eingereicht. Die Redaktion prüft sie. Bis dahin kannst du sie noch zurückziehen und ändern.</p>` : ''}
+    ${neu.length ? `<p class="erfolgbox" role="status">Danke! ${neu.length === 1 ? 'Deine Prämienabrechnung' : 'Deine Prämienabrechnungen'}
+      ${neu.map((x) => `<strong>${esc(x)}</strong>`).join(' und ')} ${neu.length === 1 ? 'wurde' : 'wurden'} eingereicht.
+      Die Redaktion prüft ${neu.length === 1 ? 'sie' : 'beide'}. Bis dahin kannst du noch zurückziehen und ändern.</p>` : ''}
     <section class="kennzahlen" aria-label="Summen ${gewaehltesJahr}">
       <div class="kennzahl"><span class="kennzahl-titel">${gewaehltesJahr} ausgezahlt</span>
         <strong>${esc(formatEuro(euroSumme(bezahlt)))}</strong><span class="klein">${bezahlt.length} ${bezahlt.length === 1 ? 'Abrechnung' : 'Abrechnungen'}</span></div>
@@ -214,7 +216,7 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
       <div class="kennzahl kennzahl-wahl"><label for="n-jahr" class="kennzahl-titel">Jahr</label>
         <select id="n-jahr">${jahre.map((j) => `<option ${j === gewaehltesJahr ? 'selected' : ''}>${j}</option>`).join('')}</select></div>
     </section>
-    ${noten.length ? `<ul class="liste">${noten.map((n) => noteKarte(n, { neu: flash?.neu === n.nummer, zeiten })).join('')}</ul>`
+    ${noten.length ? `<ul class="liste">${noten.map((n) => noteKarte(n, { neu: neu.includes(n.nummer), zeiten })).join('')}</ul>`
     : `<section class="karte"><p>${gewaehltesJahr} noch keine Prämienabrechnungen.</p></section>`}`;
 
   el.querySelector('#n-jahr').addEventListener('change', (ev) => { gewaehltesJahr = Number(ev.target.value); neuLaden(); });
