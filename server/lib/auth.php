@@ -81,6 +81,7 @@ function aufraeumen(PDO $db): void
     q($db, 'delete from versuche where zeit < ?', [time() - 3 * 3600]);
     protokoll_aufraeumen($db);
     nachweise_aufraeumen($db);
+    messwerte_aufraeumen($db);
 }
 
 /** Begrenzung von Versuchen: true, wenn noch erlaubt (und zählt den Versuch) */

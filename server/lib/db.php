@@ -300,6 +300,17 @@ const MIGRATIONEN = [
     create index nachrichten_note on nachrichten(note_id, am);
     alter table noten add column rueckfrage text;
     SQL,
+    // Version 18: Messwerte je Stunde für die Kommandozentrale (Anfragen, Antwortzeit, Fehler)
+    <<<'SQL'
+    create table messwerte (
+      stunde   text primary key,
+      anfragen integer not null default 0,
+      dauer_ms integer not null default 0,
+      max_ms   integer not null default 0,
+      langsam  integer not null default 0,
+      fehler   integer not null default 0
+    );
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -568,11 +579,22 @@ const MYSQL_MIGRATIONEN = [
     ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
     alter table noten add column rueckfrage varchar(20) null;
     SQL,
+    // Version 11 = SQLite-Version 18
+    <<<'SQL'
+    create table if not exists messwerte (
+      stunde   varchar(13) not null primary key,
+      anfragen int not null default 0,
+      dauer_ms bigint not null default 0,
+      max_ms   int not null default 0,
+      langsam  int not null default 0,
+      fehler   int not null default 0
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    SQL,
 ];
 
 /** Tabellen in der Reihenfolge, in der sie eingespielt werden können (für die Sicherung) */
 const TABELLEN = ['nutzer', 'sitzungen', 'anfragen', 'positionen', 'noten', 'note_positionen', 'kommentare', 'verlauf',
-    'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails', 'links', 'protokoll', 'nachweise', 'nachrichten'];
+    'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails', 'links', 'protokoll', 'nachweise', 'nachrichten', 'messwerte'];
 
 /**
  * Datenbank öffnen und auf den neuesten Stand bringen.

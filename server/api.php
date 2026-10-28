@@ -137,6 +137,9 @@ function api(): array
     if ($name === 'pdfMailen' && !versuch_erlaubt($db, 'pdfmail:' . ($nutzer['id'] ?? $ip), 20, 900)) {
         return [429, ['fehler' => 'Zu viele E-Mails. Bitte in 15 Minuten erneut versuchen.']];
     }
+    if ($name === 'leistungstest' && !versuch_erlaubt($db, 'leistungstest:' . ($nutzer['id'] ?? $ip), 10, 900)) {
+        return [429, ['fehler' => 'Bitte höchstens 10 Leistungstests in 15 Minuten.']];
+    }
     if ($name === 'testMail' && !versuch_erlaubt($db, 'testmail:' . ($nutzer['id'] ?? $ip), 10, 900)) {
         return [429, ['fehler' => 'Zu viele Test-E-Mails. Bitte in 15 Minuten erneut versuchen.']];
     }
@@ -152,6 +155,7 @@ function api(): array
 
 ignore_user_abort(true);
 set_time_limit(120);
+$beginn = hrtime(true);
 try {
     [$status, $daten] = api();
 } catch (Fehler $e) {
@@ -166,6 +170,11 @@ try {
     }
 }
 antworten($status, $daten);
+try {
+    // Messwert für die Kommandozentrale (Anfragen, Antwortzeit, Fehler je Stunde)
+    messwert_speichern(datenbank(), $status, (hrtime(true) - $beginn) / 1e6);
+} catch (Throwable) {
+}
 try {
     hintergrundarbeit(datenbank());
 } catch (Throwable $e) {

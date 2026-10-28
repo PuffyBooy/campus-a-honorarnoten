@@ -1150,6 +1150,73 @@ export function rueckfrageErledigt(noteId) {
   return true;
 }
 
+// ------------------------------------------------------------------ Kommandozentrale (Demo: Beispielwerte, kein Server)
+
+export function serverStatus() {
+  brauche('admin');
+  const nun = Date.now();
+  const stunden = Array.from({ length: 48 }, (_, i) => {
+    const t = new Date(nun - (47 - i) * 3600000);
+    const h = t.getHours();
+    const tag = h >= 8 && h <= 22 ? 1 : 0.15; // tagsüber mehr los
+    const anfragen = Math.round((20 + 60 * Math.abs(Math.sin((h + i) / 3))) * tag);
+    const p = (x) => String(x).padStart(2, '0');
+    return {
+      stunde: `${t.getFullYear()}-${p(t.getMonth() + 1)}-${p(t.getDate())}T${p(h)}`, anfragen,
+      mittel_ms: anfragen ? 40 + ((i * 37) % 60) : 0, max_ms: anfragen ? 300 + ((i * 53) % 500) : 0, langsam: 0, fehler: 0,
+    };
+  });
+  const letzte = stunden.slice(-24);
+  const anfragen24 = letzte.reduce((s, x) => s + x.anfragen, 0);
+  return {
+    zeit: jetzt(),
+    pruefungen: [
+      { stufe: 'ok', titel: 'Verschlüsselung', text: 'Die App läuft über https.' },
+      { stufe: 'ok', titel: 'PHP', text: 'PHP 8.3 (Beispiel).' },
+      { stufe: 'ok', titel: 'Speicherplatz', text: '18,4 GB frei.' },
+      { stufe: 'ok', titel: 'Sicherung', text: 'Letzte Sicherung heute, 03:12.' },
+      { stufe: 'warnung', titel: 'E-Mail', text: 'In der Demo werden keine E-Mails verschickt.' },
+      { stufe: 'ok', titel: 'Fehler', text: 'Keine Fehler in den letzten 24 Stunden.' },
+      { stufe: 'ok', titel: 'Antwortzeit', text: 'Ø 64 ms je Anfrage.' },
+    ],
+    auslastung: {
+      anfragen_24h: anfragen24, mittel_ms_24h: 64, max_ms_24h: Math.max(...letzte.map((x) => x.max_ms)), langsam_24h: 0, fehler_24h: 0,
+      stunden, last: [0.42, 0.37, 0.31], kerne: 4, sitzungen: 3, anmeldungen_24h: 7, gesperrt_24h: 0,
+      warnungen_24h: db.protokoll?.filter((x) => x.stufe === 'warnung').length ?? 0, fehler_protokoll_24h: 0,
+    },
+    php: {
+      version: '8.3 (Beispiel)', sapi: 'fpm-fcgi', betriebssystem: 'Linux', server: 'Apache', memory_limit: '256M', max_execution_time: 120,
+      post_max_size: '64M', upload_max_filesize: '64M', speicher_jetzt: 2097152, speicher_spitze: 4194304, zeitzone: 'Europe/Vienna',
+      opcache: { an: true, trefferquote: 99.2 },
+      erweiterungen: { pdo_mysql: true, pdo_sqlite: false, mbstring: true, openssl: true, curl: true, json: true, zlib: true, intl: true },
+    },
+    datenbank: {
+      typ: 'Browser-Speicher (Demo)', version: '', schema: VERSION, groesse: new Blob([JSON.stringify(db)]).size,
+      tabellen: Object.fromEntries(Object.entries(db).filter(([, v]) => Array.isArray(v)).map(([k, v]) => [k, v.length])),
+    },
+    speicher: { frei: 19756849152, gesamt: 53687091200, sicherungen: 0, sicherungen_groesse: 0, letzte_sicherung: null },
+    mail: { aktiv: false, server: '', offen: 0, fehlgeschlagen: 0 },
+  };
+}
+
+export async function leistungstest() {
+  brauche('admin');
+  const zeit = async (fn) => { const t = performance.now(); await fn(); return performance.now() - t; };
+  const lesen = await zeit(() => { for (let i = 0; i < 50; i++) JSON.parse(localStorage.getItem(SPEICHER_KEY) ?? '{}'); }) / 50;
+  const rechnen = await zeit(async () => { let h = new Uint8Array(32); for (let i = 0; i < 2000; i++) h = new Uint8Array(await crypto.subtle.digest('SHA-256', h)); });
+  const e = (titel, ms, g, text) => ({ titel, ms: Math.round(ms * 10) / 10, stufe: ms <= g[0] ? 'ok' : ms <= g[1] ? 'warnung' : 'fehler', text });
+  const ergebnisse = [
+    e('Speicher lesen (Demo)', lesen, [5, 30], 'Ø je Lesen aller Daten aus dem Browser-Speicher (50 Mal).'),
+    e('Rechenleistung', rechnen, [300, 1200], '2.000 Prüfsummen im Browser berechnen.'),
+  ];
+  return { zeit: jetzt(), ergebnisse, gesamt_ms: ergebnisse.reduce((s, x) => s + x.ms, 0), demo: true };
+}
+
+export function serverAktion() {
+  brauche('admin');
+  return 'In der Demo gibt es keinen Server – die Aktion läuft nur auf dem echten Server.';
+}
+
 export function navZaehler() {
   const n = ich();
   return {

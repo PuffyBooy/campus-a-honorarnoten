@@ -98,6 +98,9 @@ export const nachfragen = f('nachfragen');
 export const rueckfrageBeantworten = f('rueckfrageBeantworten');
 export const rueckfrageErledigt = f('rueckfrageErledigt');
 export const navZaehler = f('navZaehler');
+export const serverStatus = f('serverStatus');
+export const leistungstest = f('leistungstest');
+export const serverAktion = f('serverAktion');
 export const verlaufVon = f('verlaufVon');
 
 // Buchhaltung

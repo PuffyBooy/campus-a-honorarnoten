@@ -248,7 +248,7 @@ final class Honorare
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'nachweisHochladen', 'nachweisLoeschen', 'nachweisLaden', 'meineArtikel',
         'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
-        'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler',
+        'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'serverStatus', 'leistungstest', 'serverAktion',
         'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'noteLoeschen',
@@ -953,6 +953,40 @@ final class Honorare
         q($db, 'update noten set rueckfrage = null where id = ?', [$x['id']]);
         verlauf_eintragen($db, $x['id'], $n, 'rueckfrage_erledigt');
         return true;
+    }
+
+    // ---------------------------------------------------------------- Kommandozentrale (Admin → Server)
+    public function serverStatus(): array
+    {
+        brauche($this->ctx, 'admin');
+        return server_status($this->db(), function_exists('https') && https());
+    }
+
+    public function leistungstest(): array
+    {
+        brauche($this->ctx, 'admin');
+        $r = leistungstest($this->db());
+        $this->log('info', 'system', 'Leistungstest: ' . implode(', ', array_map(fn ($e) => $e['titel'] . ' ' . ($e['ms'] ?? '–') . ' ms', $r['ergebnisse'])));
+        return $r;
+    }
+
+    /** Wartungsaktionen der Kommandozentrale; liefert eine kurze Meldung */
+    public function serverAktion(mixed $aktion = null): string
+    {
+        $db = $this->db();
+        $admin = brauche($this->ctx, 'admin');
+        $meldung = match (s($aktion)) {
+            'mails_senden' => mails_verschicken($db, 50) . ' E-Mails verschickt.',
+            'mails_wiederholen' => q($db, 'update mails set versuche = 0, gesperrt_bis = 0 where gesendet_am is null and versuche >= 5')->rowCount()
+                . ' fehlgeschlagene E-Mails werden neu versucht.',
+            'aufraeumen' => (function () use ($db) { aufraeumen($db); return 'Abgelaufene Sitzungen, alte Protokolleinträge und Messwerte entfernt.'; })(),
+            'artikel_neu' => q($db, 'delete from artikel_listen')->rowCount() . ' gespeicherte Artikellisten verworfen – sie werden beim nächsten Öffnen neu geholt.',
+            'sitzungen_beenden' => q($db, 'delete from sitzungen where token_hash <> ?', [token_hash((string) $this->ctx->token)])->rowCount()
+                . ' Sitzungen beendet – alle außer dir müssen sich neu anmelden.',
+            default => throw new Fehler('Unbekannte Aktion.'),
+        };
+        $this->log('warnung', 'system', 'Kommandozentrale: ' . $meldung, $admin);
+        return $meldung;
     }
 
     /** Zahlen für die Navigation: offene Zugangsanfragen (Admin), Rückfragen an mich, Antworten an die Redaktion */

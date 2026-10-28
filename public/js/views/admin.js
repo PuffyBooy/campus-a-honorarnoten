@@ -7,6 +7,7 @@ import { MEDIEN, MEDIUM_KEYS } from '../lib/campus.js';
 import { formatIban } from '../lib/iban.js';
 import { bestaetigen, fehlerText, kopierenMitFeedback, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 import { STANDARD_HOSTER, betreiberOder } from '../lib/rechtliches.js';
+import * as kommandozentrale from './kommandozentrale.js';
 
 const REITER = {
   uebersicht: 'Übersicht', anfragen: 'Anfragen', einladen: 'Einladen', benutzer: 'Benutzer', noten: 'Abrechnungen',
@@ -826,16 +827,18 @@ async function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
 export async function render(el, ctx) {
   const s = await ctx.store.statistik();
   if (!ctx.istAktuell()) return;
-  const tab = REITER[ctx.params.tab] ? ctx.params.tab : 'uebersicht';
+  const tab = REITER[ctx.params.tab] || ctx.params.tab === 'server' ? ctx.params.tab : 'uebersicht';
   el.innerHTML = `
-    <h1>Admin</h1>
-    <nav class="reiter" aria-label="Bereiche">
+    <div class="kopfzeile"><h1>Admin${tab === 'server' ? ' <span class="h1-zusatz">Server</span>' : ''}</h1>
+      ${tab === 'server' ? '<a href="#/admin/uebersicht" class="btn btn-klein">← Zurück zum Admin</a>'
+        : '<a href="#/admin/server" class="btn btn-klein" title="Zustand und Leistung des Servers">🖥 Kommandozentrale</a>'}</div>
+    ${tab === 'server' ? '' : `<nav class="reiter" aria-label="Bereiche">
       ${Object.entries(REITER).map(([k, l]) => `<a href="#/admin/${k}"${k === tab ? ' aria-current="page"' : ''}>${esc(l)}${
         k === 'anfragen' && s.anfragen ? ` <span class="zaehler zaehler-wichtig">${s.anfragen}</span>` : ''}</a>`).join('')}
-    </nav>
+    </nav>`}
     <div id="a-zugang">${zugangsdaten ? zugangsdatenHtml(zugangsdaten) : ''}</div>
     <div id="a-inhalt"></div>`;
   zugangsdatenBinden(el.querySelector('#a-zugang'), ctx.neuLaden);
   const inhalt = el.querySelector('#a-inhalt');
-  await ({ uebersicht, anfragen, einladen, benutzer, noten, protokoll, einstellungen, mail, daten })[tab](inhalt, ctx);
+  await ({ uebersicht, anfragen, einladen, benutzer, noten, protokoll, einstellungen, mail, daten, server: kommandozentrale.render })[tab](inhalt, ctx);
 }
