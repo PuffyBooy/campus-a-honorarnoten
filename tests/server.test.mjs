@@ -60,6 +60,8 @@ test('erstes Admin-Konto und Startpasswort', async () => {
   assert.match((await k.admin.aufruf('erstesPasswortSetzen', passwort)).fehler, /Startpasswort/);
   await k.admin.ok('erstesPasswortSetzen', 'admin-passwort-1');
   assert.equal((await k.admin.ok('aktuellerNutzer')).muss_passwort_aendern, false);
+  // Erinnerung zum Monatsende in den Tests aus (sonst kommen in den letzten Tagen des Monats zusätzliche E-Mails); eigener Test unten
+  php.sql("insert into einstellungen (schluessel, wert) values ('erinnerung_tage', '0')");
 });
 
 test('E-Mail-Versand einrichten (Admin): Passwort bleibt geheim, Test-E-Mail', async () => {
@@ -1057,6 +1059,82 @@ test('Impressum und Datenschutz: Betreiber, öffentlich lesbar, Hinweis bestäti
   assert.equal((await k.anna.ok('einstellungen')).betreiber.name, 'Max Muster');
 });
 
+test('Erinnerung zum Monatsende: einmal pro Monat an alle mit gespeicherten Leistungen', async () => {
+  const e = await k.admin.ok('einstellungen');
+  assert.equal(e.erinnerung_tage, 0);
+  assert.match((await k.admin.aufruf('einstellungenSpeichern', { ...e, erinnerung_tage: 40 })).fehler, /0 bis 31/);
+  const id = await k.anna.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Vergessen?', veroeffentlichung: '2026-10-20', betrag: 15 });
+  await k.admin.ok('einstellungenSpeichern', { ...e, erinnerung_tage: 31 }); // 31: heute ist sicher „vor Monatsende“
+  await k.admin.ok('statistik');
+  const m = await mailAbwarten(php.smtp, (x) => x.an === 'anna@example.org' && /^Monatsende .*nicht eingereicht$/.test(x.betreff));
+  assert.ok(m.text.includes('#/leistungen'));
+  await k.admin.ok('statistik');
+  await k.admin.ok('statistik');
+  assert.equal(php.smtp.mails.filter((x) => x.an === 'anna@example.org' && x.betreff === m.betreff).length, 1, 'nur einmal pro Monat');
+  assert.ok(!php.smtp.mails.some((x) => x.an === 'rita@example.org' && x.betreff.startsWith('Monatsende')), 'nur wer Leistungen gespeichert hat');
+  assert.ok((await k.admin.ok('protokoll', { suche: 'Erinnerung zum Monatsende' })).eintraege.length);
+  await k.admin.ok('einstellungenSpeichern', { ...e, erinnerung_tage: 0 });
+  await k.anna.ok('leistungLoeschen', id);
+});
+
+test('Admin: Als Person ansehen – nur lesen, nur in dieser Sitzung, nicht für Admins', async () => {
+  const liste = await k.admin.ok('nutzerListe');
+  const anna = liste.find((n) => n.email === 'anna@example.org');
+  const rita = liste.find((n) => n.email === 'rita@example.org');
+  assert.equal((await k.rita.aufruf('ansichtStarten', anna.id)).status, 403, 'nur Admins');
+  const admin = client();
+  await admin.ok('anmelden', 'admin@example.org', 'admin-passwort-1');
+  assert.match((await admin.aufruf('ansichtStarten', (await admin.ok('aktuellerNutzer')).id)).fehler, /eigenes Konto/);
+  await admin.ok('ansichtStarten', anna.id);
+  const ich = await admin.ok('aktuellerNutzer');
+  assert.deepEqual([ich.email, ich.ansicht_von], ['anna@example.org', 'Alex Admin']);
+  assert.ok(Array.isArray(await admin.ok('meineNoten')), 'lesen geht');
+  const r = await admin.aufruf('leistungSpeichern', { kategorie: 'kolumne', titel: 'X', veroeffentlichung: '2026-10-01', betrag: 15 });
+  assert.equal(r.status, 403);
+  assert.match(r.fehler, /ändern geht dabei nicht/);
+  assert.equal((await admin.aufruf('nutzerListe')).status, 403, 'auch keine Admin-Funktionen');
+  assert.equal((await k.admin.ok('aktuellerNutzer')).email, 'admin@example.org', 'andere Sitzungen des Admins unberührt');
+  await admin.ok('ansichtBeenden');
+  assert.equal((await admin.ok('aktuellerNutzer')).ansicht_von, undefined);
+  assert.ok((await admin.ok('nutzerListe')).length);
+  // Admin-Konten nicht
+  await k.admin.ok('rollenSetzen', rita.id, ['redaktion', 'admin']);
+  assert.match((await admin.aufruf('ansichtStarten', rita.id)).fehler, /Admin-Konten/);
+  await k.admin.ok('rollenSetzen', rita.id, ['redaktion']);
+  assert.ok((await k.admin.ok('protokoll', { suche: 'Ansehen als' })).eintraege.length >= 2);
+});
+
+test('Funktionstest: ganzer Ablauf mit Testkonten, danach ist nichts mehr da', async () => {
+  assert.equal((await k.rita.aufruf('funktionstest')).status, 403);
+  const zaehlen = () => php.sql('select (select count(*) from nutzer) n, (select count(*) from noten) a, (select count(*) from mails) m').zeilen[0];
+  const vorher = zaehlen();
+  const r = await k.admin.ok('funktionstest');
+  assert.equal(r.ok, true, JSON.stringify(r.schritte.filter((x) => x.stufe !== 'ok')));
+  assert.deepEqual(r.schritte.map((x) => x.titel), ['Testkonten anlegen', 'Leistungen speichern', 'Prämienabrechnung einreichen',
+    'Redaktion sieht die Abrechnung', 'Rückfrage und Antwort', 'Prüfen und annehmen', 'Buchhaltung bezahlt', 'Zahlungsavis (PDF)',
+    'E-Mails vorbereitet', 'Aufgeräumt']);
+  const nachher = zaehlen();
+  assert.equal(nachher.n, vorher.n);
+  assert.equal(nachher.a, vorher.a);
+  assert.ok(!php.smtp.mails.some((m) => m.an.endsWith('@example.invalid')), 'keine E-Mail verschickt');
+  assert.ok((await k.admin.ok('protokoll', { suche: 'Funktionstest' })).eintraege.some((e) => e.text.includes('alles in Ordnung')));
+});
+
+test('Sicherung zurückspielen: Stand davor wird gesichert, Daten wie in der Sicherung', async () => {
+  const s = await k.admin.ok('jetztSichern');
+  const id = await k.anna.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Nach der Sicherung', veroeffentlichung: '2026-10-21', betrag: 15 });
+  assert.equal((await k.rita.aufruf('sicherungZurueckspielen', s.name, 'WIEDERHERSTELLEN')).status, 403);
+  assert.match((await k.admin.aufruf('sicherungZurueckspielen', s.name, 'ja')).fehler, /WIEDERHERSTELLEN/);
+  assert.equal((await k.admin.aufruf('sicherungZurueckspielen', 'honorarnoten-1999-01-01.sqlite', 'WIEDERHERSTELLEN')).status, 404);
+  await new Promise((r) => setTimeout(r, 1100)); // eigener Dateiname (Sekunde) für die Sicherung „davor“
+  const r = await k.admin.ok('sicherungZurueckspielen', s.name, 'WIEDERHERSTELLEN');
+  assert.ok(r.vorher.startsWith('honorarnoten-') && r.vorher !== s.name);
+  assert.ok(!(await k.anna.ok('meineLeistungen')).some((p) => p.id === id), 'Stand der Sicherung');
+  assert.ok((await k.admin.ok('sicherungen')).liste.some((x) => x.name === r.vorher), 'Stand davor gesichert');
+  assert.ok((await k.admin.ok('protokoll', { suche: 'zurückgespielt' })).eintraege.length);
+  assert.ok((await k.admin.ok('nutzerListe')).length > 3, 'Konten wieder da, Admin bleibt angemeldet');
+});
+
 test('Kommandozentrale: Zustand, Messwerte je Stunde, Leistungstest, Wartungsaktionen – nur für Admins', async () => {
   for (const f of ['serverStatus', 'leistungstest']) assert.equal((await k.rita.aufruf(f)).status, 403);
   assert.equal((await k.rita.aufruf('serverAktion', 'aufraeumen')).status, 403);
@@ -1065,8 +1143,11 @@ test('Kommandozentrale: Zustand, Messwerte je Stunde, Leistungstest, Wartungsakt
   assert.equal(s.auslastung.stunden.length, 48);
   assert.ok(s.auslastung.anfragen_24h > 10, 'jede Anfrage wird gezählt');
   assert.ok(s.auslastung.stunden.at(-1).anfragen > 0 && s.auslastung.stunden.at(-1).mittel_ms >= 0);
-  assert.equal(s.datenbank.typ, 'SQLite');
-  assert.ok(s.datenbank.schema >= 18 && s.datenbank.groesse > 0 && s.datenbank.tabellen.messwerte >= 1);
+  // die Tests laufen mit SQLite und (in GitHub Actions) noch einmal mit MySQL
+  const mysql = s.datenbank.typ === 'MySQL/MariaDB';
+  assert.ok(mysql || s.datenbank.typ === 'SQLite', s.datenbank.typ);
+  assert.ok(s.datenbank.schema >= (mysql ? 12 : 19), `Schema ${s.datenbank.schema}`);
+  assert.ok(s.datenbank.groesse > 0 && s.datenbank.tabellen.messwerte >= 1);
   assert.ok(s.php.version && typeof s.php.erweiterungen.mbstring === 'boolean');
   assert.ok(!JSON.stringify(s).includes('smtp-geheim'), 'kein Passwort');
 

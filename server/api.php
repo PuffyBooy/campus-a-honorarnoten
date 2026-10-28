@@ -108,6 +108,21 @@ function api(): array
         return [503, ['fehler' => $wartung['text'], 'wartung' => $wartung['text']]];
     }
 
+    // Admin sieht die App gerade als jemand anderes: nur lesen
+    $ansichtVon = null;
+    if (ist_admin($nutzer) && $token) {
+        $als = wert($db, 'select ansicht_als from sitzungen where token_hash = ?', [token_hash($token)]);
+        $ziel = $als ? nutzer_laden($db, (string) $als) : null;
+        if ($ziel && $ziel['aktiv'] && !ist_admin($ziel)) {
+            $ansichtVon = $nutzer;
+            $nutzer = $ziel;
+        } elseif ($als) {
+            q($db, 'update sitzungen set ansicht_als = null where token_hash = ?', [token_hash($token)]);
+        }
+    }
+    if ($ansichtVon && !in_array($name, Honorare::NUR_ANSEHEN, true)) {
+        return [403, ['fehler' => 'Du siehst die App gerade als ' . anzeigename($nutzer) . ' – ändern geht dabei nicht. Oben auf „Zurück zu meinem Konto“.']];
+    }
     // Begrenzung von Versuchen (gegen Erraten von Passwörtern und Massenanfragen)
     if ($name === 'anmelden') {
         $email = strtolower(tr($args[0] ?? ''));
@@ -145,6 +160,7 @@ function api(): array
     }
 
     $ctx = new Ctx($db, $nutzer, $nutzerId ? $token : null);
+    $ctx->ansichtVon = $ansichtVon;
     // Beim Aufruf genau so viele Argumente übergeben, wie die Funktion annimmt
     $methode = new ReflectionMethod(Honorare::class, $name);
     $daten = $methode->invokeArgs(new Honorare($ctx), array_slice($args, 0, $methode->getNumberOfParameters()));

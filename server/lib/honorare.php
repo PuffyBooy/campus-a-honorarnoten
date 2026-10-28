@@ -25,6 +25,8 @@ final class Ctx
     public ?string $neueSitzung = null;
     public bool $sitzungLoeschen = false;
     public bool $erlaubtMitStartpasswort = false;
+    /** Admin, der die App gerade als $nutzer ansieht (nur lesen), sonst null */
+    public ?array $ansichtVon = null;
     /** @var callable|null Ersatz für den Abruf von campus-a-college.at (Tests) */
     public $holen = null;
 
@@ -101,12 +103,13 @@ function einstellungen_laden(PDO $db): array
     foreach (zeilen($db, 'select * from einstellungen') as $z) {
         // „auftraggeber“: früheres SEPA-Konto, „mail“: eigene Einstellungen (mit Passwort, nie an den Browser),
         // „zahlungskonto“: nur für Buchhaltung und Admin (eigene Funktion)
-        if (in_array($z['schluessel'], ['auftraggeber', 'mail', 'zahlungskonto', 'wartung', 'warnmail'], true)) continue;
+        if (in_array($z['schluessel'], ['auftraggeber', 'mail', 'zahlungskonto', 'wartung', 'warnmail', 'erinnerung_monat'], true)) continue;
         $e[$z['schluessel']] = json_decode($z['wert'], true);
     }
     $e['honorarsaetze'] = saetze_normalisieren($e['honorarsaetze']); // ältere Sätze ohne Medium gelten für beide
     $e['betreiber'] = array_merge(BETREIBER_STANDARD, array_intersect_key(is_array($e['betreiber']) ? $e['betreiber'] : [], BETREIBER_STANDARD));
     $e['rueckgabe_vorlagen'] = vorlagen_normalisieren($e['rueckgabe_vorlagen'] ?? null);
+    $e['erinnerung_tage'] = max(0, min(31, (int) ($e['erinnerung_tage'] ?? ERINNERUNG_TAGE)));
     return $e;
 }
 
@@ -248,7 +251,7 @@ final class Honorare
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'nachweisHochladen', 'nachweisLoeschen', 'nachweisLaden', 'meineArtikel',
         'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
-        'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'serverStatus', 'leistungstest', 'serverAktion',
+        'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'serverStatus', 'leistungstest', 'serverAktion', 'funktionstest', 'sicherungZurueckspielen', 'ansichtStarten', 'ansichtBeenden',
         'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'noteLoeschen',
@@ -257,6 +260,12 @@ final class Honorare
         'registrierungslinkErstellen', 'registrierungslinks', 'registrierungslinkWiderrufen',
         'dashboard', 'protokoll', 'sicherungen', 'jetztSichern', 'sicherungHerunterladen', 'rechtliches', 'hinweisBestaetigen', 'benachrichtigungenSpeichern',
     ];
+
+    /** „Als Person ansehen“: nur diese Funktionen (lesen) – alles andere ist gesperrt (lib/ansicht.js) */
+    public const NUR_ANSEHEN = ['aktuellerNutzer', 'abmelden', 'ansichtBeenden', 'einstellungen', 'rechtliches', 'navZaehler',
+        'meineLeistungen', 'meineArtikel', 'naechsteNummer', 'notenDiesenMonat', 'meineNoten', 'note', 'nachrichten', 'nachweisLaden',
+        'zahlungsavis', 'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'kommentare', 'verlaufVon',
+        'offeneZahlungen', 'bezahlteNoten', 'bezahlteNotenSeit', 'zahlungskonto'];
 
     /** ohne Anmeldung erlaubt (Impressum und Datenschutz müssen für alle lesbar sein) */
     public const OEFFENTLICH = ['aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'rechtliches',
@@ -283,7 +292,32 @@ final class Honorare
         $n = $this->ctx->nutzer;
         // Admins sehen oben, dass der Wartungsmodus an ist
         if (ist_admin($n) && wartung_laden($this->db())['an']) $n['wartung'] = true;
+        if ($n && $this->ctx->ansichtVon) $n['ansicht_von'] = anzeigename($this->ctx->ansichtVon);
         return $n;
+    }
+
+    /** Admin: die App so sehen, wie diese Person sie sieht (nur ansehen, nur in dieser Sitzung) */
+    public function ansichtStarten(mixed $uid = null): bool
+    {
+        $db = $this->db();
+        $admin = brauche($this->ctx, 'admin');
+        $n = nutzer_laden($db, s($uid));
+        pruefe($n, 'Dieses Konto gibt es nicht (mehr).', 404);
+        pruefe($n['id'] !== $admin['id'], 'Das ist dein eigenes Konto.');
+        pruefe($n['aktiv'], 'Dieses Konto ist deaktiviert.');
+        pruefe(!ist_admin($n), 'Admin-Konten können nicht angesehen werden.');
+        q($db, 'update sitzungen set ansicht_als = ? where token_hash = ?', [$n['id'], token_hash((string) $this->ctx->token)]);
+        $this->log('warnung', 'konten', 'Ansehen als ' . anzeigename($n) . ' (nur lesen) begonnen');
+        return true;
+    }
+
+    public function ansichtBeenden(): bool
+    {
+        $db = $this->db();
+        if (!$this->ctx->ansichtVon) return true;
+        q($db, 'update sitzungen set ansicht_als = null where token_hash = ?', [token_hash((string) $this->ctx->token)]);
+        protokoll($db, 'info', 'konten', 'Ansehen als ' . anzeigename($this->ctx->nutzer) . ' beendet', $this->ctx->ansichtVon);
+        return true;
     }
 
     public function wartung(): array
@@ -970,6 +1004,38 @@ final class Honorare
         return $r;
     }
 
+    /** Der ganze Ablauf mit Testkonten – wird danach vollständig zurückgenommen */
+    public function funktionstest(): array
+    {
+        brauche($this->ctx, 'admin');
+        $r = funktionstest($this->db());
+        $fehler = array_values(array_filter($r['schritte'], fn ($s) => $s['stufe'] === 'fehler'));
+        $this->log($r['ok'] ? 'info' : 'fehler', 'system', $r['ok'] ? 'Funktionstest: alles in Ordnung'
+            : 'Funktionstest fehlgeschlagen bei „' . $fehler[0]['titel'] . '“: ' . $fehler[0]['text']);
+        return $r;
+    }
+
+    /** Sicherung zurückspielen (vorher wird der jetzige Stand gesichert); danach müssen sich alle neu anmelden */
+    public function sicherungZurueckspielen(mixed $name = null, mixed $bestaetigung = null): array
+    {
+        $db = $this->db();
+        $admin = brauche($this->ctx, 'admin');
+        pruefe(s($bestaetigung) === 'WIEDERHERSTELLEN', 'Zur Bestätigung bitte WIEDERHERSTELLEN eintippen.');
+        $datei = sicherung_pfad(s($name));
+        pruefe($datei, 'Diese Sicherung gibt es nicht (mehr).', 404);
+        pruefe(str_ends_with($datei, ist_mysql($db) ? '.sql' : '.sqlite'), 'Diese Sicherung passt nicht zur Datenbank (SQLite und MySQL lassen sich nicht mischen).');
+        $vorher = sichern($db, daten_ordner() . '/backups/honorarnoten-' . date('Y-m-d-His') . '.sqlite');
+        try {
+            sicherung_einspielen($db, $datei);
+        } catch (Throwable $e) {
+            protokoll(datenbank(true), 'fehler', 'sicherung', 'Zurückspielen von ' . basename($datei) . ' fehlgeschlagen: ' . $e->getMessage()
+                . ' – der Stand davor liegt in ' . basename($vorher), $admin);
+            throw new Fehler('Das Zurückspielen ist fehlgeschlagen: ' . $e->getMessage() . ' Der Stand davor ist gesichert (' . basename($vorher) . ').', 500);
+        }
+        protokoll(datenbank(true), 'warnung', 'sicherung', 'Sicherung zurückgespielt: ' . basename($datei) . ' (Stand davor gesichert als ' . basename($vorher) . ')', $admin);
+        return ['vorher' => basename($vorher)];
+    }
+
     /** Wartungsaktionen der Kommandozentrale; liefert eine kurze Meldung */
     public function serverAktion(mixed $aktion = null): string
     {
@@ -1254,8 +1320,14 @@ final class Honorare
         $saetze = saetze_normalisieren($d['honorarsaetze'] ?? einstellungen_laden($db)['honorarsaetze']);
         $betreiber = betreiber_pruefen(einstellungen_laden($db)['betreiber'], $d['betreiber'] ?? null);
         $vorlagen = array_key_exists('rueckgabe_vorlagen', $d) ? vorlagen_normalisieren($d['rueckgabe_vorlagen']) : einstellungen_laden($db)['rueckgabe_vorlagen'];
+        $erinnerung = einstellungen_laden($db)['erinnerung_tage'];
+        if (array_key_exists('erinnerung_tage', $d)) {
+            $erinnerung = filter_var($d['erinnerung_tage'], FILTER_VALIDATE_INT);
+            pruefe($erinnerung !== false && $erinnerung >= 0 && $erinnerung <= 31, 'Erinnerung: bitte 0 bis 31 Tage vor Monatsende angeben (0 = aus).');
+        }
         $speichere = fn ($schluessel, $wert) => upsert($db, 'einstellungen', ['schluessel' => $schluessel, 'wert' => json_text($wert)], ['schluessel']);
-        transaktion($db, function () use ($speichere, $e, $kontakt, $saetze, $betreiber, $vorlagen) {
+        transaktion($db, function () use ($speichere, $e, $kontakt, $saetze, $betreiber, $vorlagen, $erinnerung) {
+            $speichere('erinnerung_tage', $erinnerung);
             $speichere('betreiber', $betreiber);
             $speichere('rueckgabe_vorlagen', $vorlagen);
             $speichere('empfaenger', [

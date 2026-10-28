@@ -257,3 +257,102 @@ function leistungstest(PDO $db): array
     }
     return ['zeit' => jetzt(), 'ergebnisse' => $e, 'gesamt_ms' => round(array_sum(array_column($e, 'ms')), 1)];
 }
+
+/** Abbruch des Funktionstests: alles in der Transaktion wird zurückgenommen */
+final class FunktionstestZurueck extends Exception
+{
+}
+
+/**
+ * Funktionstest: der ganze Ablauf mit drei Testkonten – Leistungen speichern (mit Nachweis), einreichen, Rückfrage,
+ * prüfen, annehmen, bezahlen, Zahlungsavis. Alles läuft in einer Transaktion, die am Ende zurückgenommen wird:
+ * es bleibt nichts übrig und keine E-Mail geht hinaus.
+ */
+function funktionstest(PDO $db): array
+{
+    $schritte = [];
+    $kennung = bin2hex(random_bytes(3));
+    $adresse = fn (string $rolle) => "funktionstest-$kennung-$rolle@example.invalid";
+    $schritt = function (string $titel, callable $fn) use (&$schritte): mixed {
+        $t = hrtime(true);
+        try {
+            [$text, $wert, $stufe] = $fn() + [null, null, 'ok'];
+            $schritte[] = ['titel' => $titel, 'stufe' => $stufe, 'text' => (string) $text, 'ms' => round((hrtime(true) - $t) / 1e6, 1)];
+            return $wert;
+        } catch (Throwable $e) {
+            $schritte[] = ['titel' => $titel, 'stufe' => 'fehler', 'text' => $e->getMessage(), 'ms' => round((hrtime(true) - $t) / 1e6, 1)];
+            throw new FunktionstestZurueck();
+        }
+    };
+    try {
+        transaktion($db, function () use ($db, $schritt, $adresse, $kennung) {
+            $ids = $schritt('Testkonten anlegen', function () use ($db, $adresse) {
+                $ids = [];
+                foreach (['autor' => ['autor', 'redigieren'], 'redaktion' => ['redaktion'], 'buchhaltung' => ['buchhaltung']] as $k => $rollen) {
+                    $ids[$k] = konto_einfuegen($db, 'Funktionstest', ucfirst($k), $adresse($k), $rollen, BLIND_HASH);
+                }
+                q($db, "update nutzer set muss_passwort_aendern = 0, strasse = 'Testgasse 1', plz_ort = '1010 Wien',
+                        iban = 'AT611904300234573201', campus_profil = 'ae10f00d' where id = ?", [$ids['autor']]);
+                q($db, 'update nutzer set muss_passwort_aendern = 0 where id in (?, ?)', [$ids['redaktion'], $ids['buchhaltung']]);
+                return ['Autor:in, Redaktion und Buchhaltung', $ids];
+            });
+            $als = fn (string $k) => new Honorare(new Ctx($db, nutzer_laden($db, $ids[$k])));
+            $heute = heute_iso();
+            $pids = $schritt('Leistungen speichern', function () use ($als, $heute) {
+                $a = $als('autor');
+                $p1 = $a->leistungSpeichern(['kategorie' => 'kolumne', 'titel' => 'Funktionstest Kolumne', 'veroeffentlichung' => $heute, 'betrag' => 15, 'medium' => 'college']);
+                $p2 = $a->leistungSpeichern(['kategorie' => 'redigieren', 'anzahl' => 2, 'veroeffentlichung' => $heute]);
+                $a->nachweisHochladen($p2, 'Funktionstest.pdf', base64_encode("%PDF-1.4\n% Funktionstest\n%%EOF\n"));
+                pruefe(count($a->meineLeistungen()) === 2, 'Die gespeicherten Leistungen fehlen in „Mein Monat“.');
+                return ['Kolumne und Redigieren mit Nachweis (PDF)', [$p1, $p2]];
+            });
+            $note = $schritt('Prämienabrechnung einreichen', function () use ($als, $pids) {
+                $note = $als('autor')->abrechnungAbschicken($pids);
+                return ["{$note['nummer']} über " . eur($note['betrag']), $note];
+            });
+            $schritt('Redaktion sieht die Abrechnung', function () use ($als, $note) {
+                $l = $als('redaktion')->redaktionListe(['status' => 'eingereicht', 'suche' => $note['nummer']]);
+                pruefe(in_array($note['id'], array_column($l['noten'], 'id'), true), 'Die Abrechnung fehlt in der Liste der Redaktion.');
+                return ['In „Zu prüfen“ gefunden'];
+            });
+            $schritt('Rückfrage und Antwort', function () use ($als, $note) {
+                $als('redaktion')->nachfragen($note['id'], 'Funktionstest: Frage der Redaktion');
+                $als('autor')->rueckfrageBeantworten($note['id'], 'Funktionstest: Antwort');
+                pruefe(count($als('redaktion')->nachrichten($note['id'])) === 2, 'Die Nachrichten fehlen.');
+                return ['Redaktion fragt, Autor:in antwortet'];
+            });
+            $schritt('Prüfen und annehmen', function () use ($als, $note) {
+                $r = $als('redaktion');
+                foreach ($note['positionen'] as $p) $r->positionPruefen($note['id'], $p['id'], true);
+                $r->annehmen($note['id']);
+                return [count($note['positionen']) . ' Leistungen abgehakt, angenommen'];
+            });
+            $schritt('Buchhaltung bezahlt', function () use ($als, $note, $heute) {
+                $b = $als('buchhaltung');
+                pruefe(in_array($note['id'], array_column($b->offeneZahlungen(), 'id'), true), 'Die Abrechnung fehlt bei der Buchhaltung.');
+                $b->alsBezahltMarkieren($note['id'], $heute);
+                return ['Als bezahlt markiert'];
+            });
+            $schritt('Zahlungsavis (PDF)', function () use ($als, $note) {
+                $avis = $als('autor')->zahlungsavis($note['id']);
+                pruefe(str_starts_with((string) base64_decode($avis['inhalt']), '%PDF'), 'Das Zahlungsavis ist kein PDF.');
+                return [$avis['name']];
+            });
+            $schritt('E-Mails vorbereitet', function () use ($db, $kennung) {
+                if (!mail_einstellungen($db)['aktiv']) return ['Der E-Mail-Versand ist ausgeschaltet – im Betrieb gingen hier keine E-Mails hinaus.', null, 'warnung'];
+                $n = (int) wert($db, 'select count(*) from mails where an like ?', ["funktionstest-$kennung-%"]);
+                pruefe($n >= 3, "Nur $n E-Mails vorbereitet (erwartet: Eingang, Rückfrage, Annahme, Zahlung …).");
+                return ["$n E-Mails – werden nicht verschickt"];
+            });
+            throw new FunktionstestZurueck(); // alles zurücknehmen
+        });
+    } catch (FunktionstestZurueck) {
+    }
+    $rest = (int) wert($db, 'select count(*) from nutzer where email like ?', ["funktionstest-$kennung-%"])
+        + (int) wert($db, 'select count(*) from mails where an like ?', ["funktionstest-$kennung-%"]);
+    $schritte[] = $rest === 0
+        ? ['titel' => 'Aufgeräumt', 'stufe' => 'ok', 'text' => 'Testkonten, Abrechnung und E-Mails sind wieder weg.', 'ms' => null]
+        : ['titel' => 'Aufgeräumt', 'stufe' => 'fehler', 'text' => "Es sind noch $rest Testeinträge übrig.", 'ms' => null];
+    $ok = !array_filter($schritte, fn ($s) => $s['stufe'] === 'fehler');
+    return ['zeit' => jetzt(), 'ok' => $ok, 'schritte' => $schritte];
+}

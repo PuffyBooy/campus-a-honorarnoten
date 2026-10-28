@@ -370,6 +370,7 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
             <button type="button" class="btn btn-klein" data-aktion="email">E-Mail ändern</button>
             <button type="button" class="btn btn-klein" data-aktion="pw">Passwort zurücksetzen</button>
             ${n.zwei_faktor ? '<button type="button" class="btn btn-klein" data-aktion="zf">Zwei-Faktor zurücksetzen</button>' : ''}
+            ${n.aktiv && !n.rollen.includes('admin') ? '<button type="button" class="btn btn-klein" data-aktion="ansehen" title="Die App so sehen, wie diese Person sie sieht – nur lesen">Ansehen als</button>' : ''}
             <button type="button" class="btn btn-klein" data-aktion="aktiv">${n.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button>
             <button type="button" class="btn btn-klein btn-gefahr" data-aktion="loeschen">Löschen</button>
           </span></td>
@@ -421,6 +422,13 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
         const r = await store.emailAendern(n.id, neu);
         meldung(`E-Mail von ${vollerName(n)} geändert${r.mail ? '. Alte und neue Adresse bekommen eine Info-Mail' : ''}.`, 'erfolg');
         neuLaden();
+      } catch (e) {
+        meldung(fehlerText(e), 'fehler');
+      }
+    } else if (knopf.dataset.aktion === 'ansehen') {
+      try {
+        await store.ansichtStarten(n.id);
+        location.hash = '#/';
       } catch (e) {
         meldung(fehlerText(e), 'fehler');
       }
@@ -569,6 +577,11 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <p class="tipp">Die Redaktion übernimmt sie mit einem Klick beim Zurückgeben. Eine Vorlage pro Zeile, höchstens 15.</p>
       <label for="e-vorlagen" class="sr-only">Vorlagen</label>
       <textarea id="e-vorlagen" name="vorlagen" rows="6">${esc((e.rueckgabe_vorlagen ?? []).join('\n'))}</textarea>
+      <h2 class="abstand-oben">Erinnerung zum Monatsende</h2>
+      <p class="tipp">Wer Leistungen gespeichert, aber noch nicht eingereicht hat, bekommt einmal pro Monat eine E-Mail.
+        Jede Person kann das im Profil abschalten.</p>
+      <label for="e-erinnerung">Tage vor Monatsende (0 = keine Erinnerung)</label>
+      <input id="e-erinnerung" name="erinnerung" type="number" min="0" max="31" step="1" inputmode="numeric" value="${esc(e.erinnerung_tage ?? 3)}">
       <h2 class="abstand-oben">Datenschutz</h2>
       <label for="e-kontakt">Kontakt für Datenschutzanfragen (E-Mail)</label>
       <input id="e-kontakt" name="kontakt" type="email" value="${esc(e.datenschutzKontakt)}">
@@ -652,6 +665,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       datenschutzKontakt: form.kontakt.value,
       honorarsaetze,
       rueckgabe_vorlagen: form.vorlagen.value.split('\n'),
+      erinnerung_tage: Number(form.erinnerung.value || 0),
       betreiber: {
         name: form.b_name.value, anschrift: form.b_anschrift.value, email: form.b_email.value, telefon: form.b_telefon.value,
         extern: form.b_extern.checked, hoster: form.b_hoster.value,
@@ -762,7 +776,8 @@ async function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
           <td data-label="Datei" class="mono umbruch">${esc(b.name)}</td>
           <td data-label="Erstellt">${esc(formatZeitpunkt(b.zeit))}</td>
           <td data-label="Größe" class="rechts">${esc(groesse(b.groesse))}</td>
-          <td data-label=""><button type="button" class="btn btn-klein" data-laden>Herunterladen</button></td></tr>`).join('')}</tbody></table>`
+          <td data-label=""><span class="aktionen eng"><button type="button" class="btn btn-klein" data-laden>Herunterladen</button>
+            <button type="button" class="btn btn-klein btn-gefahr" data-zurueckspielen>Zurückspielen …</button></span></td></tr>`).join('')}</tbody></table>`
         : '<p class="klein">Noch keine Sicherung vorhanden. Die erste entsteht beim nächsten Aufruf der App oder mit „Jetzt sichern“.</p>'}
     </section>
     <section class="karte">
@@ -780,7 +795,30 @@ async function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
       meldung(fehlerText(e), 'fehler');
     }
   }));
-  inhalt.querySelector('tbody')?.addEventListener('click', (ev) => {
+  inhalt.querySelector('tbody')?.addEventListener('click', async (ev) => {
+    const z = ev.target.closest('[data-zurueckspielen]');
+    if (z) {
+      const name = z.closest('tr').dataset.name;
+      const eingabe = await bestaetigen({
+        titel: 'Sicherung zurückspielen?',
+        html: `<p>Alle Daten werden auf den Stand von <strong>${esc(name)}</strong> zurückgesetzt. Was seitdem eingegeben wurde, ist dann weg.</p>
+          <p>Vorher wird der jetzige Stand automatisch gesichert. Danach müssen sich alle neu anmelden.</p>`,
+        eingabe: { label: 'Zur Bestätigung WIEDERHERSTELLEN eintippen', wert: '' },
+        ja: 'Zurückspielen',
+        gefahr: true,
+      });
+      if (!eingabe) return;
+      await mitSperre(z, async () => {
+        try {
+          const r = await store.sicherungZurueckspielen(name, eingabe);
+          alert(`Sicherung zurückgespielt. Der Stand davor liegt in ${r.vorher}. Die Seite wird neu geladen.`);
+          location.reload();
+        } catch (e) {
+          meldung(fehlerText(e), 'fehler');
+        }
+      });
+      return;
+    }
     const k = ev.target.closest('[data-laden]');
     if (!k) return;
     mitSperre(k, async () => {

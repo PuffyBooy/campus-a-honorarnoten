@@ -123,8 +123,17 @@ export async function render(inhalt, { store, istDemo, neuLaden, istAktuell }) {
     </section>
 
     <section class="karte">
+      <div class="kopfzeile"><h3>Funktionstest</h3>
+        <button type="button" class="btn btn-primaer" id="k-funktion">Funktionstest starten</button></div>
+      <p class="klein">Spielt den ganzen Ablauf mit drei Testkonten durch: Leistungen speichern (mit Nachweis), einreichen, Rückfrage,
+        prüfen, annehmen, bezahlen, Zahlungsavis. Danach wird alles zurückgenommen – es bleibt nichts übrig und keine E-Mail geht hinaus.
+        Gut nach jedem Update.</p>
+      <div id="k-funktion-ergebnis"></div>
+    </section>
+
+    <section class="karte">
       <div class="kopfzeile"><h3>Leistungstest</h3>
-        <button type="button" class="btn btn-primaer" id="k-test">Leistungstest starten</button></div>
+        <button type="button" class="btn" id="k-test">Leistungstest starten</button></div>
       <p class="klein">Misst Datenbank, Rechenleistung, Dateien, PDF und ob campus-a-college.at und der Mailserver erreichbar sind.
         Dauert ein paar Sekunden und belastet den Server dabei kurz.</p>
       <div id="k-test-ergebnis"></div>
@@ -178,6 +187,21 @@ export async function render(inhalt, { store, istDemo, neuLaden, istAktuell }) {
       if (!document.hidden && !document.querySelector('dialog[open]')) neuLaden();
     }, 30000) : null;
   });
+
+  const funktion = inhalt.querySelector('#k-funktion-ergebnis');
+  inhalt.querySelector('#k-funktion').addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    funktion.innerHTML = '<p class="laden">Test läuft …</p>';
+    try {
+      const r = await store.funktionstest();
+      funktion.innerHTML = `
+        ${r.ok === null ? '' : `<p class="${r.ok ? 'erfolgbox' : 'fehlerbox'}"><strong>${r.ok ? `Alles funktioniert${r.schritte.some((x) => x.stufe === 'warnung') ? ' (mit Hinweis)' : ''}.` : 'Ein Schritt ist fehlgeschlagen.'}</strong>
+          ${r.ok ? '' : 'Details stehen auch im Protokoll.'}</p>`}
+        <ol class="funktion-schritte">${r.schritte.map((x) => `<li>${ampel(x.stufe)}<span><strong>${esc(x.titel)}</strong>
+          <span class="klein">${esc(x.text)}${x.ms != null ? ` · ${esc(ms(x.ms))}` : ''}</span></span></li>`).join('')}</ol>`;
+    } catch (e) {
+      funktion.innerHTML = `<p class="fehlerbox">${esc(fehlerText(e))}</p>`;
+    }
+  }));
 
   const ergebnis = inhalt.querySelector('#k-test-ergebnis');
   inhalt.querySelector('#k-test').addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {

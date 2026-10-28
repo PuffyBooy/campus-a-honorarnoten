@@ -266,6 +266,22 @@ function mail_abgelehnt_autor(PDO $db, array $note, string $grund): array
     ]);
 }
 
+/** Erinnerung zum Monatsende: gespeicherte, noch nicht eingereichte Leistungen */
+function mail_monatserinnerung(PDO $db, string $vorname, int $anzahl, float $summe, int $rest): array
+{
+    $wann = $rest === 0 ? 'heute' : ($rest === 1 ? 'morgen' : "in $rest Tagen");
+    $leistungen = $anzahl === 1 ? 'eine Leistung' : "$anzahl Leistungen";
+    return mail_bauen([
+        'betreff' => "Monatsende $wann: noch $leistungen nicht eingereicht",
+        'vorschau' => "Du hast $leistungen über " . eur($summe) . ' gespeichert.',
+        'titel' => 'Denk an deine Prämienabrechnung',
+        'absaetze' => ["Hallo $vorname,", "der Monat endet $wann. In „Mein Monat“ hast du noch $leistungen über " . eur($summe)
+            . ' gespeichert, aber noch nicht eingereicht. Reiche sie ein, damit sie mit diesem Monat abgerechnet werden.'],
+        'tabelle' => [['Gespeichert', $leistungen], ['Zusammen', eur($summe)]],
+        'knopf' => ['Jetzt einreichen', app_link($db, 'leistungen')],
+    ]);
+}
+
 /** Rückfrage der Redaktion an die Autor:in */
 function mail_rueckfrage_autor(PDO $db, array $note, string $text, string $von): array
 {

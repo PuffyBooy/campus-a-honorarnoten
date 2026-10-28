@@ -131,7 +131,47 @@ function sitzungsNutzer() {
   let uid = null;
   try { uid = sessionStorage.getItem(SITZUNG_KEY); } catch { /* ignorieren */ }
   const n = db?.nutzer.find((x) => x.id === uid);
-  return n?.aktiv ? n : null;
+  if (!n?.aktiv) return null;
+  // Admin sieht die App als jemand anderes (nur ansehen, nur in diesem Tab)
+  const als = ansichtZiel(n);
+  return als ?? n;
+}
+
+const ANSICHT_KEY = 'campus-a-honorare:ansicht';
+function ansichtZiel(admin) {
+  let uid = null;
+  try { uid = sessionStorage.getItem(ANSICHT_KEY); } catch { /* ignorieren */ }
+  if (!uid || !admin.rollen.includes('admin')) return null;
+  const z = db.nutzer.find((x) => x.id === uid);
+  return z?.aktiv && !z.rollen.includes('admin') ? z : null;
+}
+function echterNutzer() {
+  let uid = null;
+  try { uid = sessionStorage.getItem(SITZUNG_KEY); } catch { /* ignorieren */ }
+  return db?.nutzer.find((x) => x.id === uid && x.aktiv) ?? null;
+}
+
+/** Läuft gerade „Als Person ansehen“? (die Demo sperrt dann alles außer Lesen, siehe lib/ansicht.js) */
+export function ansichtAktiv() {
+  const admin = echterNutzer();
+  return Boolean(admin && ansichtZiel(admin));
+}
+
+export function ansichtStarten(uid) {
+  const { n } = adminNutzer(uid);
+  const admin = echterNutzer();
+  pruefe(n.id !== admin.id, 'Das ist dein eigenes Konto.');
+  pruefe(n.aktiv, 'Dieses Konto ist deaktiviert.');
+  pruefe(!n.rollen.includes('admin'), 'Admin-Konten können nicht angesehen werden.');
+  sessionStorage.setItem(ANSICHT_KEY, n.id);
+  protokoll('warnung', 'konten', `Ansehen als ${anzeigename(n)} (nur lesen) begonnen`, admin);
+  speichern();
+  return true;
+}
+
+export function ansichtBeenden() {
+  sessionStorage.removeItem(ANSICHT_KEY);
+  return true;
 }
 
 function ich() {
@@ -174,6 +214,7 @@ export function aktuellerNutzer() {
   wartungPruefen(n);
   const sicht = nutzerSicht(n);
   if (sicht?.rollen.includes('admin') && wartungLaden().an) sicht.wartung = true;
+  if (sicht && ansichtAktiv()) sicht.ansicht_von = anzeigename(echterNutzer());
   return sicht;
 }
 
@@ -239,6 +280,7 @@ export async function anmelden(email, passwort, code = null) {
 
 export function abmelden() {
   sessionStorage.removeItem(SITZUNG_KEY);
+  sessionStorage.removeItem(ANSICHT_KEY);
 }
 
 // ------------------------------------------------------------------ Zugang anfragen & freischalten
@@ -1212,6 +1254,14 @@ export async function leistungstest() {
   return { zeit: jetzt(), ergebnisse, gesamt_ms: ergebnisse.reduce((s, x) => s + x.ms, 0), demo: true };
 }
 
+export async function funktionstest() {
+  brauche('admin');
+  return {
+    zeit: jetzt(), ok: null,
+    schritte: [{ titel: 'Demo', stufe: 'warnung', text: 'Der Funktionstest läuft nur auf dem echten Server. In der Demo kannst du den Ablauf mit den Demo-Konten selbst durchklicken.', ms: null }],
+  };
+}
+
 export function serverAktion() {
   brauche('admin');
   return 'In der Demo gibt es keinen Server – die Aktion läuft nur auf dem echten Server.';
@@ -1377,6 +1427,7 @@ export function einstellungen() {
   e.honorarsaetze = saetzeNormalisieren(e.honorarsaetze); // ältere Sätze ohne Medium gelten für beide
   e.betreiber = betreiberOder(e.betreiber);
   e.rueckgabe_vorlagen = vorlagenNormalisieren(e.rueckgabe_vorlagen);
+  e.erinnerung_tage ??= 3;
   return e;
 }
 
@@ -1402,7 +1453,9 @@ export function hinweisBestaetigen() {
   return nutzerSicht(n);
 }
 
-export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorarsaetze, betreiber, rueckgabe_vorlagen: vorlagen }) {
+export function einstellungenSpeichern({
+  empfaenger, datenschutzKontakt, honorarsaetze, betreiber, rueckgabe_vorlagen: vorlagen, erinnerung_tage: erinnerung,
+}) {
   brauche('admin');
   pruefe(!leer(empfaenger?.name), 'Bitte den Namen des Rechnungsempfängers angeben.');
   let saetze;
@@ -1411,8 +1464,13 @@ export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorar
   } catch (e) {
     throw new Fehler(e.message);
   }
+  if (erinnerung !== undefined) {
+    erinnerung = Number(erinnerung);
+    pruefe(Number.isInteger(erinnerung) && erinnerung >= 0 && erinnerung <= 31, 'Erinnerung: bitte 0 bis 31 Tage vor Monatsende angeben (0 = aus).');
+  }
   db.einstellungen = {
     ...db.einstellungen,
+    erinnerung_tage: erinnerung ?? db.einstellungen.erinnerung_tage ?? 3,
     empfaenger: {
       name: trim(empfaenger.name), strasse: trim(empfaenger.strasse),
       plz_ort: trim(empfaenger.plz_ort), uid: trim(empfaenger.uid),
