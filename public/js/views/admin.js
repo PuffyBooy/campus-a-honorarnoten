@@ -370,6 +370,7 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
             <button type="button" class="btn btn-klein" data-aktion="email">E-Mail ändern</button>
             <button type="button" class="btn btn-klein" data-aktion="pw">Passwort zurücksetzen</button>
             ${n.zwei_faktor ? '<button type="button" class="btn btn-klein" data-aktion="zf">Zwei-Faktor zurücksetzen</button>' : ''}
+            ${n.aktiv && !n.rollen.includes('admin') ? '<button type="button" class="btn btn-klein" data-aktion="ansehen" title="Die App so sehen, wie diese Person sie sieht – nur lesen">Ansehen als</button>' : ''}
             <button type="button" class="btn btn-klein" data-aktion="aktiv">${n.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button>
             <button type="button" class="btn btn-klein btn-gefahr" data-aktion="loeschen">Löschen</button>
           </span></td>
@@ -421,6 +422,13 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
         const r = await store.emailAendern(n.id, neu);
         meldung(`E-Mail von ${vollerName(n)} geändert${r.mail ? '. Alte und neue Adresse bekommen eine Info-Mail' : ''}.`, 'erfolg');
         neuLaden();
+      } catch (e) {
+        meldung(fehlerText(e), 'fehler');
+      }
+    } else if (knopf.dataset.aktion === 'ansehen') {
+      try {
+        await store.ansichtStarten(n.id);
+        location.hash = '#/';
       } catch (e) {
         meldung(fehlerText(e), 'fehler');
       }

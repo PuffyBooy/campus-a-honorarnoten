@@ -1077,6 +1077,33 @@ test('Erinnerung zum Monatsende: einmal pro Monat an alle mit gespeicherten Leis
   await k.anna.ok('leistungLoeschen', id);
 });
 
+test('Admin: Als Person ansehen – nur lesen, nur in dieser Sitzung, nicht für Admins', async () => {
+  const liste = await k.admin.ok('nutzerListe');
+  const anna = liste.find((n) => n.email === 'anna@example.org');
+  const rita = liste.find((n) => n.email === 'rita@example.org');
+  assert.equal((await k.rita.aufruf('ansichtStarten', anna.id)).status, 403, 'nur Admins');
+  const admin = client();
+  await admin.ok('anmelden', 'admin@example.org', 'admin-passwort-1');
+  assert.match((await admin.aufruf('ansichtStarten', (await admin.ok('aktuellerNutzer')).id)).fehler, /eigenes Konto/);
+  await admin.ok('ansichtStarten', anna.id);
+  const ich = await admin.ok('aktuellerNutzer');
+  assert.deepEqual([ich.email, ich.ansicht_von], ['anna@example.org', 'Alex Admin']);
+  assert.ok(Array.isArray(await admin.ok('meineNoten')), 'lesen geht');
+  const r = await admin.aufruf('leistungSpeichern', { kategorie: 'kolumne', titel: 'X', veroeffentlichung: '2026-10-01', betrag: 15 });
+  assert.equal(r.status, 403);
+  assert.match(r.fehler, /ändern geht dabei nicht/);
+  assert.equal((await admin.aufruf('nutzerListe')).status, 403, 'auch keine Admin-Funktionen');
+  assert.equal((await k.admin.ok('aktuellerNutzer')).email, 'admin@example.org', 'andere Sitzungen des Admins unberührt');
+  await admin.ok('ansichtBeenden');
+  assert.equal((await admin.ok('aktuellerNutzer')).ansicht_von, undefined);
+  assert.ok((await admin.ok('nutzerListe')).length);
+  // Admin-Konten nicht
+  await k.admin.ok('rollenSetzen', rita.id, ['redaktion', 'admin']);
+  assert.match((await admin.aufruf('ansichtStarten', rita.id)).fehler, /Admin-Konten/);
+  await k.admin.ok('rollenSetzen', rita.id, ['redaktion']);
+  assert.ok((await k.admin.ok('protokoll', { suche: 'Ansehen als' })).eintraege.length >= 2);
+});
+
 test('Kommandozentrale: Zustand, Messwerte je Stunde, Leistungstest, Wartungsaktionen – nur für Admins', async () => {
   for (const f of ['serverStatus', 'leistungstest']) assert.equal((await k.rita.aufruf(f)).status, 403);
   assert.equal((await k.rita.aufruf('serverAktion', 'aufraeumen')).status, 403);
@@ -1085,8 +1112,11 @@ test('Kommandozentrale: Zustand, Messwerte je Stunde, Leistungstest, Wartungsakt
   assert.equal(s.auslastung.stunden.length, 48);
   assert.ok(s.auslastung.anfragen_24h > 10, 'jede Anfrage wird gezählt');
   assert.ok(s.auslastung.stunden.at(-1).anfragen > 0 && s.auslastung.stunden.at(-1).mittel_ms >= 0);
-  assert.equal(s.datenbank.typ, 'SQLite');
-  assert.ok(s.datenbank.schema >= 18 && s.datenbank.groesse > 0 && s.datenbank.tabellen.messwerte >= 1);
+  // die Tests laufen mit SQLite und (in GitHub Actions) noch einmal mit MySQL
+  const mysql = s.datenbank.typ === 'MySQL/MariaDB';
+  assert.ok(mysql || s.datenbank.typ === 'SQLite', s.datenbank.typ);
+  assert.ok(s.datenbank.schema >= (mysql ? 12 : 19), `Schema ${s.datenbank.schema}`);
+  assert.ok(s.datenbank.groesse > 0 && s.datenbank.tabellen.messwerte >= 1);
   assert.ok(s.php.version && typeof s.php.erweiterungen.mbstring === 'boolean');
   assert.ok(!JSON.stringify(s).includes('smtp-geheim'), 'kein Passwort');
 

@@ -25,6 +25,8 @@ final class Ctx
     public ?string $neueSitzung = null;
     public bool $sitzungLoeschen = false;
     public bool $erlaubtMitStartpasswort = false;
+    /** Admin, der die App gerade als $nutzer ansieht (nur lesen), sonst null */
+    public ?array $ansichtVon = null;
     /** @var callable|null Ersatz für den Abruf von campus-a-college.at (Tests) */
     public $holen = null;
 
@@ -249,7 +251,7 @@ final class Honorare
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'nachweisHochladen', 'nachweisLoeschen', 'nachweisLaden', 'meineArtikel',
         'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
-        'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'serverStatus', 'leistungstest', 'serverAktion',
+        'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'serverStatus', 'leistungstest', 'serverAktion', 'ansichtStarten', 'ansichtBeenden',
         'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'noteLoeschen',
@@ -258,6 +260,12 @@ final class Honorare
         'registrierungslinkErstellen', 'registrierungslinks', 'registrierungslinkWiderrufen',
         'dashboard', 'protokoll', 'sicherungen', 'jetztSichern', 'sicherungHerunterladen', 'rechtliches', 'hinweisBestaetigen', 'benachrichtigungenSpeichern',
     ];
+
+    /** „Als Person ansehen“: nur diese Funktionen (lesen) – alles andere ist gesperrt (lib/ansicht.js) */
+    public const NUR_ANSEHEN = ['aktuellerNutzer', 'abmelden', 'ansichtBeenden', 'einstellungen', 'rechtliches', 'navZaehler',
+        'meineLeistungen', 'meineArtikel', 'naechsteNummer', 'notenDiesenMonat', 'meineNoten', 'note', 'nachrichten', 'nachweisLaden',
+        'zahlungsavis', 'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'kommentare', 'verlaufVon',
+        'offeneZahlungen', 'bezahlteNoten', 'bezahlteNotenSeit', 'zahlungskonto'];
 
     /** ohne Anmeldung erlaubt (Impressum und Datenschutz müssen für alle lesbar sein) */
     public const OEFFENTLICH = ['aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'rechtliches',
@@ -284,7 +292,32 @@ final class Honorare
         $n = $this->ctx->nutzer;
         // Admins sehen oben, dass der Wartungsmodus an ist
         if (ist_admin($n) && wartung_laden($this->db())['an']) $n['wartung'] = true;
+        if ($n && $this->ctx->ansichtVon) $n['ansicht_von'] = anzeigename($this->ctx->ansichtVon);
         return $n;
+    }
+
+    /** Admin: die App so sehen, wie diese Person sie sieht (nur ansehen, nur in dieser Sitzung) */
+    public function ansichtStarten(mixed $uid = null): bool
+    {
+        $db = $this->db();
+        $admin = brauche($this->ctx, 'admin');
+        $n = nutzer_laden($db, s($uid));
+        pruefe($n, 'Dieses Konto gibt es nicht (mehr).', 404);
+        pruefe($n['id'] !== $admin['id'], 'Das ist dein eigenes Konto.');
+        pruefe($n['aktiv'], 'Dieses Konto ist deaktiviert.');
+        pruefe(!ist_admin($n), 'Admin-Konten können nicht angesehen werden.');
+        q($db, 'update sitzungen set ansicht_als = ? where token_hash = ?', [$n['id'], token_hash((string) $this->ctx->token)]);
+        $this->log('warnung', 'konten', 'Ansehen als ' . anzeigename($n) . ' (nur lesen) begonnen');
+        return true;
+    }
+
+    public function ansichtBeenden(): bool
+    {
+        $db = $this->db();
+        if (!$this->ctx->ansichtVon) return true;
+        q($db, 'update sitzungen set ansicht_als = null where token_hash = ?', [token_hash((string) $this->ctx->token)]);
+        protokoll($db, 'info', 'konten', 'Ansehen als ' . anzeigename($this->ctx->nutzer) . ' beendet', $this->ctx->ansichtVon);
+        return true;
     }
 
     public function wartung(): array

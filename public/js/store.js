@@ -131,7 +131,47 @@ function sitzungsNutzer() {
   let uid = null;
   try { uid = sessionStorage.getItem(SITZUNG_KEY); } catch { /* ignorieren */ }
   const n = db?.nutzer.find((x) => x.id === uid);
-  return n?.aktiv ? n : null;
+  if (!n?.aktiv) return null;
+  // Admin sieht die App als jemand anderes (nur ansehen, nur in diesem Tab)
+  const als = ansichtZiel(n);
+  return als ?? n;
+}
+
+const ANSICHT_KEY = 'campus-a-honorare:ansicht';
+function ansichtZiel(admin) {
+  let uid = null;
+  try { uid = sessionStorage.getItem(ANSICHT_KEY); } catch { /* ignorieren */ }
+  if (!uid || !admin.rollen.includes('admin')) return null;
+  const z = db.nutzer.find((x) => x.id === uid);
+  return z?.aktiv && !z.rollen.includes('admin') ? z : null;
+}
+function echterNutzer() {
+  let uid = null;
+  try { uid = sessionStorage.getItem(SITZUNG_KEY); } catch { /* ignorieren */ }
+  return db?.nutzer.find((x) => x.id === uid && x.aktiv) ?? null;
+}
+
+/** Läuft gerade „Als Person ansehen“? (die Demo sperrt dann alles außer Lesen, siehe lib/ansicht.js) */
+export function ansichtAktiv() {
+  const admin = echterNutzer();
+  return Boolean(admin && ansichtZiel(admin));
+}
+
+export function ansichtStarten(uid) {
+  const { n } = adminNutzer(uid);
+  const admin = echterNutzer();
+  pruefe(n.id !== admin.id, 'Das ist dein eigenes Konto.');
+  pruefe(n.aktiv, 'Dieses Konto ist deaktiviert.');
+  pruefe(!n.rollen.includes('admin'), 'Admin-Konten können nicht angesehen werden.');
+  sessionStorage.setItem(ANSICHT_KEY, n.id);
+  protokoll('warnung', 'konten', `Ansehen als ${anzeigename(n)} (nur lesen) begonnen`, admin);
+  speichern();
+  return true;
+}
+
+export function ansichtBeenden() {
+  sessionStorage.removeItem(ANSICHT_KEY);
+  return true;
 }
 
 function ich() {
@@ -174,6 +214,7 @@ export function aktuellerNutzer() {
   wartungPruefen(n);
   const sicht = nutzerSicht(n);
   if (sicht?.rollen.includes('admin') && wartungLaden().an) sicht.wartung = true;
+  if (sicht && ansichtAktiv()) sicht.ansicht_von = anzeigename(echterNutzer());
   return sicht;
 }
 
@@ -239,6 +280,7 @@ export async function anmelden(email, passwort, code = null) {
 
 export function abmelden() {
   sessionStorage.removeItem(SITZUNG_KEY);
+  sessionStorage.removeItem(ANSICHT_KEY);
 }
 
 // ------------------------------------------------------------------ Zugang anfragen & freischalten

@@ -101,6 +101,8 @@ export const navZaehler = f('navZaehler');
 export const serverStatus = f('serverStatus');
 export const leistungstest = f('leistungstest');
 export const serverAktion = f('serverAktion');
+export const ansichtStarten = f('ansichtStarten');
+export const ansichtBeenden = f('ansichtBeenden');
 export const verlaufVon = f('verlaufVon');
 
 // Buchhaltung

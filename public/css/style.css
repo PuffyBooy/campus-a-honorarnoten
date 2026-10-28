@@ -435,6 +435,9 @@ section.fehlerbox { border: 0; }
   font-size: .8rem; padding: .25rem .5rem; border-radius: 6px; pointer-events: none; white-space: nowrap; }
 .kommando-aktionen { display: flex; flex-wrap: wrap; gap: .5rem; }
 .test-name { display: inline-flex; gap: .5rem; align-items: center; }
+.ansicht-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem;
+  margin: 1rem 0 0; padding: .6rem 1rem; border-radius: 8px; background: var(--campus-a-hell); color: var(--campus-a);
+  border: 1px solid var(--campus-a); position: sticky; top: .5rem; z-index: 5; }
 .login-vergessen { text-align: center; margin: .75rem 0 0; font-size: .9rem; }
 /* Bezahl-Terminal: eine Karte pro Kalenderwoche */
 .woche-kopf { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; }

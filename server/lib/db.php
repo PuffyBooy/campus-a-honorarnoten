@@ -311,6 +311,10 @@ const MIGRATIONEN = [
       fehler   integer not null default 0
     );
     SQL,
+    // Version 19: Admin sieht die App als jemand anderes (nur ansehen) – gilt für diese eine Sitzung
+    <<<'SQL'
+    alter table sitzungen add column ansicht_als text;
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -589,6 +593,10 @@ const MYSQL_MIGRATIONEN = [
       langsam  int not null default 0,
       fehler   int not null default 0
     ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    SQL,
+    // Version 12 = SQLite-Version 19
+    <<<'SQL'
+    alter table sitzungen add column ansicht_als varchar(36) null;
     SQL,
 ];
 

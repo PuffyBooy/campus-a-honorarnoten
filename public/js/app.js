@@ -17,10 +17,12 @@ import * as passwortSeite from './views/passwort.js';
 import { hinweisOffen, zustimmungHtml } from './lib/rechtliches.js';
 import { cookieBanner, gewaehlt } from './lib/cookies.js';
 import { nachweisHerunterladen } from './lib/nachweise.js';
+import { nurAnsehen } from './lib/ansicht.js';
 
 // Demo: Daten im Browser (store.js). Server: Daten über die API (api.js).
 const IST_DEMO = MODUS !== 'server';
-const store = IST_DEMO ? await import('./store.js') : await import('./api.js');
+// beim „Als Person ansehen“ geht in der Demo nur Lesen (auf dem Server sperrt das der Server)
+const store = IST_DEMO ? nurAnsehen(await import('./store.js')) : await import('./api.js');
 const demoModul = IST_DEMO ? await import('./demo.js') : null;
 const demoDaten = demoModul?.demoDaten ?? null;
 
@@ -141,6 +143,19 @@ let renderZaehler = 0;
  * zur Kenntnis genommen wurden (beim Konto einrichten stehen sie im Formular). Ändern sich die Angaben, erneut.
  */
 function hinweisBanner(nutzer, recht) {
+  document.body.classList.toggle('nur-ansehen', Boolean(nutzer?.ansicht_von));
+  if (nutzer?.ansicht_von) {
+    banner.innerHTML = `<aside class="ansicht-banner" role="status"><span>👁 Du siehst die App als
+      <strong>${esc(`${nutzer.vorname} ${nutzer.nachname}`.trim() || nutzer.email)}</strong> – nur ansehen, ändern ist gesperrt.</span>
+      <button type="button" class="btn btn-klein" id="ansicht-ende">Zurück zu meinem Konto</button></aside>`;
+    banner.querySelector('#ansicht-ende').addEventListener('click', async (ev) => {
+      ev.currentTarget.disabled = true;
+      await Promise.resolve(store.ansichtBeenden()).catch(() => {});
+      location.hash = '#/admin/benutzer';
+      render();
+    });
+    return;
+  }
   const zeigen = recht && nutzer && !kontoEinrichten(nutzer) && hinweisOffen(nutzer, recht.betreiber);
   banner.innerHTML = (nutzer?.wartung ? `<aside class="wartung-banner" role="status"><span><strong>Wartungsmodus ist an.</strong>
       Nur Admins können die App gerade benutzen.</span> <a class="btn btn-klein" href="#/admin/einstellungen">Ausschalten</a></aside>` : '')
