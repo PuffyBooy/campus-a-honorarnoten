@@ -14,6 +14,9 @@ import * as generator from './views/generator.js';
 import * as rechtlichesSeite from './views/rechtliches.js';
 import * as registrieren from './views/registrieren.js';
 import * as passwortSeite from './views/passwort.js';
+import * as neuSeite from './views/neu.js';
+import { sucheOeffnen } from './lib/suche.js';
+import { NEUESTE, ungesehen } from './lib/neuigkeiten.js';
 import { hinweisOffen, zustimmungHtml } from './lib/rechtliches.js';
 import { cookieBanner, gewaehlt } from './lib/cookies.js';
 import { nachweisHerunterladen } from './lib/nachweise.js';
@@ -42,6 +45,7 @@ const ROUTEN = [
   { pfad: 'admin', view: admin, rolle: ['admin'], titel: 'Admin' },
   { pfad: 'admin/:tab', view: admin, rolle: ['admin'] },
   { pfad: 'profil', view: profil, rolle: ['autor', 'redaktion', 'buchhaltung', 'admin'] },
+  { pfad: 'neu', view: neuSeite, rolle: ['autor', 'redaktion', 'buchhaltung', 'admin'] },
 ];
 
 /** „Maria Muster“ -> „MM“ für den runden Knopf zum Profil */
@@ -124,10 +128,12 @@ async function renderNav(nutzer, pfad) {
   }).join('');
   nav.innerHTML = `<div class="nav-links">${links}</div>
     <div class="nav-konto">
+      <button type="button" class="nav-suche" id="suche-oeffnen" title="Suchen (Strg + K)" aria-label="Suchen">🔍<span class="nav-suche-text"> Suchen</span></button>
       <a href="#/profil" class="nav-user"${pfad === 'profil' ? ' aria-current="page"' : ''}
          title="Mein Profil · ${esc(nutzer.email)}"><span class="avatar" aria-hidden="true">${esc(initialen(nutzer))}</span>${esc(nutzer.vorname)} ${esc(nutzer.nachname)}</a>
       <button type="button" class="btn-link" id="abmelden">Abmelden</button>
     </div>`;
+  nav.querySelector('#suche-oeffnen').addEventListener('click', () => sucheOeffnen({ store, nutzer }));
   nav.querySelector('#abmelden').addEventListener('click', async () => {
     await Promise.resolve(store.abmelden()).catch(() => {});
     // Adresse ohne Route; genau einmal neu zeichnen (sonst gehen Eingaben verloren)
@@ -157,17 +163,27 @@ function hinweisBanner(nutzer, recht) {
     return;
   }
   const zeigen = recht && nutzer && !kontoEinrichten(nutzer) && hinweisOffen(nutzer, recht.betreiber);
-  banner.innerHTML = (nutzer?.wartung ? `<aside class="wartung-banner" role="status"><span><strong>Wartungsmodus ist an.</strong>
+  const neu = nutzer && !kontoEinrichten(nutzer) && !location.hash.startsWith('#/neu') ? ungesehen(nutzer) : [];
+  banner.innerHTML = (neu.length ? `<aside class="neu-banner" role="status"><span>✨ <strong>Neu:</strong> ${esc(neu[0].titel)}</span>
+      <span class="aktionen eng"><a class="btn btn-klein" href="#/neu">Ansehen</a>
+      <button type="button" class="btn btn-klein" id="neu-weg">Ausblenden</button></span></aside>` : '')
+    + (nutzer?.wartung ? `<aside class="wartung-banner" role="status"><span><strong>Wartungsmodus ist an.</strong>
       Nur Admins können die App gerade benutzen.</span> <a class="btn btn-klein" href="#/admin/einstellungen">Ausschalten</a></aside>` : '')
     + (zeigen ? `<aside class="hinweis-betreiber" role="note"><span>${zustimmungHtml(recht)}</span>
     <button type="button" class="btn btn-klein" id="hinweis-ok">Gelesen und zur Kenntnis genommen</button></aside>` : '');
+  banner.querySelector('#neu-weg')?.addEventListener('click', async (ev) => {
+    ev.currentTarget.closest('aside').remove();
+    nutzer.neuigkeiten_gesehen = NEUESTE;
+    await Promise.resolve(store.neuigkeitenGesehen(NEUESTE)).catch(() => {});
+  });
   banner.querySelector('#hinweis-ok')?.addEventListener('click', async (ev) => {
-    ev.currentTarget.disabled = true;
+    const knopf = ev.currentTarget;
+    knopf.disabled = true;
     try {
       await store.hinweisBestaetigen();
-      banner.innerHTML = '';
+      knopf.closest('aside').remove(); // nur diesen Hinweis, andere (z. B. „Neu“) bleiben
     } catch (e) {
-      ev.currentTarget.disabled = false;
+      knopf.disabled = false;
       alert(fehlerText(e));
     }
   });
@@ -363,6 +379,13 @@ async function start() {
   window.addEventListener('honorare:abgemeldet', () => render());
   // Server: Wartungsmodus wurde eingeschaltet -> Hinweis zeigen
   window.addEventListener('honorare:wartung', () => render());
+  // Suche über alles: Strg + K (Mac: ⌘ + K), wenn angemeldet
+  document.addEventListener('keydown', async (ev) => {
+    if (!(ev.ctrlKey || ev.metaKey) || ev.key.toLowerCase() !== 'k' || !document.body.classList.contains('mit-menue')) return;
+    ev.preventDefault();
+    const nutzer = await Promise.resolve(store.aktuellerNutzer()).catch(() => null);
+    sucheOeffnen({ store, nutzer });
+  });
   // Nachweise zum Redigieren herunterladen – überall, wo sie angezeigt werden
   document.addEventListener('click', async (ev) => {
     const knopf = ev.target.closest('[data-nachweis]');

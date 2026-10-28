@@ -441,6 +441,25 @@ section.fehlerbox { border: 0; }
 .ansicht-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem;
   margin: 1rem 0 0; padding: .6rem 1rem; border-radius: 8px; background: var(--campus-a-hell); color: var(--campus-a);
   border: 1px solid var(--campus-a); position: sticky; top: .5rem; z-index: 5; }
+.wiederholen { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem; margin: -.25rem 0 1rem; }
+.prognose { margin: .25rem 0 .5rem; color: var(--text-leise); }
+.nav-suche { background: rgb(255 255 255 / 12%); color: var(--kopf-text); border: 1px solid rgb(255 255 255 / 25%); border-radius: 8px;
+  padding: .3rem .6rem; font: inherit; font-size: .9rem; cursor: pointer; }
+.nav-suche:hover { background: rgb(255 255 255 / 22%); }
+@media (max-width: 799px) { .nav-suche { color: inherit; border-color: var(--rand); background: none; } }
+.suche-dialog { padding: .75rem; top: 10vh; margin-top: 0; width: min(640px, calc(100vw - 2rem)); }
+.suche-dialog input[type=search] { font-size: 1.1rem; padding: .7rem .8rem; }
+.suche-treffer { list-style: none; margin: .5rem 0 0; padding: 0; max-height: 55vh; overflow-y: auto; }
+.suche-treffer li { display: flex; gap: .75rem; align-items: baseline; padding: .5rem .6rem; border-radius: 8px; cursor: pointer; }
+.suche-treffer li[aria-selected=true] { background: var(--marke-hell); }
+.suche-treffer .suche-leer { cursor: default; }
+.suche-art { font-size: .7rem; text-transform: uppercase; letter-spacing: .04em; color: var(--text-leise); min-width: 5.5rem; }
+.suche-tipp { margin: .5rem 0 0; }
+.neu-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem;
+  margin: 1rem 0 0; padding: .5rem 1rem; border-radius: 8px; background: var(--marke-hell); color: var(--marke-dunkel); }
+.neu-eintrag h2 { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+.neu-eintrag ul { margin: 0; padding-left: 1.2rem; }
+.neu-eintrag li + li { margin-top: .35rem; }
 .login-vergessen { text-align: center; margin: .75rem 0 0; font-size: .9rem; }
 /* Bezahl-Terminal: eine Karte pro Kalenderwoche */
 .woche-kopf { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; }

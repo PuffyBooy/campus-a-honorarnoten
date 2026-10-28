@@ -1,6 +1,6 @@
 // „Als Person ansehen“ (Admin): nur diese Funktionen gehen dabei – alles andere ist gesperrt.
 // Dieselbe Liste wie Honorare::NUR_ANSEHEN auf dem Server; in der Demo sperrt nurAnsehen() den Rest.
-export const NUR_ANSEHEN = ['aktuellerNutzer', 'abmelden', 'ansichtBeenden', 'einstellungen', 'rechtliches', 'navZaehler',
+export const NUR_ANSEHEN = ['aktuellerNutzer', 'abmelden', 'ansichtBeenden', 'einstellungen', 'rechtliches', 'navZaehler', 'ablaufZeiten',
   'meineLeistungen', 'meineArtikel', 'naechsteNummer', 'notenDiesenMonat', 'meineNoten', 'note', 'nachrichten', 'nachweisLaden',
   'zahlungsavis', 'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'kommentare', 'verlaufVon',
   'offeneZahlungen', 'bezahlteNoten', 'bezahlteNotenSeit', 'zahlungskonto'];
