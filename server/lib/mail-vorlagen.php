@@ -274,11 +274,16 @@ function mail_bezahlt_autor(PDO $db, array $note, string $datum): array
         'vorschau' => eur(note_summe($note)) . ' wurden am ' . datum_text($datum) . ' überwiesen.',
         'titel' => 'Deine Anerkennungsprämie ist unterwegs',
         'medium' => $note['medium'],
-        'absaetze' => ["Hallo $vorname,", 'die Buchhaltung hat deine Prämienabrechnung bezahlt. Je nach Bank ist das Geld in ein bis zwei Werktagen auf deinem Konto.'],
+        'absaetze' => ["Hallo $vorname,", 'die Buchhaltung hat deine Prämienabrechnung bezahlt. Je nach Bank ist das Geld in ein bis zwei Werktagen auf deinem Konto. Das Zahlungsavis liegt als PDF bei.'],
         'hinweis' => ['Überwiesen am ' . datum_text($datum) . ': ' . eur(note_summe($note)), 'erfolg'],
         'tabelle' => [['Prämienabrechnung', $note['nummer']], ['Betrag', eur(note_summe($note))], ['Bezahlt am', datum_text($datum)]],
         'knopf' => ['Meine Prämienabrechnungen', app_link($db, 'noten')],
-    ]);
+    ]) + ['anhaenge' => [[zahlungsavis_name($note), 'application/pdf', zahlungsavis_pdf($note, $datum)]]];
+}
+
+function zahlungsavis_name(array $note): string
+{
+    return 'Zahlungsavis_' . preg_replace('/[^\w-]/', '', $note['nummer']) . '.pdf';
 }
 
 function mail_anfrage_admin(PDO $db, array $a): array
@@ -363,6 +368,62 @@ function mail_einladung(PDO $db, string $link, int $tage, array $von): array
             "Der Link gilt $bis."],
         'knopf' => ['Konto anlegen', $link],
         'nachsatz' => 'Oder diese Adresse im Browser öffnen:',
+    ]);
+}
+
+function mail_passwort_vergessen(PDO $db, string $vorname, string $link): array
+{
+    return mail_bauen([
+        'betreff' => 'Neues Passwort für die Anerkennungsprämien',
+        'vorschau' => 'Mit diesem Link legst du ein neues Passwort fest.',
+        'titel' => 'Neues Passwort festlegen',
+        'absaetze' => ["Hallo $vorname,", 'du hast ein neues Passwort angefordert. Mit dem Knopf legst du es fest. Der Link gilt eine Stunde und nur einmal.',
+            'Warst du das nicht? Dann ignoriere diese E-Mail einfach, dein bisheriges Passwort bleibt gültig.'],
+        'knopf' => ['Neues Passwort festlegen', $link],
+        'nachsatz' => 'Oder diese Adresse im Browser öffnen:',
+    ]);
+}
+
+function mail_passwort_geaendert(PDO $db, string $vorname): array
+{
+    return mail_bauen([
+        'betreff' => 'Dein Passwort wurde geändert',
+        'vorschau' => 'Für dein Konto gilt jetzt ein neues Passwort.',
+        'titel' => 'Passwort geändert',
+        'absaetze' => ["Hallo $vorname,", 'das Passwort deines Kontos bei den Anerkennungsprämien wurde gerade geändert.'],
+        'hinweis' => ['Warst du das nicht? Dann melde dich bitte sofort beim Admin.', 'gefahr'],
+        'knopf' => ['Zur Anmeldung', app_link($db)],
+    ]);
+}
+
+function mail_zwei_faktor(PDO $db, string $vorname, bool $an): array
+{
+    return mail_bauen([
+        'betreff' => $an ? 'Zwei-Faktor-Anmeldung eingeschaltet' : 'Zwei-Faktor-Anmeldung ausgeschaltet',
+        'vorschau' => $an ? 'Beim Anmelden brauchst du ab jetzt den Code aus der App.' : 'Beim Anmelden reicht wieder das Passwort.',
+        'titel' => $an ? 'Zwei-Faktor-Anmeldung ist an' : 'Zwei-Faktor-Anmeldung ist aus',
+        'absaetze' => ["Hallo $vorname,", $an
+            ? 'für dein Konto ist jetzt die Zwei-Faktor-Anmeldung eingeschaltet. Beim Anmelden brauchst du zusätzlich den Code aus deiner App. Bewahre die Ersatz-Codes gut auf.'
+            : 'für dein Konto ist die Zwei-Faktor-Anmeldung jetzt ausgeschaltet. Beim Anmelden reicht wieder das Passwort.'],
+        'hinweis' => ['Warst du das nicht? Dann melde dich bitte sofort beim Admin.', $an ? 'info' : 'gefahr'],
+        'knopf' => ['Zur App', app_link($db)],
+    ]);
+}
+
+const WARNMAIL_BETREFF = 'Probleme in der Anerkennungsprämien-App';
+
+/** Warn-Mail an Admins: neue Fehler aus dem Protokoll */
+function mail_probleme(PDO $db, array $eintraege, int $anzahl): array
+{
+    return mail_bauen([
+        'betreff' => WARNMAIL_BETREFF,
+        'vorschau' => $anzahl === 1 ? 'Im Protokoll steht ein neuer Fehler.' : "Im Protokoll stehen $anzahl neue Fehler.",
+        'titel' => 'Da stimmt etwas nicht',
+        'absaetze' => [$anzahl === 1 ? 'Im Protokoll der App steht ein neuer Fehler:' : "Im Protokoll der App stehen $anzahl neue Fehler oder Warnungen:"],
+        'tabelle' => array_map(fn ($e) => [zeitpunkt_text($e['zeit']), $e['text']], $eintraege),
+        'hinweis' => [($anzahl > count($eintraege) ? 'Hier stehen nur die ersten ' . count($eintraege) . '. ' : '')
+            . 'Weitere Fehler sammeln wir und schicken höchstens eine E-Mail pro Stunde. Ausschalten im Profil unter „E-Mail-Benachrichtigungen“.', 'gefahr'],
+        'knopf' => ['Protokoll öffnen', app_link($db, 'admin/protokoll')],
     ]);
 }
 

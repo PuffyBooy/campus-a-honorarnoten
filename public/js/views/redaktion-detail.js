@@ -130,6 +130,9 @@ export async function pruefungRendern(el, { store, nutzer, params, einstellungen
     </div>
     <form id="d-ablehnen-form" class="unterkarte" hidden novalidate>
       <p class="klein">Die Leistungen gehen sofort zurück an die Autor:in. Sie überarbeitet sie in „Mein Monat“ und reicht neu ein.</p>
+      ${einstellungen.rueckgabe_vorlagen?.length ? `<p class="klein">Vorlage übernehmen:</p>
+      <div class="vorlagen">${einstellungen.rueckgabe_vorlagen.map((v, i) => `
+        <button type="button" class="vorlage" data-vorlage="${i}">${esc(v)}</button>`).join('')}</div>` : ''}
       <label for="d-grund">Begründung (Pflicht, die Autor:in sieht diesen Text)</label>
       <textarea id="d-grund" rows="3" required maxlength="1000"></textarea>
       <p class="feldfehler" id="d-grund-fehler" role="alert"></p>
@@ -216,6 +219,15 @@ export async function pruefungRendern(el, { store, nutzer, params, einstellungen
     ablehnenForm.querySelector('textarea').focus();
   });
   el.querySelector('#d-ablehnen-abbrechen').addEventListener('click', () => { ablehnenForm.hidden = true; });
+  // Vorlage anhängen (mehrere gehen, je ein Absatz); danach kann man den Text noch anpassen
+  ablehnenForm.querySelector('.vorlagen')?.addEventListener('click', (ev) => {
+    const k = ev.target.closest('[data-vorlage]');
+    if (!k) return;
+    const feld = el.querySelector('#d-grund');
+    const text = einstellungen.rueckgabe_vorlagen[Number(k.dataset.vorlage)];
+    feld.value = feld.value.trim() ? `${feld.value.trim()}\n${text}` : text;
+    feld.focus();
+  });
   ablehnenForm.addEventListener('submit', (ev) => {
     ev.preventDefault();
     const grund = el.querySelector('#d-grund').value.trim();

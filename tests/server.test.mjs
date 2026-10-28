@@ -1,6 +1,7 @@
 // Tests für den Server (PHP, wie auf World4You): Rollen, Rechte, Abläufe und E-Mails über die echte HTTP-API
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { phpServerStarten, mailAbwarten } from './php-server.mjs';
 import { CAMPUS_A_PROFIL, campusSeiten, campusHolen } from './campus-fixtures.mjs';
 
@@ -226,6 +227,16 @@ test('Buchhaltung: bezahlen', async () => {
   assert.equal(bezahlt.status, 'bezahlt');
   assert.equal((await b.ok('bezahlteNoten', heute.slice(0, 7))).length, 1);
   assert.match((await k.rita.aufruf('betragKorrigieren', k.note.id, k.note.positionen[0].id, 20, 'x')).fehler, /Bezahlte/);
+  // Zahlungsavis: als PDF im Anhang der Bezahlt-Mail und zum Herunterladen
+  const mail = await mailAbwarten(php.smtp, (m) => m.betreff === `Prämienabrechnung ${k.note.nummer} bezahlt`);
+  assert.match(mail.roh, /Content-Disposition: attachment; filename="Zahlungsavis_[\w-]+\.pdf"/);
+  const avis = await b.ok('zahlungsavis', k.note.id);
+  const pdf = Buffer.from(avis.inhalt, 'base64').toString('latin1');
+  assert.ok(pdf.startsWith('%PDF-1.4') && pdf.trimEnd().endsWith('%%EOF'));
+  assert.ok(pdf.includes('Zahlungsavis') && pdf.includes(k.note.nummer));
+  assert.equal((await k.rita.aufruf('zahlungsavis', k.note.id)).status, 403);
+  assert.ok(php.sql("select anhaenge from mails where betreff like '%bezahlt' and gesendet_am is not null").zeilen.every((z) => z.anhaenge === null),
+    'Anhang wird nach dem Versand nicht aufgehoben');
 });
 
 test('Abgelehnte Note überarbeiten', async () => {
@@ -353,6 +364,112 @@ test('Link in der Zugangs-Mail meldet direkt an (einmal, danach eigenes Passwort
   await k.admin.ok('nutzerLoeschen', n.id);
 });
 
+/** TOTP-Code wie die Authenticator-App (RFC 6238) */
+function totp(geheimnis, schritt = Math.floor(Date.now() / 30000)) {
+  const bits = geheimnis.split('').map((z) => 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'.indexOf(z).toString(2).padStart(5, '0')).join('');
+  const key = Buffer.from(bits.match(/.{8}/g).map((b) => parseInt(b, 2)));
+  const zaehler = Buffer.alloc(8);
+  zaehler.writeBigUInt64BE(BigInt(schritt));
+  const h = createHmac('sha1', key).update(zaehler).digest();
+  const o = h[19] & 0x0f;
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1000000).padStart(6, '0');
+}
+
+test('Passwort vergessen: neutrale Antwort, Link per E-Mail (einmal, 1 Stunde), danach angemeldet', async () => {
+  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Vera', nachname: 'Vergessen', email: 'vera@example.org', rollen: ['autor'] });
+  const vor = php.smtp.mails.length;
+  assert.equal(await client().ok('passwortVergessen', 'niemand@example.org'), true, 'gleiche Antwort für unbekannte Adressen');
+  assert.equal(await client().ok('passwortVergessen', 'VERA@example.org '), true);
+  const mail = php.smtp.mails.slice(vor).find((m) => m.an === 'vera@example.org' && m.betreff === 'Neues Passwort für die Anerkennungsprämien');
+  assert.ok(mail, 'sofort verschickt');
+  assert.ok(!php.smtp.mails.slice(vor).some((m) => m.an === 'niemand@example.org'));
+  const token = mail.html.match(/#\/passwort\/([\w-]+)/)[1];
+  assert.equal((await client().aufruf('linkAnmelden', token)).status, 404, 'ist kein Anmeldelink');
+  assert.match((await client().aufruf('passwortNeuSetzen', token, 'kurz')).fehler, /8 Zeichen/);
+  const vera = client();
+  assert.deepEqual(await vera.ok('passwortNeuSetzen', token, 'neues-passwort-1'), { angemeldet: true });
+  const ich = await vera.ok('aktuellerNutzer');
+  assert.equal(ich.email, 'vera@example.org');
+  assert.equal(ich.muss_passwort_aendern, false);
+  assert.match((await client().aufruf('passwortNeuSetzen', token, 'noch-eins-123')).fehler, /schon verwendet/);
+  await client().ok('anmelden', 'vera@example.org', 'neues-passwort-1');
+  assert.equal((await client().aufruf('linkAnmelden', z.link.split('#/link/')[1])).status, 410, 'Anmeldelink aus der Zugangs-Mail gilt nicht mehr');
+  assert.ok(await mailAbwarten(php.smtp, (m) => m.an === 'vera@example.org' && m.betreff === 'Dein Passwort wurde geändert'));
+  // ein neuer Link macht den alten ungültig; abgelaufen gilt er auch nicht
+  await client().ok('passwortVergessen', 'vera@example.org');
+  await client().ok('passwortVergessen', 'vera@example.org');
+  const links = php.smtp.mails.filter((m) => m.an === 'vera@example.org' && m.betreff.startsWith('Neues Passwort')).map((m) => m.html.match(/#\/passwort\/([\w-]+)/)[1]);
+  assert.equal(links.length, 3);
+  assert.equal((await client().aufruf('passwortNeuSetzen', links[1], 'neues-passwort-2')).status, 410);
+  php.sql("update links set gueltig_bis = '2020-01-01T00:00:00.000Z' where nutzer_id = ?", [ich.id]);
+  assert.match((await client().aufruf('passwortNeuSetzen', links[2], 'neues-passwort-2')).fehler, /abgelaufen/);
+  await k.admin.ok('nutzerLoeschen', ich.id);
+});
+
+test('Zwei-Faktor: einrichten, Anmelden mit Code, kein Wiederverwenden, Ersatz-Codes, ausschalten, Admin setzt zurück', async () => {
+  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Zora', nachname: 'Zwei', email: 'zora@example.org', rollen: ['redaktion'] });
+  const zora = client();
+  await anmeldenMitNeuemPasswort(zora, 'zora@example.org', z.passwort, 'zora-geheim-1');
+  const anderesGeraet = client();
+  await anderesGeraet.ok('anmelden', 'zora@example.org', 'zora-geheim-1');
+  const { geheimnis, uri } = await zora.ok('zweiFaktorStarten');
+  assert.match(geheimnis, /^[A-Z2-7]{32}$/);
+  assert.ok(uri.startsWith('otpauth://totp/') && uri.includes(`secret=${geheimnis}`));
+  assert.equal((await zora.ok('aktuellerNutzer')).zwei_faktor, false, 'erst nach dem Bestätigen aktiv');
+  assert.match((await zora.aufruf('zweiFaktorEinschalten', '000000')).fehler, /Code stimmt nicht/);
+  const schritt = Math.floor(Date.now() / 30000);
+  const { ersatzcodes } = await zora.ok('zweiFaktorEinschalten', totp(geheimnis, schritt));
+  assert.equal(ersatzcodes.length, 8);
+  assert.equal((await zora.ok('aktuellerNutzer')).zwei_faktor, true, 'eigene Sitzung bleibt');
+  assert.equal((await anderesGeraet.aufruf('aktuellerNutzer')).daten, null, 'andere Geräte abgemeldet');
+  assert.ok(await mailAbwarten(php.smtp, (m) => m.an === 'zora@example.org' && m.betreff === 'Zwei-Faktor-Anmeldung eingeschaltet'));
+  const dump = JSON.stringify(await k.admin.ok('nutzerListe')) + await k.admin.ok('exportieren');
+  assert.ok(!dump.includes(geheimnis), 'Geheimnis nie in Listen oder im Export');
+
+  // Passwort allein reicht nicht mehr
+  const c = client();
+  assert.deepEqual(await c.ok('anmelden', 'zora@example.org', 'zora-geheim-1'), { code_noetig: true });
+  assert.equal((await c.aufruf('aktuellerNutzer')).daten, null);
+  assert.equal((await c.aufruf('anmelden', 'zora@example.org', 'zora-geheim-1', '123456')).status, 401);
+  assert.equal((await c.aufruf('anmelden', 'zora@example.org', 'falsch', totp(geheimnis, schritt + 1))).status, 401);
+  assert.equal((await c.aufruf('anmelden', 'zora@example.org', 'zora-geheim-1', totp(geheimnis, schritt))).status, 401, 'Code vom Einschalten nicht nochmal');
+  await c.ok('anmelden', 'zora@example.org', 'zora-geheim-1', totp(geheimnis, schritt + 1));
+  assert.equal((await c.ok('aktuellerNutzer')).email, 'zora@example.org');
+  assert.equal((await client().aufruf('anmelden', 'zora@example.org', 'zora-geheim-1', totp(geheimnis, schritt + 1))).status, 401, 'jeder Code nur einmal');
+  php.sql('delete from versuche'); // Bremse für Anmeldeversuche (10 in 15 Minuten) gilt auch hier
+  // Ersatz-Code: einmal
+  await client().ok('anmelden', 'zora@example.org', 'zora-geheim-1', ` ${ersatzcodes[0].toUpperCase()} `);
+  assert.equal((await client().aufruf('anmelden', 'zora@example.org', 'zora-geheim-1', ersatzcodes[0])).status, 401);
+  assert.ok((await k.admin.ok('protokoll', { suche: 'Ersatz-Code' })).eintraege.length);
+  // Anmeldelink und Passwort-vergessen umgehen Zwei-Faktor nicht
+  const z2 = await k.admin.ok('passwortZuruecksetzen', z.id ?? (await zora.ok('aktuellerNutzer')).id);
+  assert.equal((await client().aufruf('linkAnmelden', z2.link.split('#/link/')[1])).status, 403);
+  await client().ok('passwortVergessen', 'zora@example.org');
+  const m = await mailAbwarten(php.smtp, (x) => x.an === 'zora@example.org' && x.betreff.startsWith('Neues Passwort'));
+  const neu = client();
+  assert.deepEqual(await neu.ok('passwortNeuSetzen', m.html.match(/#\/passwort\/([\w-]+)/)[1], 'zora-geheim-2'), { angemeldet: false });
+  assert.equal((await neu.aufruf('aktuellerNutzer')).daten, null, 'mit Zwei-Faktor nicht automatisch angemeldet');
+
+  php.sql('delete from versuche');
+  // ausschalten nur mit Passwort
+  const zora2 = client();
+  await zora2.ok('anmelden', 'zora@example.org', 'zora-geheim-2', ersatzcodes[1]);
+  assert.match((await zora2.aufruf('zweiFaktorAusschalten', 'falsch')).fehler, /Passwort stimmt nicht/);
+  await zora2.ok('zweiFaktorAusschalten', 'zora-geheim-2');
+  assert.equal((await zora2.ok('aktuellerNutzer')).zwei_faktor, false);
+  assert.equal((await client().ok('anmelden', 'zora@example.org', 'zora-geheim-2')).email, 'zora@example.org');
+
+  // Admin setzt zurück (Handy verloren); nur Admin
+  const g2 = (await zora2.ok('zweiFaktorStarten')).geheimnis;
+  await zora2.ok('zweiFaktorEinschalten', totp(g2));
+  const id = (await zora2.ok('aktuellerNutzer')).id;
+  assert.equal((await zora2.aufruf('zweiFaktorZuruecksetzen', id)).status, 403);
+  await k.admin.ok('zweiFaktorZuruecksetzen', id);
+  assert.equal((await k.admin.ok('nutzerListe')).find((n) => n.id === id).zwei_faktor, false);
+  assert.equal((await client().ok('anmelden', 'zora@example.org', 'zora-geheim-2')).email, 'zora@example.org');
+  await k.admin.ok('nutzerLoeschen', id);
+});
+
 test('Zugangs-Mail: Mailserver nicht erreichbar -> der Admin sieht den Fehler, später neuer Versuch', async () => {
   const e = await k.admin.ok('mailEinstellungen');
   await k.admin.ok('mailEinstellungenSpeichern', { ...e, port: 1 });
@@ -461,6 +578,18 @@ test('Redaktion: Liste am Server gefiltert und seitenweise, Prüf-Infos, Jahress
   const jahr = await k.kasse.ok('ausgezahltImJahr');
   assert.equal(typeof jahr.anzahl, 'number');
   assert.equal((await k.rita.aufruf('ausgezahltImJahr')).status, 403);
+});
+
+test('Vorlagen für Rückgabegründe: Standard, vom Admin änderbar, gesäubert', async () => {
+  const e = await k.rita.ok('einstellungen');
+  assert.equal(e.rueckgabe_vorlagen.length, 5);
+  const basis = { empfaenger: e.empfaenger, datenschutzKontakt: e.datenschutzKontakt };
+  await k.admin.ok('einstellungenSpeichern', { ...basis, rueckgabe_vorlagen: ['  Eigene   Vorlage ', '', 'x'.repeat(400)] });
+  const neu = (await k.rita.ok('einstellungen')).rueckgabe_vorlagen;
+  assert.deepEqual([neu.length, neu[0], neu[1].length], [2, 'Eigene Vorlage', 300]);
+  await k.admin.ok('einstellungenSpeichern', basis); // ohne Angabe bleiben sie
+  assert.equal((await k.rita.ok('einstellungen')).rueckgabe_vorlagen.length, 2);
+  await k.admin.ok('einstellungenSpeichern', { ...basis, rueckgabe_vorlagen: e.rueckgabe_vorlagen });
 });
 
 test('Admin: E-Mail-Adresse ändern, alte und neue Adresse bekommen eine Info', async () => {
@@ -744,6 +873,47 @@ test('Benachrichtigungen: jedes Konto wählt selbst', async () => {
   await k.rita.ok('ablehnen', note.id, 'Test');
   await k.rita.ok('benachrichtigungenSpeichern', { neue_note: true });
   await k.anna.ok('benachrichtigungenSpeichern', { eingang: true });
+});
+
+test('Wartungsmodus: nur Admins kommen hinein, alle anderen sehen den Hinweis', async () => {
+  assert.equal((await k.rita.aufruf('wartungSetzen', true)).status, 403);
+  const w = await k.admin.ok('wartungSetzen', true, 'Update läuft, gleich wieder da.');
+  assert.equal(w.an, true);
+  assert.equal(w.von, 'Alex Admin');
+  const r = await k.rita.aufruf('redaktionListe', {});
+  assert.deepEqual([r.status, r.wartung], [503, 'Update läuft, gleich wieder da.']);
+  assert.equal((await k.rita.aufruf('aktuellerNutzer')).status, 503);
+  assert.equal((await client().aufruf('aktuellerNutzer')).status, 503, 'auch ohne Anmeldung');
+  assert.equal((await client().aufruf('rechtliches')).status, 200, 'Impressum bleibt lesbar');
+  assert.equal((await client().aufruf('anmelden', 'rita@example.org', 'geheim12345')).status, 503, 'nur Admins können sich anmelden');
+  const admin2 = client();
+  await admin2.ok('anmelden', 'admin@example.org', 'admin-passwort-1');
+  assert.equal((await admin2.ok('aktuellerNutzer')).wartung, true, 'Admins sehen, dass er an ist');
+  assert.ok(!('wartung' in (await k.admin.ok('einstellungen'))));
+  await k.admin.ok('wartungSetzen', false);
+  assert.equal((await k.rita.aufruf('redaktionListe', {})).status, 200);
+  assert.equal((await k.rita.ok('aktuellerNutzer')).wartung, undefined);
+  assert.ok((await k.admin.ok('protokoll', { suche: 'Wartungsmodus' })).eintraege.length >= 2);
+});
+
+test('Warn-Mail an Admins bei Fehlern im Protokoll (höchstens eine pro Stunde)', async () => {
+  php.sql("update einstellungen set wert = json_object('bis', (select max(id) from protokoll), 'zeit', 0) where schluessel = 'warnmail'");
+  php.sql("insert into protokoll (zeit, stufe, bereich, text, wer, ip) values (?, 'fehler', 'sicherung', 'Tägliche Sicherung fehlgeschlagen: Platte voll', '', '')", [new Date().toISOString()]);
+  await k.admin.ok('statistik'); // danach läuft die Hintergrundarbeit
+  const m = await mailAbwarten(php.smtp, (x) => x.an === 'admin@example.org' && x.betreff === 'Probleme in der Anerkennungsprämien-App');
+  assert.ok(m.text.includes('Tägliche Sicherung fehlgeschlagen: Platte voll'));
+  assert.ok(m.html.includes('#/admin/protokoll'));
+  assert.ok(!php.smtp.mails.some((x) => x.an === 'rita@example.org' && x.betreff === m.betreff), 'nur an Admins');
+  // gleich danach: gesammelt, keine zweite Mail
+  php.sql("insert into protokoll (zeit, stufe, bereich, text, wer, ip) values (?, 'fehler', 'system', 'Noch ein Fehler', '', '')", [new Date().toISOString()]);
+  await k.admin.ok('statistik');
+  await k.admin.ok('statistik');
+  assert.equal(php.smtp.mails.filter((x) => x.betreff === m.betreff).length, 1);
+  // nach einer Stunde kommt der gesammelte Fehler
+  php.sql("update einstellungen set wert = json_set(wert, '$.zeit', 0) where schluessel = 'warnmail'");
+  await k.admin.ok('statistik');
+  const m2 = await mailAbwarten(php.smtp, (x) => x.betreff === m.betreff && x.text.includes('Noch ein Fehler'));
+  assert.ok(!m2.text.includes('Platte voll'), 'jeder Fehler nur einmal');
 });
 
 test('Admin: Note löschen mit Protokoll, Export ohne Passwörter', async () => {

@@ -13,6 +13,7 @@ import * as admin from './views/admin.js';
 import * as generator from './views/generator.js';
 import * as rechtlichesSeite from './views/rechtliches.js';
 import * as registrieren from './views/registrieren.js';
+import * as passwortSeite from './views/passwort.js';
 import { hinweisOffen, zustimmungHtml } from './lib/rechtliches.js';
 import { cookieBanner, gewaehlt } from './lib/cookies.js';
 
@@ -134,8 +135,10 @@ let renderZaehler = 0;
  */
 function hinweisBanner(nutzer, recht) {
   const zeigen = recht && nutzer && !kontoEinrichten(nutzer) && hinweisOffen(nutzer, recht.betreiber);
-  banner.innerHTML = zeigen ? `<aside class="hinweis-betreiber" role="note"><span>${zustimmungHtml(recht)}</span>
-    <button type="button" class="btn btn-klein" id="hinweis-ok">Gelesen und zur Kenntnis genommen</button></aside>` : '';
+  banner.innerHTML = (nutzer?.wartung ? `<aside class="wartung-banner" role="status"><span><strong>Wartungsmodus ist an.</strong>
+      Nur Admins können die App gerade benutzen.</span> <a class="btn btn-klein" href="#/admin/einstellungen">Ausschalten</a></aside>` : '')
+    + (zeigen ? `<aside class="hinweis-betreiber" role="note"><span>${zustimmungHtml(recht)}</span>
+    <button type="button" class="btn btn-klein" id="hinweis-ok">Gelesen und zur Kenntnis genommen</button></aside>` : '');
   banner.querySelector('#hinweis-ok')?.addEventListener('click', async (ev) => {
     ev.currentTarget.disabled = true;
     try {
@@ -148,14 +151,56 @@ function hinweisBanner(nutzer, recht) {
   });
 }
 
+/**
+ * „Wird geladen …“ erst zeigen, wenn das Laden länger dauert: bei schnellen Seitenwechseln und beim Filtern
+ * bleibt der bisherige Inhalt stehen, statt kurz zu verschwinden und die Seite springen zu lassen.
+ * Liefert eine Funktion, die die Anzeige abbricht.
+ */
+function ladenSpaeter() {
+  const vorher = main.firstElementChild;
+  const t = setTimeout(() => { if (main.firstElementChild === vorher) ladeAnzeige(main); }, 400);
+  return () => clearTimeout(t);
+}
+
+/** Wartungsmodus: Hinweis für alle außer Admins (die sich hier anmelden können); Impressum und Datenschutz bleiben lesbar */
+async function wartungSeite(pfad, text) {
+  await renderNav(null, pfad);
+  banner.innerHTML = '';
+  if (pfad === 'impressum' || pfad === 'datenschutz') {
+    await rechtlichesSeite.render(main, { store, istDemo: IST_DEMO, seite: pfad, angemeldet: false }).catch(() => {});
+    return;
+  }
+  main.innerHTML = `<section class="karte schmal wartung-seite" role="status">
+      <p class="wartung-symbol" aria-hidden="true">🛠</p>
+      <h1>Gleich wieder da</h1>
+      <p>${esc(text)}</p>
+      <p class="aktionen"><button type="button" class="btn btn-primaer" id="nochmal">Erneut versuchen</button>
+        <button type="button" class="link-knopf" id="admin-anmelden">Als Admin anmelden</button></p>
+    </section>`;
+  main.querySelector('#nochmal').addEventListener('click', render);
+  main.querySelector('#admin-anmelden').addEventListener('click', () => login.render(main, {
+    store, istDemo: IST_DEMO, recht: null, nachAnmeldung: () => { history.replaceState(null, '', location.pathname + location.search); render(); },
+  }));
+}
+
 async function render() {
   const lauf = ++renderZaehler;
   const pfad = aktuellerPfad();
-  delete main.dataset.seite;
+  // Breite der Seite (die Redaktion ist breiter) erst umstellen, wenn der neue Inhalt kommt –
+  // sonst springt der alte Inhalt kurz in die neue Breite
+  const seite = pfad.split('/')[0];
+  if (main.dataset.seite !== seite) {
+    const beobachter = new MutationObserver(() => { main.dataset.seite = seite; beobachter.disconnect(); });
+    beobachter.observe(main, { childList: true });
+  }
   let nutzer;
   try {
     nutzer = await store.aktuellerNutzer();
   } catch (e) {
+    if (e.wartung) {
+      await wartungSeite(pfad, e.wartung);
+      return;
+    }
     // Hinweis auf die Einrichtung als Link (z. B. „Bitte zuerst …/einrichten.php öffnen“)
     const text = esc(fehlerText(e)).replace(/(https?:\/\/[^\s<]+einrichten\.php)/, '<a href="$1">$1</a>');
     main.innerHTML = `<section class="karte fehlerbox" role="alert"><h1>Die App ist gerade nicht erreichbar</h1>
@@ -189,6 +234,14 @@ async function render() {
       main.innerHTML = `<section class="karte schmal"><h1>Anmelden</h1><p class="fehlerbox">${esc(fehlerText(e))}</p>
         <p><a href="#/" class="btn btn-primaer">Zur Anmeldung</a></p></section>`;
     }
+    return;
+  }
+  // Link aus „Passwort vergessen“
+  if (pfad.startsWith('passwort/')) {
+    passwortSeite.render(main, { store, token: pfad.slice(9), fertig: () => {
+      history.replaceState(null, '', location.pathname + location.search);
+      render();
+    } });
     return;
   }
   // Registrierungslink vom Admin
@@ -243,8 +296,7 @@ async function render() {
 
   const f = flash;
   flash = null;
-  main.dataset.seite = treffer.route.pfad.split('/')[0];
-  ladeAnzeige(main);
+  const ladenFertig = ladenSpaeter();
   try {
     await treffer.route.view.render(main, {
       store,
@@ -258,9 +310,11 @@ async function render() {
       istDemo: IST_DEMO,
       istAktuell: () => lauf === renderZaehler,
     });
+    ladenFertig();
   } catch (e) {
     console.error(e);
     if (lauf !== renderZaehler) return;
+    ladenFertig();
     main.innerHTML = `<section class="karte fehlerbox" role="alert">
       <h1>Fehler</h1><p>${esc(fehlerText(e))}</p>
       <p><a href="#/${startseite(nutzer)}">Zur Startseite</a></p></section>`;
@@ -285,6 +339,8 @@ async function start() {
   });
   // Server: Sitzung abgelaufen -> zurück zur Anmeldung
   window.addEventListener('honorare:abgemeldet', () => render());
+  // Server: Wartungsmodus wurde eingeschaltet -> Hinweis zeigen
+  window.addEventListener('honorare:wartung', () => render());
   // Cookies: beim ersten Besuch fragen, über die Fußzeile jederzeit änderbar
   document.addEventListener('click', (ev) => {
     if (ev.target.closest('#cookie-einstellungen, [data-cookie-einstellungen]')) cookieBanner({ details: true });

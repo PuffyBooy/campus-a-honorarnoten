@@ -21,7 +21,9 @@ async function aufruf(name, ...args) {
   if (!res.ok) {
     // Sitzung abgelaufen -> App zeigt wieder die Anmeldung
     if (body.abgemeldet) window.dispatchEvent(new CustomEvent('honorare:abgemeldet'));
-    throw new Fehler(body.fehler || `Fehler ${res.status}. Bitte später erneut versuchen.`);
+    // Wartungsmodus: App zeigt den Hinweis statt der Seite
+    if (body.wartung && name !== 'aktuellerNutzer') window.dispatchEvent(new CustomEvent('honorare:wartung'));
+    throw Object.assign(new Fehler(body.fehler || `Fehler ${res.status}. Bitte später erneut versuchen.`), { wartung: body.wartung });
   }
   return body.daten;
 }
@@ -38,6 +40,12 @@ export const zugangAnfragen = f('zugangAnfragen');
 export const erstesPasswortSetzen = f('erstesPasswortSetzen');
 export const passwortAendern = f('passwortAendern');
 export const linkAnmelden = f('linkAnmelden');
+export const passwortVergessen = f('passwortVergessen');
+export const passwortNeuSetzen = f('passwortNeuSetzen');
+export const zweiFaktorStarten = f('zweiFaktorStarten');
+export const zweiFaktorEinschalten = f('zweiFaktorEinschalten');
+export const zweiFaktorAusschalten = f('zweiFaktorAusschalten');
+export const zweiFaktorZuruecksetzen = f('zweiFaktorZuruecksetzen');
 export const einladungPruefen = f('einladungPruefen');
 export const mitLinkRegistrieren = f('mitLinkRegistrieren');
 export const registrierungslinkErstellen = f('registrierungslinkErstellen');
@@ -86,6 +94,7 @@ export const verlaufVon = f('verlaufVon');
 
 // Buchhaltung
 export const offeneZahlungen = f('offeneZahlungen');
+export const zahlungsavis = f('zahlungsavis');
 export const zahlungskonto = f('zahlungskonto');
 export const zahlungskontoSpeichern = f('zahlungskontoSpeichern');
 export const pdfMailen = f('pdfMailen');
@@ -114,4 +123,6 @@ export const exportieren = f('exportieren');
 export const mailEinstellungen = f('mailEinstellungen');
 export const mailEinstellungenSpeichern = f('mailEinstellungenSpeichern');
 export const testMail = f('testMail');
+export const wartung = f('wartung');
+export const wartungSetzen = f('wartungSetzen');
 // Einspielen und Zurücksetzen gibt es nur in der Demo; auf dem Server über die Kommandozeile

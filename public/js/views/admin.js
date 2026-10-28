@@ -357,7 +357,8 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
         <tr data-id="${esc(n.id)}" class="${n.aktiv ? '' : 'inaktiv'}">
           <td data-label="Name"><span><strong>${esc(vollerName(n))}</strong>${n.id === ich.id ? ' <span class="klein">(du)</span>' : ''}
             ${n.aktiv ? '' : '<br><span class="badge badge-abgelehnt">deaktiviert</span>'}
-            ${n.muss_passwort_aendern ? '<br><span class="klein">noch nicht angemeldet</span>' : ''}</span></td>
+            ${n.muss_passwort_aendern ? '<br><span class="klein">noch nicht angemeldet</span>' : ''}
+            ${n.zwei_faktor ? '<br><span class="klein">🔒 Zwei-Faktor an</span>' : ''}</span></td>
           <td data-label="E-Mail">${esc(n.email)}</td>
           <td data-label="Rollen"><span class="rollen-wahl">${Object.entries(ROLLEN_LABEL).map(([r, l]) => `
             <label class="check"><input type="checkbox" data-rolle="${r}" ${n.rollen.includes(r) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}
@@ -367,6 +368,7 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
           <td data-label="Aktionen"><span class="aktionen eng">
             <button type="button" class="btn btn-klein" data-aktion="email">E-Mail ändern</button>
             <button type="button" class="btn btn-klein" data-aktion="pw">Passwort zurücksetzen</button>
+            ${n.zwei_faktor ? '<button type="button" class="btn btn-klein" data-aktion="zf">Zwei-Faktor zurücksetzen</button>' : ''}
             <button type="button" class="btn btn-klein" data-aktion="aktiv">${n.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button>
             <button type="button" class="btn btn-klein btn-gefahr" data-aktion="loeschen">Löschen</button>
           </span></td>
@@ -421,6 +423,10 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
       } catch (e) {
         meldung(fehlerText(e), 'fehler');
       }
+    } else if (knopf.dataset.aktion === 'zf') {
+      if (!confirm(`Zwei-Faktor-Anmeldung von ${vollerName(n)} ausschalten?\n\nNur, wenn die Person Handy und Ersatz-Codes verloren hat. `
+        + 'Sie meldet sich danach nur mit dem Passwort an und kann Zwei-Faktor im Profil neu einrichten.')) return;
+      versuche(() => store.zweiFaktorZuruecksetzen(n.id), 'Zwei-Faktor zurückgesetzt.', neuLaden);
     } else if (knopf.dataset.aktion === 'pw') {
       if (!confirm(`Passwort von ${vollerName(n)} zurücksetzen? Es wird ein neues Startpasswort erzeugt.`)) return;
       try {
@@ -505,9 +511,19 @@ async function noten(inhalt, { store, neuLaden }) {
 }
 
 async function einstellungen(inhalt, { store, neuLaden }) {
-  const [e, konto] = await Promise.all([store.einstellungen(), store.zahlungskonto()]);
+  const [e, konto, w] = await Promise.all([store.einstellungen(), store.zahlungskonto(), store.wartung()]);
   const b = betreiberOder(e.betreiber);
   inhalt.innerHTML = `
+    <form class="karte${w.an ? ' wartung-an' : ''}" id="w-form" novalidate>
+      <h2>Wartungsmodus ${w.an ? '<span class="badge badge-abgelehnt">An</span>' : ''}</h2>
+      <p class="tipp">${w.an ? `Eingeschaltet${w.seit ? ` am ${esc(formatZeitpunkt(w.seit))}` : ''}${w.von ? ` von ${esc(w.von)}` : ''}.
+        Nur Admins können die App benutzen, alle anderen sehen diesen Text.`
+        : 'Für Umbauten oder Updates: Solange er an ist, kommen nur Admins in die App. Alle anderen sehen diesen Text.'}</p>
+      <label for="w-text">Text für alle anderen</label>
+      <textarea id="w-text" name="text" rows="2" maxlength="500">${esc(w.text)}</textarea>
+      <p class="feldfehler" role="alert"></p>
+      <button type="submit" class="btn ${w.an ? 'btn-primaer' : 'btn-gefahr'}">${w.an ? 'Wartungsmodus ausschalten' : 'Wartungsmodus einschalten'}</button>
+    </form>
     <form class="karte" id="k-form" novalidate>
       <h2>Zahlungskonto für die Sammelüberweisung</h2>
       <p class="tipp">Von diesem Konto gehen die Auszahlungen ab. Die Buchhaltung erstellt damit pro Woche eine
@@ -548,6 +564,10 @@ async function einstellungen(inhalt, { store, neuLaden }) {
                  value="${wert('redigieren')}"></div>` : ''}
       </div>`;
       }).join('')}
+      <h2 class="abstand-oben">Vorlagen für Rückgabegründe</h2>
+      <p class="tipp">Die Redaktion übernimmt sie mit einem Klick beim Zurückgeben. Eine Vorlage pro Zeile, höchstens 15.</p>
+      <label for="e-vorlagen" class="sr-only">Vorlagen</label>
+      <textarea id="e-vorlagen" name="vorlagen" rows="6">${esc((e.rueckgabe_vorlagen ?? []).join('\n'))}</textarea>
       <h2 class="abstand-oben">Datenschutz</h2>
       <label for="e-kontakt">Kontakt für Datenschutzanfragen (E-Mail)</label>
       <input id="e-kontakt" name="kontakt" type="email" value="${esc(e.datenschutzKontakt)}">
@@ -577,6 +597,14 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <p class="feldfehler" role="alert"></p>
       <button type="submit" class="btn btn-primaer">Speichern</button>
     </form>`;
+  const wForm = inhalt.querySelector('#w-form');
+  wForm.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    if (!w.an && !confirm('Wartungsmodus einschalten? Alle außer Admins kommen dann nicht mehr in die App.')) return;
+    versuche(() => store.wartungSetzen(!w.an, wForm.text.value), w.an ? 'Wartungsmodus ausgeschaltet.' : 'Wartungsmodus eingeschaltet.',
+      neuLaden);
+  });
+
   const kForm = inhalt.querySelector('#k-form');
   kForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -622,6 +650,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       empfaenger: { name: form.name.value, strasse: form.strasse.value, plz_ort: form.plz_ort.value, uid: form.uid.value },
       datenschutzKontakt: form.kontakt.value,
       honorarsaetze,
+      rueckgabe_vorlagen: form.vorlagen.value.split('\n'),
       betreiber: {
         name: form.b_name.value, anschrift: form.b_anschrift.value, email: form.b_email.value, telefon: form.b_telefon.value,
         extern: form.b_extern.checked, hoster: form.b_hoster.value,

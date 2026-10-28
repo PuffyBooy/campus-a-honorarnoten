@@ -97,6 +97,11 @@ function api(): array
     $nutzer = $nutzerId ? nutzer_laden($db, $nutzerId) : null;
     if ($nutzer && !$nutzer['aktiv']) $nutzer = null;
     if (!$nutzer && !in_array($name, Honorare::OEFFENTLICH, true)) return [401, ['fehler' => 'Bitte melde dich an.', 'abgemeldet' => true]];
+    // Wartungsmodus: nur Admins arbeiten weiter, alle anderen sehen den Hinweis
+    $wartung = wartung_laden($db);
+    if ($wartung['an'] && !ist_admin($nutzer) && !in_array($name, WARTUNG_ERLAUBT, true)) {
+        return [503, ['fehler' => $wartung['text'], 'wartung' => $wartung['text']]];
+    }
 
     // Begrenzung von Versuchen (gegen Erraten von Passwörtern und Massenanfragen)
     if ($name === 'anmelden') {
@@ -109,6 +114,13 @@ function api(): array
     // Links: gegen Durchprobieren von Tokens
     if (in_array($name, ['linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren'], true) && !versuch_erlaubt($db, "link:$ip", 30, 900)) {
         protokoll($db, 'warnung', 'anmeldung', 'Zu viele Versuche mit Links (Anmelde- oder Registrierungslink), vorübergehend gesperrt');
+        return [429, ['fehler' => 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.']];
+    }
+    if ($name === 'passwortVergessen' && (!versuch_erlaubt($db, "vergessen:$ip", 10, 3600)
+        || !versuch_erlaubt($db, 'vergessen:' . strtolower(tr($args[0] ?? '')), 3, 3600))) {
+        return [429, ['fehler' => 'Zu viele Anfragen. Bitte in einer Stunde erneut versuchen.']];
+    }
+    if ($name === 'passwortNeuSetzen' && !versuch_erlaubt($db, "link:$ip", 30, 900)) {
         return [429, ['fehler' => 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.']];
     }
     if ($name === 'zugangAnfragen' && !versuch_erlaubt($db, "anfrage:$ip", 5, 3600)) {

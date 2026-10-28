@@ -10,8 +10,8 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
     <div class="login-raster">
       <section class="login-intro">
         <div class="login-logos">
-          <img src="img/logo-campus-a.svg" alt="campus a – Das Studierendenmagazin">
-          <img src="img/logo-campus-a-college.png" alt="campus a college – Die Schülerzeitung für alle Schüler*innen">
+          <img src="img/logo-campus-a.svg" width="112" height="40" alt="campus a – Das Studierendenmagazin">
+          <img src="img/logo-campus-a-college.png" width="175" height="40" alt="campus a college – Die Schülerzeitung für alle Schüler*innen">
         </div>
         <p>Hier erfasst ihr eure Beiträge für campus a und campus a college und reicht sie einmal im Monat als Prämienabrechnung ein.</p>
       </section>
@@ -27,8 +27,24 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
           <input id="a-email" name="email" type="email" autocomplete="username" inputmode="email" required>
           <label for="a-pw">Passwort</label>
           <input id="a-pw" name="passwort" type="password" autocomplete="current-password" required>
+          <div id="a-code-feld" hidden>
+            <label for="a-code">Code aus der Authenticator-App</label>
+            <input id="a-code" name="code" autocomplete="one-time-code" inputmode="numeric" maxlength="11" spellcheck="false">
+            <p class="tipp">6 Ziffern aus der App – oder einer deiner Ersatz-Codes.</p>
+          </div>
           <p class="feldfehler" role="alert"></p>
           <button class="btn btn-primaer btn-breit" type="submit">Anmelden</button>
+          <p class="login-vergessen"><button type="button" class="link-knopf" id="a-vergessen">Passwort vergessen?</button></p>
+        </form>
+
+        <form id="p-vergessen" hidden novalidate>
+          <h2>Passwort vergessen</h2>
+          <p>Gib deine E-Mail-Adresse ein. Du bekommst einen Link, mit dem du ein neues Passwort festlegst. Er gilt eine Stunde.</p>
+          <label for="v-email">E-Mail-Adresse</label>
+          <input id="v-email" name="email" type="email" autocomplete="username" inputmode="email" required>
+          <p class="feldfehler" role="alert"></p>
+          <button class="btn btn-primaer btn-breit" type="submit">Link schicken</button>
+          <p class="login-vergessen"><button type="button" class="link-knopf" data-zurueck>Zurück zur Anmeldung</button></p>
         </form>
 
         <form id="p-registrieren" role="tabpanel" aria-labelledby="t-registrieren" hidden novalidate>
@@ -77,22 +93,65 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
     });
   }
 
-  async function absenden(form, fn) {
-    const fehler = form.querySelector('.feldfehler');
+  const codeFeld = el.querySelector('#a-code-feld');
+  panels.anmelden.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const f = ev.currentTarget;
+    const fehler = f.querySelector('.feldfehler');
     fehler.textContent = '';
-    await mitSperre(form.querySelector('button[type=submit]'), async () => {
+    await mitSperre(f.querySelector('button[type=submit]'), async () => {
       try {
-        nachAnmeldung(await fn());
+        const r = await store.anmelden(f.email.value, f.passwort.value, codeFeld.hidden ? null : f.code.value);
+        if (r?.code_noetig) {
+          // Passwort stimmt, jetzt noch der Code aus der App
+          codeFeld.hidden = false;
+          f.code.focus();
+          return;
+        }
+        nachAnmeldung();
+      } catch (e) {
+        fehler.textContent = fehlerText(e);
+        if (!codeFeld.hidden) f.code.select();
+      }
+    });
+  });
+  // andere E-Mail-Adresse: Code erst wieder fragen, wenn das Passwort stimmt
+  panels.anmelden.email.addEventListener('input', () => { codeFeld.hidden = true; panels.anmelden.code.value = ''; });
+
+  // Passwort vergessen: eigene Ansicht statt der Reiter
+  const vergessen = el.querySelector('#p-vergessen');
+  const reiterLeiste = el.querySelector('.reiter');
+  const vergessenZeigen = (an) => {
+    vergessen.hidden = !an;
+    reiterLeiste.hidden = an;
+    panels.anmelden.hidden = an;
+    panels.registrieren.hidden = true;
+    reiter.anmelden.setAttribute('aria-selected', 'true');
+    reiter.registrieren.setAttribute('aria-selected', 'false');
+    (an ? vergessen.email : panels.anmelden.email).focus();
+  };
+  el.querySelector('#a-vergessen').addEventListener('click', () => {
+    vergessen.email.value = panels.anmelden.email.value;
+    vergessenZeigen(true);
+  });
+  vergessen.addEventListener('click', (ev) => { if (ev.target.closest('[data-zurueck]')) vergessenZeigen(false); });
+  vergessen.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const fehler = vergessen.querySelector('.feldfehler');
+    fehler.textContent = '';
+    mitSperre(vergessen.querySelector('button[type=submit]'), async () => {
+      try {
+        const r = await store.passwortVergessen(vergessen.email.value);
+        vergessen.querySelector('h2').insertAdjacentHTML('afterend', `<p class="erfolgbox" role="status">
+          Falls es ein Konto mit <strong>${esc(vergessen.email.value.trim())}</strong> gibt, ist die E-Mail mit dem Link unterwegs.
+          Schau auch im Spam-Ordner nach.</p>
+          ${istDemo ? `<p class="hinweisbox">Demo: Es werden keine E-Mails verschickt. ${r?.demo_link
+            ? `<a href="${esc(r.demo_link)}">Link aus der E-Mail öffnen</a>` : 'Zu dieser Adresse gibt es kein aktives Konto.'}</p>` : ''}`);
+        vergessen.querySelectorAll('p:not(.erfolgbox):not(.hinweisbox):not(.login-vergessen), label, input, button[type=submit]').forEach((x) => x.remove());
       } catch (e) {
         fehler.textContent = fehlerText(e);
       }
     });
-  }
-
-  panels.anmelden.addEventListener('submit', (ev) => {
-    ev.preventDefault();
-    const f = ev.currentTarget;
-    absenden(f, async () => { await store.anmelden(f.email.value, f.passwort.value); });
   });
 
   panels.registrieren.addEventListener('submit', async (ev) => {

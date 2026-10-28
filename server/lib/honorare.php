@@ -63,6 +63,7 @@ function nutzer_aus_zeile(?array $z): ?array
         'erstellt_am' => $z['erstellt_am'],
         'letzter_login' => $z['letzter_login'],
         'hinweis_bestaetigt_am' => $z['hinweis_bestaetigt_am'] ?? null,
+        'zwei_faktor' => !empty($z['zwei_faktor']),
         'benachrichtigungen' => (object) (json_decode($z['benachrichtigungen'] ?? '{}', true) ?: []),
     ];
 }
@@ -100,11 +101,12 @@ function einstellungen_laden(PDO $db): array
     foreach (zeilen($db, 'select * from einstellungen') as $z) {
         // „auftraggeber“: früheres SEPA-Konto, „mail“: eigene Einstellungen (mit Passwort, nie an den Browser),
         // „zahlungskonto“: nur für Buchhaltung und Admin (eigene Funktion)
-        if (in_array($z['schluessel'], ['auftraggeber', 'mail', 'zahlungskonto'], true)) continue;
+        if (in_array($z['schluessel'], ['auftraggeber', 'mail', 'zahlungskonto', 'wartung', 'warnmail'], true)) continue;
         $e[$z['schluessel']] = json_decode($z['wert'], true);
     }
     $e['honorarsaetze'] = saetze_normalisieren($e['honorarsaetze']); // ältere Sätze ohne Medium gelten für beide
     $e['betreiber'] = array_merge(BETREIBER_STANDARD, array_intersect_key(is_array($e['betreiber']) ? $e['betreiber'] : [], BETREIBER_STANDARD));
+    $e['rueckgabe_vorlagen'] = vorlagen_normalisieren($e['rueckgabe_vorlagen'] ?? null);
     return $e;
 }
 
@@ -224,18 +226,18 @@ final class Honorare
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'meineArtikel',
         'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
-        'offeneZahlungen', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
+        'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'noteLoeschen',
         'loeschprotokoll', 'einstellungenSpeichern', 'statistik', 'exportieren',
-        'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail', 'linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren',
+        'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail', 'wartung', 'wartungSetzen', 'zweiFaktorStarten', 'zweiFaktorEinschalten', 'zweiFaktorAusschalten', 'zweiFaktorZuruecksetzen', 'passwortVergessen', 'passwortNeuSetzen', 'linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren',
         'registrierungslinkErstellen', 'registrierungslinks', 'registrierungslinkWiderrufen',
         'dashboard', 'protokoll', 'sicherungen', 'jetztSichern', 'sicherungHerunterladen', 'rechtliches', 'hinweisBestaetigen', 'benachrichtigungenSpeichern',
     ];
 
     /** ohne Anmeldung erlaubt (Impressum und Datenschutz müssen für alle lesbar sein) */
     public const OEFFENTLICH = ['aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'rechtliches',
-        'linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren'];
+        'linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren', 'passwortVergessen', 'passwortNeuSetzen'];
 
     public function __construct(private Ctx $ctx)
     {
@@ -255,10 +257,36 @@ final class Honorare
     // ---------------------------------------------------------------- Sitzung
     public function aktuellerNutzer(): ?array
     {
-        return $this->ctx->nutzer;
+        $n = $this->ctx->nutzer;
+        // Admins sehen oben, dass der Wartungsmodus an ist
+        if (ist_admin($n) && wartung_laden($this->db())['an']) $n['wartung'] = true;
+        return $n;
     }
 
-    public function anmelden(mixed $email = null, mixed $passwort = null): array
+    public function wartung(): array
+    {
+        brauche($this->ctx, 'admin');
+        return wartung_laden($this->db());
+    }
+
+    /** Wartungsmodus ein/aus: solange er an ist, kommen nur Admins in die App */
+    public function wartungSetzen(mixed $an = false, mixed $text = ''): array
+    {
+        $db = $this->db();
+        $admin = brauche($this->ctx, 'admin');
+        $an = $an === true;
+        $text = kuerze(tr($text), 500);
+        upsert($db, 'einstellungen', ['schluessel' => 'wartung', 'wert' => json_text(
+            ['an' => $an, 'text' => $text, 'seit' => $an ? jetzt() : null, 'von' => $an ? anzeigename($admin) : ''])], ['schluessel']);
+        $this->log('warnung', 'einstellungen', $an ? 'Wartungsmodus eingeschaltet' : 'Wartungsmodus ausgeschaltet');
+        return wartung_laden($db);
+    }
+
+    /**
+     * Anmelden; mit Zwei-Faktor zuerst ohne Code: Antwort ['code_noetig' => true], dann noch einmal mit Code
+     * (6 Ziffern aus der App oder ein Ersatz-Code).
+     */
+    public function anmelden(mixed $email = null, mixed $passwort = null, mixed $code = null): array
     {
         $db = $this->db();
         $z = zeile($db, 'select * from nutzer where email = ?', [strtolower(tr($email))]);
@@ -268,7 +296,16 @@ final class Honorare
         pruefe($z && $ok, 'E-Mail oder Passwort ist falsch.', 401);
         if (!$z['aktiv']) $this->log('warnung', 'anmeldung', 'Anmeldeversuch mit deaktiviertem Konto', nutzer_aus_zeile($z));
         pruefe($z['aktiv'], 'Dieses Konto ist deaktiviert. Bitte wende dich an die Redaktion.', 403);
-        $this->log('info', 'anmeldung', 'Angemeldet', nutzer_aus_zeile($z));
+        $wartung = wartung_laden($db);
+        if ($wartung['an'] && !ist_admin(nutzer_aus_zeile($z))) throw new Fehler($wartung['text'], 503);
+        if (!empty($z['zwei_faktor'])) {
+            if (leer($code)) return ['code_noetig' => true];
+            if (!zwei_faktor_code_ok($db, $z, s($code))) {
+                $this->log('warnung', 'anmeldung', 'Falscher Zwei-Faktor-Code', nutzer_aus_zeile($z));
+                throw new Fehler('Der Code stimmt nicht. Bitte den aktuellen Code aus der App eingeben.', 401);
+            }
+        }
+        $this->log('info', 'anmeldung', !empty($z['zwei_faktor']) ? 'Angemeldet (mit Zwei-Faktor)' : 'Angemeldet', nutzer_aus_zeile($z));
         if ($this->ctx->token) sitzung_beenden($db, $this->ctx->token);
         $this->ctx->neueSitzung = sitzung_erstellen($db, $z['id']);
         q($db, 'update nutzer set letzter_login = ? where id = ?', [jetzt(), $z['id']]);
@@ -633,13 +670,22 @@ final class Honorare
         $where = $wo ? 'where ' . implode(' and ', $wo) : '';
         $limit = max(1, min(200, (int) ($f['limit'] ?? 100)));
         $offset = max(0, (int) ($f['offset'] ?? 0));
+        // Zähler je Status für das gewählte Medium, dazu „zu prüfen“ je Medium für den Umschalter
+        $medium = ist_medium($f['medium'] ?? '') ? $f['medium'] : null;
         $zaehler = array_fill_keys(array_keys(STATUS_LABEL), 0);
-        foreach (zeilen($db, 'select status, count(*) anzahl from noten group by status') as $z) $zaehler[$z['status']] = (int) $z['anzahl'];
+        foreach (zeilen($db, 'select status, count(*) anzahl from noten' . ($medium ? ' where medium = ?' : '') . ' group by status', $medium ? [$medium] : []) as $z) {
+            $zaehler[$z['status']] = (int) $z['anzahl'];
+        }
+        $zuPruefen = array_fill_keys(MEDIUM_KEYS, 0);
+        foreach (zeilen($db, "select medium, count(*) anzahl from noten where status = 'eingereicht' group by medium") as $z) {
+            $zuPruefen[medium_oder($z['medium'])] += (int) $z['anzahl'];
+        }
         return [
             'noten' => noten_liste($db, $n, $where, $p, REDAKTION_SORTIERUNG[$f['sortierung'] ?? ''] ?? 'eingereicht_am asc', "limit $limit offset $offset"),
             'anzahl' => (int) wert($db, "select count(*) from noten $where", $p),
             'summe' => euro((int) wert($db, "select coalesce(sum(np.betrag_cent), 0) from note_positionen np where np.note_id in (select id from noten $where)", $p)),
             'zaehler' => $zaehler,
+            'zu_pruefen_medium' => $zuPruefen,
             'monate' => array_column(zeilen($db, 'select distinct monat from noten order by monat desc limit 36'), 'monat'),
         ];
     }
@@ -1012,9 +1058,11 @@ final class Honorare
         pruefe($kontakt === '' || ist_email($kontakt), 'Bitte eine gültige E-Mail-Adresse für Datenschutzanfragen angeben.');
         $saetze = saetze_normalisieren($d['honorarsaetze'] ?? einstellungen_laden($db)['honorarsaetze']);
         $betreiber = betreiber_pruefen(einstellungen_laden($db)['betreiber'], $d['betreiber'] ?? null);
+        $vorlagen = array_key_exists('rueckgabe_vorlagen', $d) ? vorlagen_normalisieren($d['rueckgabe_vorlagen']) : einstellungen_laden($db)['rueckgabe_vorlagen'];
         $speichere = fn ($schluessel, $wert) => upsert($db, 'einstellungen', ['schluessel' => $schluessel, 'wert' => json_text($wert)], ['schluessel']);
-        transaktion($db, function () use ($speichere, $e, $kontakt, $saetze, $betreiber) {
+        transaktion($db, function () use ($speichere, $e, $kontakt, $saetze, $betreiber, $vorlagen) {
             $speichere('betreiber', $betreiber);
+            $speichere('rueckgabe_vorlagen', $vorlagen);
             $speichere('empfaenger', [
                 'name' => kuerze(tr($e['name']), 150), 'strasse' => kuerze(tr($e['strasse'] ?? ''), 150),
                 'plz_ort' => kuerze(tr($e['plz_ort'] ?? ''), 100), 'uid' => kuerze(tr($e['uid'] ?? ''), 30),
@@ -1050,7 +1098,7 @@ final class Honorare
         $alle = fn ($t) => zeilen($db, "select * from $t");
         return json_text([
             'exportiert_am' => jetzt(),
-            'nutzer' => array_map(function ($n) { unset($n['passwort']); return $n; }, $alle('nutzer')),
+            'nutzer' => array_map(function ($n) { unset($n['passwort'], $n['zwei_faktor'], $n['zwei_faktor_neu'], $n['zwei_faktor_codes'], $n['zwei_faktor_schritt']); return $n; }, $alle('nutzer')),
             'anfragen' => $alle('anfragen'),
             'positionen' => $alle('positionen'),
             'noten' => $alle('noten'),
@@ -1201,8 +1249,10 @@ final class Honorare
         $db = $this->db();
         return transaktion($db, function () use ($db, $token) {
             $l = link_pruefen($db, $token, 'anmelden');
+            pruefe($l['notiz'] !== PASSWORT_LINK, 'Dieser Link ist ungültig. Bitte prüfe, ob er vollständig kopiert wurde.', 404);
             $n = nutzer_laden($db, (string) $l['nutzer_id']);
             pruefe($n && $n['aktiv'], 'Dieses Konto ist deaktiviert. Bitte wende dich an die Redaktion.', 403);
+            pruefe(!$n['zwei_faktor'], 'Für dieses Konto ist die Zwei-Faktor-Anmeldung eingeschaltet. Bitte mit E-Mail, Passwort und Code anmelden.', 403);
             q($db, 'update links set nutzungen = nutzungen + 1 where id = ?', [$l['id']]);
             if ($this->ctx->token) sitzung_beenden($db, $this->ctx->token);
             $this->ctx->neueSitzung = sitzung_erstellen($db, $n['id']);
@@ -1210,6 +1260,110 @@ final class Honorare
             $this->log('info', 'anmeldung', 'Mit Anmeldelink aus der Zugangs-Mail angemeldet', $n);
             return nutzer_laden($db, $n['id']);
         });
+    }
+
+    // ---------------------------------------------------------------- Zwei-Faktor-Anmeldung (freiwillig, im Profil)
+    /** Einrichten beginnen: neues Geheimnis (noch nicht aktiv) für den QR-Code */
+    public function zweiFaktorStarten(): array
+    {
+        $db = $this->db();
+        $n = ich($this->ctx);
+        pruefe(!$n['zwei_faktor'], 'Die Zwei-Faktor-Anmeldung ist schon eingeschaltet.');
+        $g = totp_geheimnis();
+        q($db, 'update nutzer set zwei_faktor_neu = ? where id = ?', [$g, $n['id']]);
+        return ['geheimnis' => $g, 'uri' => totp_uri($g, $n['email'])];
+    }
+
+    /** Mit dem ersten Code aus der App bestätigen; liefert die Ersatz-Codes (nur jetzt sichtbar) */
+    public function zweiFaktorEinschalten(mixed $code = null): array
+    {
+        $db = $this->db();
+        $n = ich($this->ctx);
+        $g = (string) wert($db, 'select zwei_faktor_neu from nutzer where id = ?', [$n['id']]);
+        pruefe($g !== '', 'Bitte zuerst „Zwei-Faktor einrichten“ starten.');
+        $schritt = totp_pruefen($g, s($code));
+        pruefe($schritt !== null, 'Der Code stimmt nicht. Bitte den aktuellen Code aus der App eingeben (die Uhr am Handy muss stimmen).');
+        $codes = ersatzcodes();
+        q($db, 'update nutzer set zwei_faktor = ?, zwei_faktor_neu = null, zwei_faktor_schritt = ?, zwei_faktor_codes = ? where id = ?',
+            [$g, $schritt, json_text(array_map(fn ($c) => hash('sha256', $c), $codes)), $n['id']]);
+        alle_sitzungen_beenden($db, $n['id'], $this->ctx->token);
+        mail_einreihen($db, $n['email'], mail_zwei_faktor($db, $n['vorname'], true));
+        $this->log('info', 'konten', 'Zwei-Faktor-Anmeldung eingeschaltet');
+        return ['ersatzcodes' => $codes];
+    }
+
+    /** Ausschalten mit dem Passwort */
+    public function zweiFaktorAusschalten(mixed $passwort = null): bool
+    {
+        $db = $this->db();
+        $n = ich($this->ctx);
+        pruefe(password_verify(s($passwort), (string) wert($db, 'select passwort from nutzer where id = ?', [$n['id']])), 'Das Passwort stimmt nicht.');
+        q($db, 'update nutzer set zwei_faktor = null, zwei_faktor_neu = null, zwei_faktor_codes = null where id = ?', [$n['id']]);
+        mail_einreihen($db, $n['email'], mail_zwei_faktor($db, $n['vorname'], false));
+        $this->log('warnung', 'konten', 'Zwei-Faktor-Anmeldung ausgeschaltet');
+        return true;
+    }
+
+    /** Admin: für jemanden, der Handy und Ersatz-Codes verloren hat */
+    public function zweiFaktorZuruecksetzen(mixed $uid = null): bool
+    {
+        $db = $this->db();
+        brauche($this->ctx, 'admin');
+        $n = nutzer_laden($db, s($uid));
+        pruefe($n, 'Dieses Konto gibt es nicht (mehr).', 404);
+        q($db, 'update nutzer set zwei_faktor = null, zwei_faktor_neu = null, zwei_faktor_codes = null where id = ?', [$n['id']]);
+        mail_einreihen($db, $n['email'], mail_zwei_faktor($db, $n['vorname'], false));
+        $this->log('warnung', 'konten', 'Zwei-Faktor-Anmeldung zurückgesetzt: ' . anzeigename($n));
+        return true;
+    }
+
+    /**
+     * Passwort vergessen: Link zum Festlegen eines neuen Passworts per E-Mail (1 Stunde, einmal).
+     * Die Antwort ist immer gleich – man kann so nicht herausfinden, ob es eine Adresse gibt.
+     */
+    public function passwortVergessen(mixed $email = null): bool
+    {
+        $db = $this->db();
+        $adresse = strtolower(tr($email));
+        pruefe(ist_email($adresse), 'Bitte eine gültige E-Mail-Adresse angeben.');
+        $z = zeile($db, 'select * from nutzer where email = ? and aktiv = 1', [$adresse]);
+        if (!$z) {
+            protokoll($db, 'warnung', 'anmeldung', "Passwort vergessen für unbekannte oder deaktivierte Adresse: $adresse");
+            return true;
+        }
+        $n = nutzer_aus_zeile($z);
+        // ältere Links „Passwort vergessen“ gelten nicht mehr
+        q($db, "update links set widerrufen_am = ? where nutzer_id = ? and art = 'anmelden' and notiz = ? and widerrufen_am is null", [jetzt(), $n['id'], PASSWORT_LINK]);
+        $link = app_link($db, 'passwort/' . link_erstellen($db, 'anmelden', ['nutzer_id' => $n['id'], 'max' => 1, 'sekunden' => 3600, 'notiz' => PASSWORT_LINK]));
+        $id = mail_einreihen($db, $n['email'], mail_passwort_vergessen($db, $n['vorname'], $link));
+        $fehler = $id ? mail_jetzt_senden($db, $id) : 'E-Mail-Versand ist ausgeschaltet';
+        protokoll($db, $fehler ? 'warnung' : 'info', 'anmeldung', 'Passwort vergessen: Link angefordert' . ($fehler ? " (E-Mail nicht verschickt: $fehler)" : ''), $n);
+        return true;
+    }
+
+    /** Neues Passwort mit dem Link aus „Passwort vergessen“; meldet danach an (außer mit Zwei-Faktor) */
+    public function passwortNeuSetzen(mixed $token = null, mixed $neu = null): array
+    {
+        $db = $this->db();
+        pruefe(mb_strlen(s($neu)) >= 8, 'Das Passwort muss mindestens 8 Zeichen haben.');
+        $hash = passwort_hash(s($neu));
+        $n = transaktion($db, function () use ($db, $token, $hash) {
+            $l = link_pruefen($db, $token, 'anmelden');
+            pruefe($l['notiz'] === PASSWORT_LINK, 'Dieser Link ist ungültig. Bitte fordere unter „Passwort vergessen“ einen neuen an.', 404);
+            $n = nutzer_laden($db, (string) $l['nutzer_id']);
+            pruefe($n && $n['aktiv'], 'Dieses Konto ist deaktiviert. Bitte wende dich an die Redaktion.', 403);
+            q($db, 'update links set nutzungen = nutzungen + 1 where id = ?', [$l['id']]);
+            q($db, 'update nutzer set passwort = ?, muss_passwort_aendern = 0 where id = ?', [$hash, $n['id']]);
+            alle_sitzungen_beenden($db, $n['id']);
+            anmeldelinks_widerrufen($db, $n['id']);
+            return $n;
+        });
+        mail_einreihen($db, $n['email'], mail_passwort_geaendert($db, $n['vorname']));
+        $this->log('info', 'anmeldung', 'Neues Passwort über „Passwort vergessen“ festgelegt', $n);
+        if (zwei_faktor_aktiv($db, $n['id'])) return ['angemeldet' => false];
+        if ($this->ctx->token) sitzung_beenden($db, $this->ctx->token);
+        $this->ctx->neueSitzung = sitzung_erstellen($db, $n['id']);
+        return ['angemeldet' => true];
     }
 
     /** Gilt der Registrierungslink? (für die Seite „Registrieren“) */
@@ -1292,6 +1446,17 @@ final class Honorare
         pruefe($r->rowCount() === 1, 'Diesen Link gibt es nicht (mehr) oder er ist schon zurückgezogen.', 404);
         $this->log('info', 'konten', 'Registrierungslink zurückgezogen');
         return true;
+    }
+
+    /** Zahlungsavis (PDF, base64) einer bezahlten Abrechnung – für die Autor:in selbst und die Buchhaltung */
+    public function zahlungsavis(mixed $noteId = null): array
+    {
+        $db = $this->db();
+        $n = ich($this->ctx);
+        $note = note_holen($db, $noteId);
+        pruefe($note['autor_id'] === $n['id'] || hat($n, 'buchhaltung'), 'Dafür fehlt dir die Berechtigung.', 403);
+        pruefe($note['status'] === 'bezahlt', 'Ein Zahlungsavis gibt es erst, wenn die Prämienabrechnung bezahlt ist.');
+        return ['name' => zahlungsavis_name($note), 'inhalt' => base64_encode(zahlungsavis_pdf($note, (string) $note['bezahlt_am']))];
     }
 
     /** Konto, von dem die Sammelüberweisung (SEPA) abgeht – nur Buchhaltung und Admin */
@@ -1385,7 +1550,28 @@ function betreiber_pruefen(array $alt, mixed $neu): array
     return $b;
 }
 
-/** Startpasswort an das neue Konto schicken (wenn eingeschaltet); die Antwort sagt, ob eine Mail unterwegs ist */
+/** Zwei-Faktor für dieses Konto eingeschaltet? */
+function zwei_faktor_aktiv(PDO $db, string $nutzerId): bool
+{
+    return (string) wert($db, 'select zwei_faktor from nutzer where id = ?', [$nutzerId]) !== '';
+}
+
+/** Code aus der App (jeder nur einmal) oder ein Ersatz-Code (wird danach gestrichen) */
+function zwei_faktor_code_ok(PDO $db, array $z, string $code): bool
+{
+    $schritt = totp_pruefen((string) $z['zwei_faktor'], $code);
+    if ($schritt !== null && $schritt > (int) $z['zwei_faktor_schritt']) {
+        q($db, 'update nutzer set zwei_faktor_schritt = ? where id = ?', [$schritt, $z['id']]);
+        return true;
+    }
+    $codes = json_decode((string) $z['zwei_faktor_codes'], true) ?: [];
+    $h = hash('sha256', strtolower(trim($code)));
+    if (!in_array($h, $codes, true)) return false;
+    q($db, 'update nutzer set zwei_faktor_codes = ? where id = ?', [json_text(array_values(array_diff($codes, [$h]))), $z['id']]);
+    protokoll($db, 'warnung', 'anmeldung', 'Mit Ersatz-Code angemeldet (' . (count($codes) - 1) . ' übrig)', nutzer_aus_zeile($z));
+    return true;
+}
+
 function zahlungskonto_laden(PDO $db): array
 {
     $k = json_decode((string) wert($db, "select wert from einstellungen where schluessel = 'zahlungskonto'"), true);
@@ -1417,6 +1603,7 @@ function sicherung_pfad(string $name): ?string
 }
 
 const LINK_ANMELDEN_TAGE = 7;
+const PASSWORT_LINK = 'passwort-vergessen'; // Merkmal der Links aus „Passwort vergessen“
 const LINK_TAGE = [1, 3, 7, 14, 30]; // wählbare Gültigkeit der Registrierungslinks
 const LINK_ROLLEN = ['autor', 'redigieren', 'redaktion', 'buchhaltung']; // Admin nie per Link
 
@@ -1427,7 +1614,7 @@ function link_erstellen(PDO $db, string $art, array $w): string
     q($db, 'insert into links (id, token_hash, art, nutzer_id, rollen, max_nutzungen, gueltig_bis, notiz, erstellt_von, erstellt_am)
             values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', [
         neue_id(), token_hash($token), $art, $w['nutzer_id'] ?? null, json_text($w['rollen'] ?? []), $w['max'] ?? null,
-        zeit_iso(time() + $w['tage'] * 86400), $w['notiz'] ?? '', $w['von'] ?? '', jetzt(),
+        zeit_iso(time() + ($w['sekunden'] ?? $w['tage'] * 86400)), $w['notiz'] ?? '', $w['von'] ?? '', jetzt(),
     ]);
     return $token;
 }

@@ -371,6 +371,23 @@ section.fehlerbox { border: 0; }
   background: none; border: 0; padding: 0; font: inherit; color: var(--marke);
   text-decoration: underline; cursor: pointer;
 }
+/* Zwei-Faktor im Profil */
+.zf-liste { padding-left: 1.2rem; margin: 0; }
+.zf-liste > li + li { margin-top: 1rem; }
+.zf-qr { width: 180px; margin: .5rem 0; background: #fff; border-radius: 8px; overflow: hidden; }
+.zf-qr svg { display: block; width: 100%; height: auto; }
+.zf-schluessel { word-break: break-all; font-size: .9rem; }
+.zf-codes { list-style: none; padding: 0; margin: .5rem 0 1rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem; }
+.zf-codes code { font-size: .95rem; }
+.wartung-banner {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .5rem 1rem;
+  margin: 1rem 0 0; padding: .6rem 1rem; border-radius: 8px;
+  background: var(--gefahr-hell); color: var(--gefahr); border: 1px solid var(--gefahr);
+}
+.wartung-seite { text-align: center; margin-top: 3rem; }
+.wartung-seite .aktionen { justify-content: center; align-items: center; gap: 1rem; }
+.wartung-symbol { font-size: 2.5rem; margin: 0; }
+.login-vergessen { text-align: center; margin: .75rem 0 0; font-size: .9rem; }
 /* Bezahl-Terminal: eine Karte pro Kalenderwoche */
 .woche-kopf { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; }
 .woche-kopf h2 { margin: 0; }
@@ -614,8 +631,8 @@ body.modus-demo .fuss-demo { display: block; }
 
 /* ---- Admin: Übersicht und Protokoll */
 .kennzahlen-5 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
-a.kennzahl-link { color: inherit; text-decoration: none; transition: box-shadow .15s, transform .15s; }
-a.kennzahl-link:hover { box-shadow: 0 4px 18px rgb(0 0 0 / 10%); transform: translateY(-1px); }
+a.kennzahl-link { color: inherit; text-decoration: none; transition: box-shadow .15s; }
+a.kennzahl-link:hover { box-shadow: 0 0 0 2px var(--marke-hell), 0 4px 18px rgb(0 0 0 / 8%); }
 .kennzahl-achtung { box-shadow: inset 0 0 0 2px var(--warnung-hell), var(--schatten); }
 .kennzahl-achtung strong { color: var(--warnung); }
 .kennzahl-fehler { box-shadow: inset 0 0 0 2px var(--gefahr-hell), var(--schatten); }
@@ -645,3 +662,34 @@ a.kennzahl-link:hover { box-shadow: 0 4px 18px rgb(0 0 0 / 10%); transform: tran
 .nowrap { white-space: nowrap; }
 .umbruch { overflow-wrap: anywhere; }
 a.kennzahl-link.kennzahl-marke { color: #fff; }
+
+/* ---- Ruhiger Seitenaufbau: nichts springt beim Laden */
+@media (min-width: 800px) {
+  /* so hoch wie mit Menü – der Kopf wächst nicht, wenn das Menü nach dem Anmelden erscheint */
+  .kopf-innen { min-height: 67px; box-sizing: border-box; }
+}
+/* der Fuß bleibt unten, auch solange der Inhalt noch lädt */
+.inhalt { min-height: calc(100vh - 67px); box-sizing: border-box; }
+
+/* ---- Redaktion: Umschalter campus a / campus a college */
+.medium-schalter { display: inline-flex; flex-wrap: wrap; gap: .25rem; padding: .25rem; background: #e8eeec; border-radius: 999px; }
+.medium-knopf {
+  font: inherit; font-weight: 600; font-size: .9rem; padding: .45rem 1rem; border: 0; border-radius: 999px;
+  background: transparent; color: var(--text-leise); cursor: pointer;
+}
+.medium-knopf[aria-pressed="true"] { background: var(--flaeche); color: var(--text); box-shadow: 0 1px 4px rgb(0 0 0 / 12%); }
+.medium-knopf-college[aria-pressed="true"] { background: var(--college); color: #fff; }
+.medium-knopf-campus-a[aria-pressed="true"] { background: var(--campus-a); color: #fff; }
+.medium-knopf[aria-pressed="true"] .zaehler { background: rgb(255 255 255 / 30%); color: inherit; }
+@media (min-width: 700px) { .redaktion-filter { grid-template-columns: 1fr 1.6fr 1fr; } }
+.medium-knopf .zaehler { background: var(--flaeche); color: var(--text); }
+.medium-knopf[aria-pressed="true"] .zaehler { background: rgb(255 255 255 / 30%); color: inherit; }
+.vorlagen { display: flex; flex-wrap: wrap; gap: .35rem; margin: .25rem 0 .75rem; }
+.vorlage {
+  font: inherit; font-size: .82rem; text-align: left; padding: .35rem .7rem; border-radius: var(--radius-klein);
+  border: 1px solid var(--rand); background: var(--flaeche); cursor: pointer; max-width: 100%;
+}
+.vorlage:hover { border-color: var(--marke); background: var(--marke-hell); }
+kbd { font-family: var(--mono); font-size: .78rem; padding: .05rem .35rem; border: 1px solid var(--rand); border-bottom-width: 2px; border-radius: 4px; background: var(--flaeche); }
+.kuerzel-hinweis { margin: .75rem 0 0; color: var(--text-leise); }
+@media (hover: none) { .kuerzel-hinweis { display: none; } }
