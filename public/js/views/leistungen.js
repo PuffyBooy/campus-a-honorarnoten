@@ -295,6 +295,11 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
         </section>
       </div>
       <div id="abrechnungen">
+        ${gruppen.length > 1 ? `<section class="karte beide-einreichen">
+          <p><strong>Beide auf einmal einreichen?</strong><br>
+            <span class="klein">Es werden zwei getrennte Prämienabrechnungen – eine für ${gruppen.map((g) => esc(mediumName(g.medium))).join(', eine für ')}.</span></p>
+          <button type="button" class="btn btn-primaer btn-breit" data-beide>Beide einreichen …</button>
+        </section>` : ''}
         ${gruppen.length ? gruppen.map(({ medium, positionen }) => {
           const schon = diesenMonat.filter((n) => mediumOder(n.medium) === medium);
           return `
@@ -566,6 +571,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     const b = ev.target.closest('[data-bearbeiten]');
     const l = ev.target.closest('[data-loeschen]');
     const a = ev.target.closest('[data-abschicken]');
+    const beide = ev.target.closest('[data-beide]');
     if (b) {
       bearbeiteId = b.dataset.bearbeiten;
       neuLaden();
@@ -580,6 +586,47 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
       }
       if (bearbeiteId === p.id) bearbeiteId = null;
       neuLaden();
+    } else if (beide) {
+      // je Medium die ausgewählten Leistungen; Medien ohne Auswahl bleiben liegen
+      const teile = Array.from(abrechnungen.querySelectorAll('section[data-medium]'))
+        .map((karte) => ({ medium: karte.dataset.medium, ids: gewaehlt(karte) }))
+        .filter((t) => t.ids.length)
+        .map((t) => ({ ...t, auswahl: liste.filter((p) => t.ids.includes(p.id)) }));
+      if (teile.length < 2) {
+        meldung('Bitte bei beiden Medien mindestens eine Leistung auswählen – oder einzeln einreichen.', 'fehler');
+        return;
+      }
+      const tage = tageBisMonatsende(heute);
+      const ok = await bestaetigen({
+        titel: 'Beide Prämienabrechnungen einreichen?',
+        html: `${teile.map((t) => `
+          <h3>${mediumBadge(t.medium)} ${esc(anzahlText(t.auswahl.length, 'Leistung', 'Leistungen'))}</h3>
+          <ul class="dialog-liste">${t.auswahl.map((p) => `<li><span>${esc(p.titel)}<br><span class="klein">${
+            esc([KATEGORIE_LABEL[p.kategorie], formatDatum(p.veroeffentlichung)].join(' · '))}</span></span>
+            <span class="mono">${esc(formatEuro(p.betrag))}</span></li>`).join('')}</ul>
+          <p class="summenzeile">${esc(mediumName(t.medium))}: <strong>${esc(formatEuro(summe(t.auswahl)))}</strong></p>`).join('')}
+          <p class="summenzeile">Zusammen: <strong>${esc(formatEuro(summe(teile.flatMap((t) => t.auswahl))))}</strong></p>
+          ${tage > 3 ? `<p class="hinweisbox">Es sind noch ${esc(anzahlText(tage, 'Tag', 'Tage'))} bis Monatsende. Leistungen, die danach dazukommen, brauchen eine eigene Abrechnung.</p>` : ''}
+          <p class="klein">Es entstehen zwei Prämienabrechnungen ${esc(formatMonat(heute))} mit eigenen Nummern. Bis die Redaktion sie annimmt, kannst du sie noch zurückziehen und ändern.</p>`,
+        ja: 'Beide einreichen',
+      });
+      if (!ok) return;
+      await mitSperre(beide, async () => {
+        const nummern = [];
+        for (const t of teile) {
+          try {
+            nummern.push((await store.abrechnungAbschicken(t.ids)).nummer);
+          } catch (e) {
+            // die erste ist vielleicht schon eingereicht – das sagen, statt es zu verschweigen
+            meldung(nummern.length ? `${nummern[0]} ist eingereicht, ${mediumName(t.medium)} aber nicht: ${fehlerText(e)}` : fehlerText(e), 'fehler');
+            if (nummern.length) { bearbeiteId = null; neuLaden(); }
+            return;
+          }
+        }
+        bearbeiteId = null;
+        setFlash({ neu: nummern });
+        navigate('noten');
+      });
     } else if (a) {
       const karte = a.closest('[data-medium]');
       const medium = karte.dataset.medium;
