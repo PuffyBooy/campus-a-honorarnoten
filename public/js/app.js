@@ -148,10 +148,27 @@ function hinweisBanner(nutzer, recht) {
   });
 }
 
+/**
+ * „Wird geladen …“ erst zeigen, wenn das Laden länger dauert: bei schnellen Seitenwechseln und beim Filtern
+ * bleibt der bisherige Inhalt stehen, statt kurz zu verschwinden und die Seite springen zu lassen.
+ * Liefert eine Funktion, die die Anzeige abbricht.
+ */
+function ladenSpaeter() {
+  const vorher = main.firstElementChild;
+  const t = setTimeout(() => { if (main.firstElementChild === vorher) ladeAnzeige(main); }, 400);
+  return () => clearTimeout(t);
+}
+
 async function render() {
   const lauf = ++renderZaehler;
   const pfad = aktuellerPfad();
-  delete main.dataset.seite;
+  // Breite der Seite (die Redaktion ist breiter) erst umstellen, wenn der neue Inhalt kommt –
+  // sonst springt der alte Inhalt kurz in die neue Breite
+  const seite = pfad.split('/')[0];
+  if (main.dataset.seite !== seite) {
+    const beobachter = new MutationObserver(() => { main.dataset.seite = seite; beobachter.disconnect(); });
+    beobachter.observe(main, { childList: true });
+  }
   let nutzer;
   try {
     nutzer = await store.aktuellerNutzer();
@@ -243,8 +260,7 @@ async function render() {
 
   const f = flash;
   flash = null;
-  main.dataset.seite = treffer.route.pfad.split('/')[0];
-  ladeAnzeige(main);
+  const ladenFertig = ladenSpaeter();
   try {
     await treffer.route.view.render(main, {
       store,
@@ -258,9 +274,11 @@ async function render() {
       istDemo: IST_DEMO,
       istAktuell: () => lauf === renderZaehler,
     });
+    ladenFertig();
   } catch (e) {
     console.error(e);
     if (lauf !== renderZaehler) return;
+    ladenFertig();
     main.innerHTML = `<section class="karte fehlerbox" role="alert">
       <h1>Fehler</h1><p>${esc(fehlerText(e))}</p>
       <p><a href="#/${startseite(nutzer)}">Zur Startseite</a></p></section>`;

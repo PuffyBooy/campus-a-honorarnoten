@@ -614,8 +614,8 @@ body.modus-demo .fuss-demo { display: block; }
 
 /* ---- Admin: Übersicht und Protokoll */
 .kennzahlen-5 { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); }
-a.kennzahl-link { color: inherit; text-decoration: none; transition: box-shadow .15s, transform .15s; }
-a.kennzahl-link:hover { box-shadow: 0 4px 18px rgb(0 0 0 / 10%); transform: translateY(-1px); }
+a.kennzahl-link { color: inherit; text-decoration: none; transition: box-shadow .15s; }
+a.kennzahl-link:hover { box-shadow: 0 0 0 2px var(--marke-hell), 0 4px 18px rgb(0 0 0 / 8%); }
 .kennzahl-achtung { box-shadow: inset 0 0 0 2px var(--warnung-hell), var(--schatten); }
 .kennzahl-achtung strong { color: var(--warnung); }
 .kennzahl-fehler { box-shadow: inset 0 0 0 2px var(--gefahr-hell), var(--schatten); }
@@ -645,3 +645,11 @@ a.kennzahl-link:hover { box-shadow: 0 4px 18px rgb(0 0 0 / 10%); transform: tran
 .nowrap { white-space: nowrap; }
 .umbruch { overflow-wrap: anywhere; }
 a.kennzahl-link.kennzahl-marke { color: #fff; }
+
+/* ---- Ruhiger Seitenaufbau: nichts springt beim Laden */
+@media (min-width: 800px) {
+  /* so hoch wie mit Menü – der Kopf wächst nicht, wenn das Menü nach dem Anmelden erscheint */
+  .kopf-innen { min-height: 67px; box-sizing: border-box; }
+}
+/* der Fuß bleibt unten, auch solange der Inhalt noch lädt */
+.inhalt { min-height: calc(100vh - 67px); box-sizing: border-box; }

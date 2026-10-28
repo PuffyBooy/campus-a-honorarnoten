@@ -10,8 +10,8 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
     <div class="login-raster">
       <section class="login-intro">
         <div class="login-logos">
-          <img src="img/logo-campus-a.svg" alt="campus a – Das Studierendenmagazin">
-          <img src="img/logo-campus-a-college.png" alt="campus a college – Die Schülerzeitung für alle Schüler*innen">
+          <img src="img/logo-campus-a.svg" width="112" height="40" alt="campus a – Das Studierendenmagazin">
+          <img src="img/logo-campus-a-college.png" width="175" height="40" alt="campus a college – Die Schülerzeitung für alle Schüler*innen">
         </div>
         <p>Hier erfasst ihr eure Beiträge für campus a und campus a college und reicht sie einmal im Monat als Prämienabrechnung ein.</p>
       </section>
