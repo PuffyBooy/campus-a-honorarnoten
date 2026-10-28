@@ -9,6 +9,7 @@ export const BENACHRICHTIGUNGEN = [
   { typ: 'angenommen', rollen: ['autor'], text: 'Meine Prämienabrechnung wurde angenommen' },
   { typ: 'abgelehnt', rollen: ['autor'], text: 'Meine Prämienabrechnung wurde zum Überarbeiten zurückgegeben' },
   { typ: 'bezahlt', rollen: ['autor'], text: 'Meine Anerkennungsprämie wurde überwiesen' },
+  { typ: 'rueckfrage', rollen: ['autor'], text: 'Die Redaktion hat eine Rückfrage zu meiner Prämienabrechnung' },
 ];
 
 // Admins dürfen auch die Mails von Redaktion und Buchhaltung bekommen – aber erst, wenn sie es einschalten

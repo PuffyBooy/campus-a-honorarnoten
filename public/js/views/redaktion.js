@@ -8,7 +8,7 @@ import { pruefungRendern } from './redaktion-detail.js';
 // Filter bleiben beim Wechseln zwischen Abrechnungen erhalten; das Medium merkt sich der Browser
 const MEDIUM_KEY = 'campus-a-honorare:redaktion-medium';
 const gemerktesMedium = () => { try { return localStorage.getItem(MEDIUM_KEY) ?? ''; } catch { return ''; } };
-const filter = { status: 'eingereicht', medium: gemerktesMedium(), monat: '', suche: '', sortierung: 'eingereicht_asc' };
+const filter = { status: 'eingereicht', medium: gemerktesMedium(), monat: '', suche: '', sortierung: 'eingereicht_asc', rueckfrage: false };
 
 const REITER = [
   ['eingereicht', 'Zu prüfen'], ['angenommen', 'Angenommen'], ['abgelehnt', 'Zurückgegeben'], ['bezahlt', 'Bezahlt'], ['', 'Alle'],
@@ -24,7 +24,7 @@ const SEITE = 100;
 let tastenAbbrechen = null;
 const KUERZEL = [
   ['J', 'nächste Abrechnung'], ['K', 'vorige Abrechnung'], ['Leertaste', 'nächste Leistung als geprüft abhaken'],
-  ['A', 'annehmen'], ['R', 'zurückgeben (mit Vorlagen)'], ['?', 'diese Hilfe'],
+  ['A', 'annehmen'], ['R', 'zurückgeben (mit Vorlagen)'], ['F', 'nachfragen (Rückfrage an die Autor:in)'], ['?', 'diese Hilfe'],
 ];
 const kuerzelHinweis = () => `<p class="kuerzel-hinweis klein">Tastenkürzel: ${KUERZEL.slice(0, 5)
   .map(([k, t]) => `<kbd>${esc(k)}</kbd> ${esc(t)}`).join(' · ')} · <kbd>?</kbd> Hilfe</p>`;
@@ -50,6 +50,8 @@ function eintragHtml(n, aktiv, mitAuswahl) {
       <a href="#/redaktion/${esc(n.id)}"${aktiv ? ' aria-current="true"' : ''}>
         <span class="eingang-zeile"><strong>${esc(vollerName(n.autor))}</strong><span class="eingang-betrag">${esc(formatEuro(n.betrag))}</span></span>
         <span class="eingang-zeile klein"><span class="nummer-klein">${esc(n.nummer)} · ${esc(wieLange(n.eingereicht_am))}</span>${mediumBadge(n.medium)}</span>
+        ${n.rueckfrage === 'offen' ? '<span class="rueckfrage-marke">❓ Rückfrage offen</span>' : ''}
+        ${n.rueckfrage === 'beantwortet' ? '<span class="rueckfrage-marke rueckfrage-antwort">💬 Antwort da</span>' : ''}
       </a>
     </li>`;
 }
@@ -85,6 +87,9 @@ export async function render(el, ctx) {
         <input id="r-suche" type="search" placeholder="Name oder Nummer" autocomplete="off"></div>
       <div class="feld"><label for="r-sort">Sortierung</label>
         <select id="r-sort">${Object.entries(SORTIERUNGEN).map(([w, l]) => `<option value="${w}">${esc(l)}</option>`).join('')}</select></div>
+      <label class="check rueckfrage-filter"><input type="checkbox" id="r-rueckfrage" ${filter.rueckfrage ? 'checked' : ''}>
+        Nur mit Rückfrage${daten.rueckfragen?.beantwortet ? ` <span class="zaehler zaehler-wichtig" title="Antwort da">${daten.rueckfragen.beantwortet}</span>` : ''}
+        ${daten.rueckfragen?.offen ? ` <span class="klein">(${daten.rueckfragen.offen} warten)</span>` : ''}</label>
     </section>
     <div class="arbeitsplatz${gewaehlt ? ' mit-auswahl' : ''}">
       <aside class="posteingang" aria-label="Prämienabrechnungen">
@@ -122,6 +127,7 @@ export async function render(el, ctx) {
     e.value = filter[feld];
     e.addEventListener('change', () => setzen(feld, e.value));
   };
+  el.querySelector('#r-rueckfrage').addEventListener('change', (ev) => setzen('rueckfrage', ev.target.checked));
   sel('#r-monat', 'monat');
   sel('#r-sort', 'sortierung');
   const suche = el.querySelector('#r-suche');
@@ -199,6 +205,11 @@ export async function render(el, ctx) {
     else if (taste === 'k') ziel(i > 0 ? liste[i - 1] : null);
     else if (taste === 'a') el.querySelector('#d-annehmen')?.click();
     else if (taste === 'r') el.querySelector('#d-ablehnen-oeffnen')?.click();
+    else if (taste === 'f') {
+      const knopf = el.querySelector('#d-rueckfrage-oeffnen');
+      if (knopf) knopf.click();
+      else el.querySelector('#d-rueckfrage textarea')?.focus();
+    }
     else if (taste === ' ' && gewaehlt) el.querySelector('[data-pruefen]:not(:checked):not(:disabled)')?.click();
     else if (taste === '?') kuerzelHilfe();
     else return;

@@ -35,6 +35,9 @@ export const AKTION_LABEL = {
   abgelehnt: 'Abgelehnt',
   betrag_korrigiert: 'Betrag korrigiert',
   kommentar: 'Interner Kommentar',
+  rueckfrage: 'Rückfrage an die Autor:in',
+  antwort: 'Antwort der Autor:in',
+  rueckfrage_erledigt: 'Rückfrage als geklärt markiert',
   bezahlt: 'Als bezahlt markiert',
   zurueckgeholt: 'Leistungen zur Überarbeitung an die Autor:in zurückgegeben',
 };

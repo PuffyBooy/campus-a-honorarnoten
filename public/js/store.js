@@ -782,6 +782,8 @@ function darfZahlungsdaten(n, note) {
 /** Kopie der Note, bei der die Redaktion keine IBAN/Adresse bekommt */
 function sicht(n, note) {
   const k = kopie(note);
+  k.rueckfrage ??= null;
+  k.nachrichten = (db.nachrichten ?? []).filter((m) => m.note_id === note.id).length;
   k.positionen = mitNachweisen(k.positionen);
   k.betrag = summe(k.positionen);
   if (!darfZahlungsdaten(n, note)) {
@@ -959,6 +961,7 @@ export function abrechnungZurueckziehen(noteId) {
   zurueckAnAutor({ ...note, ablehnungsgrund: '' }, n);
   db.noten = db.noten.filter((y) => y.id !== noteId);
   db.kommentare = db.kommentare.filter((k) => k.note_id !== noteId);
+  db.nachrichten = (db.nachrichten ?? []).filter((m) => m.note_id !== noteId);
   db.verlauf = db.verlauf.filter((v) => v.note_id !== noteId);
   nachweiseAufraeumen();
   db.loeschprotokoll.push({ id: id(), nummer: note.nummer, geloescht_von: `${anzeigename(n)} (zurückgezogen)`, am: jetzt() });
@@ -982,13 +985,16 @@ const REDAKTION_SORTIERUNG = {
 };
 
 /** Wie auf dem Server: gefiltert und seitenweise */
-export function redaktionListe({ status = '', medium = '', monat = '', suche = '', sortierung = '', limit = 100, offset = 0 } = {}) {
+export function redaktionListe({
+  status = '', medium = '', monat = '', suche = '', sortierung = '', rueckfrage = false, limit = 100, offset = 0,
+} = {}) {
   const n = brauche('redaktion');
   const q = trim(suche).toLowerCase();
   const treffer = db.noten
     .filter((x) => !STATUS_WERTE.includes(status) || x.status === status)
     .filter((x) => !medium || mediumOder(x.medium) === medium)
     .filter((x) => !/^\d{4}-\d{2}$/.test(monat) || x.monat === monat)
+    .filter((x) => !rueckfrage || x.rueckfrage)
     .filter((x) => !q || x.nummer.toLowerCase().includes(q) || JSON.stringify(x.autor).toLowerCase().includes(q))
     .sort(REDAKTION_SORTIERUNG[sortierung] ?? REDAKTION_SORTIERUNG.eingereicht_asc);
   limit = Math.max(1, Math.min(200, Number(limit) || 100));
@@ -998,6 +1004,7 @@ export function redaktionListe({ status = '', medium = '', monat = '', suche = '
     summe: treffer.reduce((s, x) => s + Math.round(summe(x.positionen) * 100), 0) / 100,
     zaehler: Object.fromEntries(STATUS_WERTE.map((st) => [st, db.noten.filter((x) => x.status === st && (!medium || mediumOder(x.medium) === medium)).length])),
     zu_pruefen_medium: Object.fromEntries(MEDIUM_KEYS.map((m) => [m, db.noten.filter((x) => x.status === 'eingereicht' && mediumOder(x.medium) === m).length])),
+    rueckfragen: Object.fromEntries(['offen', 'beantwortet'].map((r) => [r, db.noten.filter((x) => x.rueckfrage === r && (!medium || mediumOder(x.medium) === medium)).length])),
     monate: [...new Set(db.noten.map((x) => x.monat))].sort().reverse().slice(0, 36),
   };
 }
@@ -1038,7 +1045,7 @@ export function annehmen(noteId) {
   pruefe(['eingereicht', 'abgelehnt'].includes(x.status), 'Diese Prämienabrechnung kann nicht angenommen werden.');
   pruefe(!x.zurueckgeholt_am, 'Die Autor:in überarbeitet diese Leistungen bereits in einer neuen Prämienabrechnung.');
   const vorher = x.status;
-  Object.assign(x, { status: 'angenommen', ablehnungsgrund: '', entschieden_am: jetzt() });
+  Object.assign(x, { status: 'angenommen', ablehnungsgrund: '', entschieden_am: jetzt(), rueckfrage: null });
   verlauf(x.id, n, 'angenommen', { vorher });
   protokoll('info', 'abrechnungen', `Angenommen: ${x.nummer}`);
   speichern();
@@ -1050,7 +1057,7 @@ export function ablehnen(noteId, grund) {
   const x = noteHolen(noteId);
   pruefe(['eingereicht', 'angenommen'].includes(x.status), 'Diese Prämienabrechnung kann nicht abgelehnt werden.');
   const vorher = x.status;
-  Object.assign(x, { status: 'abgelehnt', ablehnungsgrund: trim(grund), entschieden_am: jetzt() });
+  Object.assign(x, { status: 'abgelehnt', ablehnungsgrund: trim(grund), entschieden_am: jetzt(), rueckfrage: null });
   verlauf(x.id, n, 'abgelehnt', { vorher, grund: trim(grund) });
   protokoll('info', 'abrechnungen', `Zurückgegeben: ${x.nummer} (${trim(grund)})`);
   // die Leistungen gehen sofort zurück an die Autor:in zum Überarbeiten
@@ -1092,6 +1099,64 @@ export function kommentieren(noteId, textInhalt) {
   db.kommentare.push({ id: id(), note_id: noteId, verfasser_id: n.id, verfasser_name: anzeigename(n), text: trim(textInhalt), am: jetzt() });
   verlauf(noteId, n, 'kommentar');
   speichern();
+}
+
+// ------------------------------------------------------------------ Rückfragen (Chat Redaktion ↔ Autor:in)
+
+export function nachrichten(noteId) {
+  const n = ich();
+  const x = noteHolen(noteId);
+  pruefe(darfSehen(n, x), 'Dafür fehlt dir die Berechtigung.');
+  return (db.nachrichten ?? []).filter((m) => m.note_id === x.id)
+    .map((m) => ({ id: m.id, von_name: m.von_name, von_redaktion: m.von_redaktion, text: m.text, am: m.am, ich: m.von_id === n.id }));
+}
+
+function nachrichtSpeichern(x, von, redaktion, text) {
+  pruefe(!leer(text), 'Die Nachricht ist leer.');
+  db.nachrichten ??= [];
+  db.nachrichten.push({ id: id(), note_id: x.id, von_id: von.id, von_name: anzeigename(von), von_redaktion: redaktion, text: trim(text).slice(0, 2000), am: jetzt() });
+}
+
+export function nachfragen(noteId, text) {
+  const n = brauche('redaktion');
+  const x = noteHolen(noteId);
+  pruefe(['eingereicht', 'angenommen'].includes(x.status), 'Rückfragen gehen nur, solange die Abrechnung noch nicht bezahlt oder zurückgegeben ist.');
+  nachrichtSpeichern(x, n, true, text);
+  x.rueckfrage = 'offen';
+  verlauf(x.id, n, 'rueckfrage');
+  speichern();
+  return true;
+}
+
+export function rueckfrageBeantworten(noteId, text) {
+  const n = ich();
+  const x = noteHolen(noteId);
+  pruefe(x.autor_id === n.id, 'Dafür fehlt dir die Berechtigung.');
+  pruefe(['eingereicht', 'angenommen'].includes(x.status), 'Diese Abrechnung ist schon erledigt.');
+  pruefe((db.nachrichten ?? []).some((m) => m.note_id === x.id), 'Zu dieser Abrechnung gibt es keine Rückfrage.');
+  nachrichtSpeichern(x, n, false, text);
+  x.rueckfrage = 'beantwortet';
+  verlauf(x.id, n, 'antwort');
+  speichern();
+  return true;
+}
+
+export function rueckfrageErledigt(noteId) {
+  const n = brauche('redaktion');
+  const x = noteHolen(noteId);
+  x.rueckfrage = null;
+  verlauf(x.id, n, 'rueckfrage_erledigt');
+  speichern();
+  return true;
+}
+
+export function navZaehler() {
+  const n = ich();
+  return {
+    anfragen: hat(n, 'admin') ? db.anfragen.filter((a) => a.status === 'offen').length : 0,
+    rueckfragen: db.noten.filter((x) => x.autor_id === n.id && x.rueckfrage === 'offen').length,
+    antworten: hat(n, 'redaktion') ? db.noten.filter((x) => x.rueckfrage === 'beantwortet').length : 0,
+  };
 }
 
 export function kommentare(noteId) {
@@ -1224,6 +1289,7 @@ export function noteLoeschen(noteId) {
   const x = noteHolen(noteId);
   db.noten = db.noten.filter((y) => y.id !== noteId);
   db.kommentare = db.kommentare.filter((k) => k.note_id !== noteId);
+  db.nachrichten = (db.nachrichten ?? []).filter((m) => m.note_id !== noteId);
   db.verlauf = db.verlauf.filter((v) => v.note_id !== noteId);
   nachweiseAufraeumen();
   db.loeschprotokoll.push({ id: id(), nummer: x.nummer, geloescht_von: anzeigename(admin), am: jetzt() });

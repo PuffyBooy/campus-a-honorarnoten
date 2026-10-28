@@ -867,6 +867,55 @@ test('Redigieren: Nachweis (PDF, Word …) anhängen, Redaktion sieht ihn, nur b
   await k.admin.ok('nutzerLoeschen', (await nina.ok('aktuellerNutzer')).id);
 });
 
+test('Rückfrage: Redaktion fragt nach, Autor:in antwortet im Chat, E-Mails, Zähler', async () => {
+  await k.bert.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Unklarer Text', veroeffentlichung: '2026-10-03', betrag: 15 });
+  const [p] = (await k.bert.ok('meineLeistungen')).filter((x) => x.titel === 'Unklarer Text');
+  const note = await k.bert.ok('abrechnungAbschicken', [p.id]);
+  assert.deepEqual([note.rueckfrage, note.nachrichten], [null, 0]);
+  // Autor:in kann nicht von sich aus anfangen, fremde schon gar nicht
+  assert.match((await k.bert.aufruf('rueckfrageBeantworten', note.id, 'Hallo?')).fehler, /keine Rückfrage/);
+  assert.equal((await k.bert.aufruf('nachfragen', note.id, 'Frage')).status, 403);
+  assert.match((await k.rita.aufruf('nachfragen', note.id, '  ')).fehler, /leer/);
+
+  await k.rita.ok('nachfragen', note.id, 'Welcher Artikel ist „Unklarer Text“?');
+  const frage = await mailAbwarten(php.smtp, (m) => m.an === 'bert@example.org' && m.betreff === `Rückfrage zu deiner Prämienabrechnung ${note.nummer}`);
+  assert.ok(frage.text.includes('Welcher Artikel ist „Unklarer Text“?'));
+  assert.equal((await k.bert.ok('navZaehler')).rueckfragen, 1);
+  const n1 = (await k.bert.ok('meineNoten')).find((x) => x.id === note.id);
+  assert.deepEqual([n1.status, n1.rueckfrage, n1.nachrichten], ['eingereicht', 'offen', 1], 'Abrechnung bleibt, wie sie ist');
+  assert.equal((await k.anna.aufruf('nachrichten', note.id)).status, 403, 'andere Autor:innen sehen nichts');
+  const liste = await k.rita.ok('redaktionListe', { rueckfrage: true });
+  assert.ok(liste.noten.every((x) => x.rueckfrage) && liste.noten.some((x) => x.id === note.id));
+  assert.equal(liste.rueckfragen.offen, 1);
+
+  await k.bert.ok('rueckfrageBeantworten', note.id, 'Der über den Mensa-Streik.');
+  const antwort = await mailAbwarten(php.smtp, (m) => m.an === 'rita@example.org' && m.betreff.startsWith('Antwort von Bert'));
+  assert.ok(antwort.text.includes('Mensa-Streik'));
+  assert.equal((await k.rita.ok('navZaehler')).antworten, 1);
+  assert.equal((await k.bert.ok('navZaehler')).rueckfragen, 0);
+  const chat = await k.rita.ok('nachrichten', note.id);
+  assert.deepEqual(chat.map((m) => [m.von_redaktion, m.ich, m.text]),
+    [[true, true, 'Welcher Artikel ist „Unklarer Text“?'], [false, false, 'Der über den Mensa-Streik.']]);
+  assert.ok((await k.rita.ok('verlaufVon', note.id)).some((v) => v.aktion === 'antwort'));
+
+  // geklärt markieren, oder Annehmen beendet die Rückfrage; danach kein Schreiben mehr
+  await k.rita.ok('rueckfrageErledigt', note.id);
+  assert.equal((await k.rita.ok('note', note.id)).rueckfrage, null);
+  await k.rita.ok('nachfragen', note.id, 'Und das Datum stimmt?');
+  await k.rita.ok('annehmen', note.id);
+  const n2 = await k.bert.ok('note', note.id);
+  assert.deepEqual([n2.rueckfrage, n2.nachrichten], [null, 3], 'Verlauf bleibt lesbar');
+  assert.equal((await k.bert.ok('nachrichten', note.id)).length, 3);
+  // angenommen: Antworten geht noch (die Redaktion sieht „Antwort da“), bezahlt nicht mehr
+  await k.bert.ok('rueckfrageBeantworten', note.id, 'Ja, stimmt.');
+  assert.equal((await k.rita.ok('note', note.id)).rueckfrage, 'beantwortet');
+  await k.kasse.ok('alsBezahltMarkieren', note.id, new Date().toISOString().slice(0, 10));
+  assert.match((await k.bert.aufruf('rueckfrageBeantworten', note.id, 'Noch was')).fehler, /schon erledigt/);
+  assert.match((await k.rita.aufruf('nachfragen', note.id, 'Noch was')).fehler, /nicht bezahlt/);
+  await k.admin.ok('noteLoeschen', note.id);
+  assert.equal(php.sql('select count(*) n from nachrichten where note_id = ?', [note.id]).zeilen[0].n, 0, 'mit der Abrechnung gelöscht');
+});
+
 test('E-Mails: Anfrage, Zugang, Einreichen, Annehmen, Ablehnen, Bezahlen', async () => {
   const mail = (an, betreff) => mailAbwarten(php.smtp, (m) => m.an === an && betreff.test(m.betreff));
   const anfrage = await mail('admin@example.org', /^Neue Zugangsanfrage: Anna Autorin$/);

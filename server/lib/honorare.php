@@ -125,8 +125,11 @@ function position_aus_zeile(array $p): array
     ];
 }
 
-/** $positionen: schon geladene Zeilen aus note_positionen (sonst werden sie hier geholt) */
-function note_aus_zeile(PDO $db, array $z, ?array $positionen = null): array
+/**
+ * $positionen: schon geladene Zeilen aus note_positionen (sonst werden sie hier geholt),
+ * $nachrichten: Anzahl der Nachrichten zu Rückfragen (sonst wird sie hier gezählt)
+ */
+function note_aus_zeile(PDO $db, array $z, ?array $positionen = null, ?int $nachrichten = null): array
 {
     $positionen = nachweise_anhaengen($db, array_map('position_aus_zeile',
         $positionen ?? zeilen($db, 'select * from note_positionen where note_id = ? order by reihenfolge', [$z['id']])));
@@ -135,6 +138,8 @@ function note_aus_zeile(PDO $db, array $z, ?array $positionen = null): array
         'monat' => $z['monat'], 'medium' => medium_oder($z['medium']), 'autor_id' => $z['autor_id'], 'status' => $z['status'],
         'eingereicht_am' => $z['eingereicht_am'], 'entschieden_am' => $z['entschieden_am'], 'bezahlt_am' => $z['bezahlt_am'],
         'ablehnungsgrund' => $z['ablehnungsgrund'], 'zurueckgeholt_am' => $z['zurueckgeholt_am'],
+        'rueckfrage' => $z['rueckfrage'] ?? null,
+        'nachrichten' => $nachrichten ?? (int) wert($db, 'select count(*) from nachrichten where note_id = ?', [$z['id']]),
         'autor' => json_decode($z['autor_json'], true), 'zahlung' => json_decode($z['zahlung_json'], true),
         'empfaenger' => json_decode($z['empfaenger_json'], true),
         'positionen' => $positionen,
@@ -178,11 +183,15 @@ function noten_liste(PDO $db, array $n, string $where = '', array $params = [], 
     $zeilen = zeilen($db, "select * from noten $where order by $order $limit", $params);
     // Leistungen aller Noten gesammelt laden statt mit einer Abfrage pro Note
     $positionen = [];
+    $nachrichten = [];
     foreach (array_chunk(array_column($zeilen, 'id'), 500) as $ids) {
         $platz = implode(',', array_fill(0, count($ids), '?'));
         foreach (zeilen($db, "select * from note_positionen where note_id in ($platz) order by reihenfolge", $ids) as $p) $positionen[$p['note_id']][] = $p;
+        foreach (zeilen($db, "select note_id, count(*) anzahl from nachrichten where note_id in ($platz) group by note_id", $ids) as $r) {
+            $nachrichten[$r['note_id']] = (int) $r['anzahl'];
+        }
     }
-    return array_map(fn ($z) => sicht($n, note_aus_zeile($db, $z, $positionen[$z['id']] ?? [])), $zeilen);
+    return array_map(fn ($z) => sicht($n, note_aus_zeile($db, $z, $positionen[$z['id']] ?? [], $nachrichten[$z['id']] ?? 0)), $zeilen);
 }
 
 const REDAKTION_SORTIERUNG = [
@@ -195,6 +204,18 @@ function verlauf_eintragen(PDO $db, string $noteId, array $n, string $aktion, ar
 {
     q($db, 'insert into verlauf (id, note_id, akteur_id, akteur_name, aktion, details, am) values (?, ?, ?, ?, ?, ?, ?)',
         [neue_id(), $noteId, $n['id'], anzeigename($n), $aktion, json_text((object) $details), jetzt()]);
+}
+
+function rueckfrage_text(mixed $text): string
+{
+    pruefe(!leer($text), 'Die Nachricht ist leer.');
+    return kuerze(tr($text), 2000);
+}
+
+function nachricht_speichern(PDO $db, string $noteId, array $von, bool $redaktion, string $text): void
+{
+    q($db, 'insert into nachrichten (id, note_id, von_id, von_name, von_redaktion, text, am) values (?, ?, ?, ?, ?, ?, ?)',
+        [neue_id(), $noteId, $von['id'], anzeigename($von), $redaktion ? 1 : 0, $text, jetzt()]);
 }
 
 /** E-Mail an alle aktiven Konten, die diese Benachrichtigung eingeschaltet haben (z. B. die Redaktion) */
@@ -227,6 +248,7 @@ final class Honorare
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'nachweisHochladen', 'nachweisLoeschen', 'nachweisLaden', 'meineArtikel',
         'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
+        'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler',
         'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'noteLoeschen',
@@ -717,6 +739,7 @@ final class Honorare
         if (isset(STATUS_LABEL[$f['status'] ?? ''])) { $wo[] = 'status = ?'; $p[] = $f['status']; }
         if (ist_medium($f['medium'] ?? '')) { $wo[] = 'medium = ?'; $p[] = $f['medium']; }
         if (preg_match('/^\d{4}-\d{2}$/', s($f['monat'] ?? ''))) { $wo[] = 'monat = ?'; $p[] = $f['monat']; }
+        if (!empty($f['rueckfrage'])) $wo[] = 'rueckfrage is not null';
         $suche = mb_strtolower(kuerze(tr($f['suche'] ?? ''), 100));
         if ($suche !== '') {
             $wo[] = '(lower(nummer) like ? or lower(autor_json) like ?)';
@@ -741,6 +764,10 @@ final class Honorare
             'summe' => euro((int) wert($db, "select coalesce(sum(np.betrag_cent), 0) from note_positionen np where np.note_id in (select id from noten $where)", $p)),
             'zaehler' => $zaehler,
             'zu_pruefen_medium' => $zuPruefen,
+            'rueckfragen' => [
+                'offen' => (int) wert($db, "select count(*) from noten where rueckfrage = 'offen'" . ($medium ? ' and medium = ?' : ''), $medium ? [$medium] : []),
+                'beantwortet' => (int) wert($db, "select count(*) from noten where rueckfrage = 'beantwortet'" . ($medium ? ' and medium = ?' : ''), $medium ? [$medium] : []),
+            ],
             'monate' => array_column(zeilen($db, 'select distinct monat from noten order by monat desc limit 36'), 'monat'),
         ];
     }
@@ -785,7 +812,7 @@ final class Honorare
             $x = note_holen($db, $noteId);
             pruefe(in_array($x['status'], ['eingereicht', 'abgelehnt'], true), 'Diese Prämienabrechnung kann nicht angenommen werden.');
             pruefe(!$x['zurueckgeholt_am'], 'Die Autor:in überarbeitet diese Leistungen bereits in einer neuen Prämienabrechnung.');
-            q($db, "update noten set status = 'angenommen', ablehnungsgrund = '', entschieden_am = ? where id = ?", [jetzt(), $x['id']]);
+            q($db, "update noten set status = 'angenommen', ablehnungsgrund = '', entschieden_am = ?, rueckfrage = null where id = ?", [jetzt(), $x['id']]);
             verlauf_eintragen($db, $x['id'], $n, 'angenommen', ['vorher' => $x['status']]);
             $this->log('info', 'abrechnungen', "Angenommen: {$x['nummer']}");
             $note = note_holen($db, $x['id']);
@@ -804,7 +831,7 @@ final class Honorare
         return transaktion($db, function () use ($db, $n, $noteId, $g) {
             $x = note_holen($db, $noteId);
             pruefe(in_array($x['status'], ['eingereicht', 'angenommen'], true), 'Diese Prämienabrechnung kann nicht abgelehnt werden.');
-            q($db, "update noten set status = 'abgelehnt', ablehnungsgrund = ?, entschieden_am = ? where id = ?", [$g, jetzt(), $x['id']]);
+            q($db, "update noten set status = 'abgelehnt', ablehnungsgrund = ?, entschieden_am = ?, rueckfrage = null where id = ?", [$g, jetzt(), $x['id']]);
             verlauf_eintragen($db, $x['id'], $n, 'abgelehnt', ['vorher' => $x['status'], 'grund' => $g]);
             $this->log('info', 'abrechnungen', "Zurückgegeben: {$x['nummer']} ($g)");
             // die Leistungen gehen sofort zurück an die Autor:in zum Überarbeiten
@@ -861,6 +888,83 @@ final class Honorare
             verlauf_eintragen($db, $x['id'], $n, 'kommentar');
         });
         return true;
+    }
+
+    // ---------------------------------------------------------------- Rückfragen (Chat Redaktion ↔ Autor:in)
+    /** Nachrichten zu einer Abrechnung: für die Autor:in und alle, die die Abrechnung sehen dürfen */
+    public function nachrichten(mixed $noteId = null): array
+    {
+        $db = $this->db();
+        $n = ich($this->ctx);
+        $x = note_holen($db, $noteId);
+        pruefe(darf_sehen($n, $x), 'Dafür fehlt dir die Berechtigung.', 403);
+        return array_map(fn ($z) => [
+            'id' => $z['id'], 'von_name' => $z['von_name'], 'von_redaktion' => (bool) $z['von_redaktion'], 'text' => $z['text'],
+            'am' => $z['am'], 'ich' => $z['von_id'] === $n['id'],
+        ], zeilen($db, 'select * from nachrichten where note_id = ? order by am, id', [$x['id']]));
+    }
+
+    /** Redaktion fragt nach, statt gleich zurückzugeben; die Abrechnung bleibt, wie sie ist */
+    public function nachfragen(mixed $noteId = null, mixed $text = null): bool
+    {
+        $db = $this->db();
+        $n = brauche($this->ctx, 'redaktion');
+        $t = rueckfrage_text($text);
+        return transaktion($db, function () use ($db, $n, $noteId, $t) {
+            $x = note_holen($db, $noteId);
+            pruefe(in_array($x['status'], ['eingereicht', 'angenommen'], true), 'Rückfragen gehen nur, solange die Abrechnung noch nicht bezahlt oder zurückgegeben ist.');
+            nachricht_speichern($db, $x['id'], $n, true, $t);
+            q($db, "update noten set rueckfrage = 'offen' where id = ?", [$x['id']]);
+            verlauf_eintragen($db, $x['id'], $n, 'rueckfrage');
+            autor_benachrichtigen($db, $x, 'rueckfrage', mail_rueckfrage_autor($db, $x, $t, anzeigename($n)));
+            return true;
+        });
+    }
+
+    /** Autor:in antwortet; die Redaktion, die gefragt hat, bekommt eine E-Mail */
+    public function rueckfrageBeantworten(mixed $noteId = null, mixed $text = null): bool
+    {
+        $db = $this->db();
+        $n = ich($this->ctx);
+        $t = rueckfrage_text($text);
+        return transaktion($db, function () use ($db, $n, $noteId, $t) {
+            $x = note_holen($db, $noteId);
+            pruefe($x['autor_id'] === $n['id'], 'Dafür fehlt dir die Berechtigung.', 403);
+            pruefe(in_array($x['status'], ['eingereicht', 'angenommen'], true), 'Diese Abrechnung ist schon erledigt.');
+            pruefe((int) wert($db, 'select count(*) from nachrichten where note_id = ?', [$x['id']]) > 0, 'Zu dieser Abrechnung gibt es keine Rückfrage.');
+            nachricht_speichern($db, $x['id'], $n, false, $t);
+            q($db, "update noten set rueckfrage = 'beantwortet' where id = ?", [$x['id']]);
+            verlauf_eintragen($db, $x['id'], $n, 'antwort');
+            $mail = mail_rueckfrage_antwort($db, $x, $t);
+            foreach (zeilen($db, 'select distinct von_id from nachrichten where note_id = ? and von_redaktion = 1', [$x['id']]) as $z) {
+                $r = $z['von_id'] ? nutzer_laden($db, $z['von_id']) : null;
+                if ($r && $r['aktiv']) mail_einreihen($db, $r['email'], $mail);
+            }
+            return true;
+        });
+    }
+
+    /** Redaktion: Rückfrage ist geklärt (ohne Annehmen oder Zurückgeben) */
+    public function rueckfrageErledigt(mixed $noteId = null): bool
+    {
+        $db = $this->db();
+        $n = brauche($this->ctx, 'redaktion');
+        $x = note_holen($db, $noteId);
+        q($db, 'update noten set rueckfrage = null where id = ?', [$x['id']]);
+        verlauf_eintragen($db, $x['id'], $n, 'rueckfrage_erledigt');
+        return true;
+    }
+
+    /** Zahlen für die Navigation: offene Zugangsanfragen (Admin), Rückfragen an mich, Antworten an die Redaktion */
+    public function navZaehler(): array
+    {
+        $db = $this->db();
+        $n = ich($this->ctx);
+        return [
+            'anfragen' => hat($n, 'admin') ? (int) wert($db, "select count(*) from anfragen where status = 'offen'") : 0,
+            'rueckfragen' => (int) wert($db, "select count(*) from noten where autor_id = ? and rueckfrage = 'offen'", [$n['id']]),
+            'antworten' => hat($n, 'redaktion') ? (int) wert($db, "select count(*) from noten where rueckfrage = 'beantwortet'") : 0,
+        ];
     }
 
     public function kommentare(mixed $noteId = null): array

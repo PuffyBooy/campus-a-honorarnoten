@@ -392,6 +392,25 @@ section.fehlerbox { border: 0; }
 .nachweise { list-style: none; padding: 0; margin: .3rem 0; font-size: .9rem; }
 .nachweise li { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; margin: .15rem 0; }
 .nachweise .link-knopf { text-align: left; word-break: break-word; }
+/* Rückfragen: Chat Redaktion ↔ Autor:in */
+.rueckfrage-marke { display: inline-block; font-size: .75rem; font-weight: 600; padding: .1rem .45rem; border-radius: 999px;
+  background: var(--warnung-hell); color: #6b4a00; margin-top: .2rem; }
+.rueckfrage-marke.rueckfrage-antwort { background: var(--erfolg-hell); color: var(--erfolg); }
+.rueckfrage .kopfzeile { align-items: center; flex-wrap: wrap; gap: .5rem; }
+.rueckfrage .kopfzeile h3 { margin: 0; }
+.rueckfrage-box.rueckfrage-offen { border-left: 4px solid var(--warnung); padding-left: .75rem; }
+.rueckfrage-hinweis { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; background: var(--warnung-hell);
+  border-radius: 8px; padding: .5rem .75rem; margin: .5rem 0; }
+.chat-verlauf { display: flex; flex-direction: column; gap: .5rem; max-height: 22rem; overflow-y: auto; padding: .25rem 0 .5rem; }
+.chat-nachricht { max-width: 85%; align-self: flex-start; background: var(--flaeche); border: 1px solid var(--rand); border-radius: 12px 12px 12px 4px;
+  padding: .5rem .75rem; }
+.chat-nachricht.chat-ich { align-self: flex-end; background: var(--marke); color: var(--marke-kontrast); border-color: var(--marke);
+  border-radius: 12px 12px 4px 12px; }
+.chat-nachricht.chat-ich .klein { color: inherit; opacity: .85; }
+.chat-kopf { font-size: .8rem; font-weight: 600; margin-bottom: .15rem; }
+.chat-text { white-space: pre-wrap; word-break: break-word; }
+.chat-form textarea { margin-top: .25rem; }
+.chat-leer { margin: .25rem 0; }
 .login-vergessen { text-align: center; margin: .75rem 0 0; font-size: .9rem; }
 /* Bezahl-Terminal: eine Karte pro Kalenderwoche */
 .woche-kopf { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; }
@@ -686,7 +705,8 @@ a.kennzahl-link.kennzahl-marke { color: #fff; }
 .medium-knopf-college[aria-pressed="true"] { background: var(--college); color: #fff; }
 .medium-knopf-campus-a[aria-pressed="true"] { background: var(--campus-a); color: #fff; }
 .medium-knopf[aria-pressed="true"] .zaehler { background: rgb(255 255 255 / 30%); color: inherit; }
-@media (min-width: 700px) { .redaktion-filter { grid-template-columns: 1fr 1.6fr 1fr; } }
+@media (min-width: 700px) { .redaktion-filter { grid-template-columns: 1fr 1.6fr 1fr auto; } }
+.rueckfrage-filter { align-self: end; margin-bottom: .9rem; white-space: nowrap; }
 .medium-knopf .zaehler { background: var(--flaeche); color: var(--text); }
 .medium-knopf[aria-pressed="true"] .zaehler { background: rgb(255 255 255 / 30%); color: inherit; }
 .vorlagen { display: flex; flex-wrap: wrap; gap: .35rem; margin: .25rem 0 .75rem; }

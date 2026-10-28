@@ -266,6 +266,37 @@ function mail_abgelehnt_autor(PDO $db, array $note, string $grund): array
     ]);
 }
 
+/** Rückfrage der Redaktion an die Autor:in */
+function mail_rueckfrage_autor(PDO $db, array $note, string $text, string $von): array
+{
+    $vorname = $note['autor']['vorname'] ?? '';
+    return mail_bauen([
+        'betreff' => "Rückfrage zu deiner Prämienabrechnung {$note['nummer']}",
+        'vorschau' => "$von hat eine Frage: " . kuerze($text, 80),
+        'titel' => 'Die Redaktion hat eine Rückfrage',
+        'medium' => $note['medium'],
+        'absaetze' => ["Hallo $vorname,", "$von hat beim Prüfen deiner Prämienabrechnung eine Frage. Bitte antworte direkt in der App unter „Meine Abrechnungen“ – dann kann sie weiter prüfen."],
+        'hinweis' => ["Frage von $von:\n$text", 'info'],
+        'tabelle' => [['Prämienabrechnung', $note['nummer']]],
+        'knopf' => ['Jetzt antworten', app_link($db, 'noten')],
+    ]);
+}
+
+/** Antwort der Autor:in auf eine Rückfrage (an die Redaktion, die gefragt hat) */
+function mail_rueckfrage_antwort(PDO $db, array $note, string $text): array
+{
+    $name = autor_name($note);
+    return mail_bauen([
+        'betreff' => "Antwort von $name zu {$note['nummer']}",
+        'vorschau' => kuerze($text, 100),
+        'titel' => 'Antwort auf deine Rückfrage',
+        'medium' => $note['medium'],
+        'absaetze' => ["$name hat auf deine Rückfrage zur Prämienabrechnung {$note['nummer']} geantwortet:"],
+        'hinweis' => [$text, 'info'],
+        'knopf' => ['Prämienabrechnung öffnen', app_link($db, 'redaktion/' . $note['id'])],
+    ]);
+}
+
 function mail_bezahlt_autor(PDO $db, array $note, string $datum): array
 {
     $vorname = $note['autor']['vorname'] ?? '';

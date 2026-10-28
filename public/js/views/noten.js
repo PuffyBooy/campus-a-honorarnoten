@@ -9,6 +9,7 @@ import { hatArtikel, mediumBadge, mediumName, titelLink } from '../lib/campus.js
 import { bestaetigen, fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 import { kannZurueckziehen, schritteHtml } from '../lib/schritte.js';
 import { nachweiseHtml } from '../lib/nachweise.js';
+import { chatAnzeigen } from '../lib/rueckfrage.js';
 
 /**
  * Tabelle der Leistungen einer Prämienabrechnung. Jeder Titel ist ein Link (neuer Tab): zum verknüpften
@@ -73,6 +74,21 @@ export async function zurueckziehen(store, n) {
   }
 }
 
+/** Rückfrage der Redaktion: offen als Chat zum Antworten, sonst die Nachrichten zum Aufklappen */
+function rueckfrageHtml(n, kompakt) {
+  if (!n.nachrichten && !n.rueckfrage) return '';
+  const offen = n.rueckfrage === 'offen';
+  if (kompakt) {
+    return offen ? `<p class="rueckfrage-hinweis"><strong>❓ Die Redaktion hat eine Rückfrage.</strong>
+      <a href="#/noten" class="btn btn-klein">Antworten</a></p>` : '';
+  }
+  return `<details class="aufklapp rueckfrage-box${offen ? ' rueckfrage-offen' : ''}" ${offen ? 'open' : ''} data-rueckfrage>
+      <summary>${offen ? '<strong>❓ Rückfrage der Redaktion – bitte antworten</strong>'
+        : `💬 Nachrichten mit der Redaktion (${n.nachrichten})${n.rueckfrage === 'beantwortet' ? ' · deine Antwort ist angekommen' : ''}`}</summary>
+      <div data-chat><p class="laden">Wird geladen …</p></div>
+    </details>`;
+}
+
 /** Karte einer Abrechnung mit Verlauf (auch in „Mein Monat“ verwendet) */
 export function noteKarte(n, { neu = false, kompakt = false } = {}) {
   return `
@@ -90,6 +106,7 @@ export function noteKarte(n, { neu = false, kompakt = false } = {}) {
             ? '<p>Die Leistungen sind zurück in <a href="#/leistungen">Mein Monat</a>. Dort überarbeiten und neu einreichen.</p>'
             : '<p><button type="button" class="btn btn-klein" data-zurueck>Leistungen überarbeiten und neu abschicken</button></p>'}
           </div>` : ''}
+        ${rueckfrageHtml(n, kompakt)}
         ${kompakt ? '' : `<details class="aufklapp">
           <summary>Leistungen anzeigen</summary>
           ${positionenTabelle(n)}
@@ -104,6 +121,19 @@ export function noteKarte(n, { neu = false, kompakt = false } = {}) {
 
 /** Klicks in einer Liste von noteKarte(): Word, Zurückholen, Zurückziehen */
 export function notenAktionen(liste, noten, { store, neuLaden }) {
+  // Chats der Rückfragen: offene gleich laden, die anderen beim Aufklappen
+  liste?.querySelectorAll('[data-rueckfrage]').forEach((box) => {
+    const n = noten.find((x) => x.id === box.closest('[data-id]').dataset.id);
+    let geladen = false;
+    const laden = () => {
+      if (geladen || !box.open) return;
+      geladen = true;
+      chatAnzeigen(box.querySelector('[data-chat]'), { store, note: n, rolle: 'autor', nachAenderung: () => neuLaden() })
+        .catch((e) => { box.querySelector('[data-chat]').innerHTML = `<p class="fehlerbox">${esc(fehlerText(e))}</p>`; });
+    };
+    box.addEventListener('toggle', laden);
+    laden();
+  });
   liste?.addEventListener('click', async (ev) => {
     const karte = ev.target.closest('[data-id]');
     const n = noten.find((x) => x.id === karte?.dataset.id);
