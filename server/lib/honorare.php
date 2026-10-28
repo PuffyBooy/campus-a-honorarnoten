@@ -128,7 +128,8 @@ function position_aus_zeile(array $p): array
 /** $positionen: schon geladene Zeilen aus note_positionen (sonst werden sie hier geholt) */
 function note_aus_zeile(PDO $db, array $z, ?array $positionen = null): array
 {
-    $positionen = array_map('position_aus_zeile', $positionen ?? zeilen($db, 'select * from note_positionen where note_id = ? order by reihenfolge', [$z['id']]));
+    $positionen = nachweise_anhaengen($db, array_map('position_aus_zeile',
+        $positionen ?? zeilen($db, 'select * from note_positionen where note_id = ? order by reihenfolge', [$z['id']])));
     return [
         'id' => $z['id'], 'nummer' => $z['nummer'], 'jahr' => (int) $z['jahr'], 'laufende_nummer' => (int) $z['laufende_nummer'],
         'monat' => $z['monat'], 'medium' => medium_oder($z['medium']), 'autor_id' => $z['autor_id'], 'status' => $z['status'],
@@ -223,7 +224,7 @@ final class Honorare
     /** Alle Funktionen, die der Browser aufrufen darf */
     public const FUNKTIONEN = [
         'aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'erstesPasswortSetzen', 'passwortAendern',
-        'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'meineArtikel',
+        'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'nachweisHochladen', 'nachweisLoeschen', 'nachweisLaden', 'meineArtikel',
         'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
         'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
@@ -444,13 +445,14 @@ final class Honorare
     public function meineLeistungen(): array
     {
         $n = brauche($this->ctx, 'autor');
-        return array_map(
+        return nachweise_anhaengen($this->db(), array_map(
             fn ($p) => position_aus_zeile($p + ['betrag_eingereicht_cent' => $p['betrag_cent'], 'betrag_vermerk' => '']),
             zeilen($this->db(), 'select * from positionen where autor_id = ? order by veroeffentlichung, erstellt_am', [$n['id']]),
-        );
+        ));
     }
 
-    public function leistungSpeichern(mixed $daten = []): bool
+    /** Liefert die Id der Leistung (für Nachweise zu einer neuen Leistung) */
+    public function leistungSpeichern(mixed $daten = []): string
     {
         $db = $this->db();
         $n = brauche($this->ctx, 'autor');
@@ -502,21 +504,73 @@ final class Honorare
                     vereinbart_mit = ?, notiz = ?, betrag_cent = ?, artikel_url = ?, medium = ?, anzahl = ?, geaendert_am = ? where id = ? and autor_id = ?',
                 [...$werte, jetzt(), $id, $n['id']]);
             pruefe($r->rowCount() === 1, 'Diese Leistung gibt es nicht (mehr).', 404);
-        } else {
-            pruefe((int) wert($db, 'select count(*) from positionen where autor_id = ?', [$n['id']]) < 500, 'Zu viele gespeicherte Leistungen.');
-            q($db, 'insert into positionen (id, autor_id, kategorie, art, kolumnenart, titel, veroeffentlichung, ausgabe, vereinbart_mit,
-                    notiz, betrag_cent, artikel_url, medium, anzahl, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                [neue_id(), $n['id'], ...$werte, jetzt()]);
+            // nicht mehr Redigieren: Nachweise gehören nicht mehr dazu
+            if (!$istRedigieren) q($db, 'delete from nachweise where position_id = ?', [$id]);
+            return $id;
         }
-        return true;
+        pruefe((int) wert($db, 'select count(*) from positionen where autor_id = ?', [$n['id']]) < 500, 'Zu viele gespeicherte Leistungen.');
+        $id = neue_id();
+        q($db, 'insert into positionen (id, autor_id, kategorie, art, kolumnenart, titel, veroeffentlichung, ausgabe, vereinbart_mit,
+                notiz, betrag_cent, artikel_url, medium, anzahl, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [$id, $n['id'], ...$werte, jetzt()]);
+        return $id;
     }
 
     public function leistungLoeschen(mixed $pid = null): bool
     {
+        $db = $this->db();
         $n = brauche($this->ctx, 'autor');
-        $r = q($this->db(), 'delete from positionen where id = ? and autor_id = ?', [s($pid), $n['id']]);
+        $r = q($db, 'delete from positionen where id = ? and autor_id = ?', [s($pid), $n['id']]);
         pruefe($r->rowCount() === 1, 'Diese Leistung gibt es nicht (mehr).', 404);
+        q($db, 'delete from nachweise where position_id = ?', [s($pid)]);
         return true;
+    }
+
+    // ---------------------------------------------------------------- Nachweise zum Redigieren
+    /** Datei an eine gespeicherte (noch nicht abgeschickte) Leistung „Redigieren“ hängen; $inhalt als base64 */
+    public function nachweisHochladen(mixed $positionId = null, mixed $name = null, mixed $inhalt = null): array
+    {
+        $db = $this->db();
+        $n = brauche($this->ctx, 'autor');
+        $p = zeile($db, 'select id, kategorie from positionen where id = ? and autor_id = ?', [s($positionId), $n['id']]);
+        pruefe($p, 'Diese Leistung gibt es nicht (mehr) oder sie ist schon abgeschickt.', 404);
+        pruefe($p['kategorie'] === 'redigieren', 'Nachweise gibt es nur beim Redigieren.');
+        $name = nachweis_name($name);
+        pruefe($name !== null, 'Diese Datei geht nicht. Erlaubt sind PDF, Word (doc, docx), odt, rtf, txt, Excel (xls, xlsx), ods, png und jpg.');
+        $daten = base64_decode(s($inhalt), true);
+        pruefe($daten !== false && $daten !== '', 'Die Datei ist leer oder beschädigt.');
+        pruefe(strlen($daten) <= NACHWEIS_MAX_BYTES, 'Die Datei ist zu groß (höchstens 5 MB).', 413);
+        pruefe((int) wert($db, 'select count(*) from nachweise where position_id = ?', [$p['id']]) < NACHWEISE_PRO_LEISTUNG,
+            'Höchstens ' . NACHWEISE_PRO_LEISTUNG . ' Nachweise pro Leistung.');
+        $id = neue_id();
+        q($db, 'insert into nachweise (id, position_id, autor_id, name, typ, groesse, inhalt, erstellt_am) values (?, ?, ?, ?, ?, ?, ?, ?)',
+            [$id, $p['id'], $n['id'], $name, NACHWEIS_TYPEN[strtolower(pathinfo($name, PATHINFO_EXTENSION))], strlen($daten), base64_encode($daten), jetzt()]);
+        return ['id' => $id, 'name' => $name, 'groesse' => strlen($daten)];
+    }
+
+    /** Nachweis entfernen – nur solange die Leistung noch nicht abgeschickt ist */
+    public function nachweisLoeschen(mixed $id = null): bool
+    {
+        $db = $this->db();
+        $n = brauche($this->ctx, 'autor');
+        $r = q($db, 'delete from nachweise where id = ? and autor_id = ? and position_id in (select id from positionen where autor_id = ?)',
+            [s($id), $n['id'], $n['id']]);
+        pruefe($r->rowCount() === 1, 'Diesen Nachweis gibt es nicht (mehr) oder die Leistung ist schon abgeschickt.', 404);
+        return true;
+    }
+
+    /** Nachweis herunterladen: die Autor:in selbst, sonst wer die Abrechnung sehen darf (Redaktion, Buchhaltung, Admin) */
+    public function nachweisLaden(mixed $id = null): array
+    {
+        $db = $this->db();
+        $n = ich($this->ctx);
+        $z = zeile($db, 'select * from nachweise where id = ?', [s($id)]);
+        pruefe($z, 'Diesen Nachweis gibt es nicht (mehr).', 404);
+        if ($z['autor_id'] !== $n['id']) {
+            $noteId = wert($db, 'select note_id from note_positionen where id = ?', [$z['position_id']]);
+            pruefe($noteId && darf_sehen($n, note_holen($db, $noteId)), 'Dafür fehlt dir die Berechtigung.', 403);
+        }
+        return ['name' => $z['name'], 'typ' => $z['typ'], 'inhalt' => $z['inhalt']];
     }
 
     /** Alle Artikel der Autor:in auf beiden Seiten (je nach Profilen), neueste zuerst, mit Vermerk „schon erfasst“ */
@@ -635,6 +689,7 @@ final class Honorare
             pruefe($note['status'] === 'eingereicht', 'Diese Prämienabrechnung wurde schon geprüft und kann nicht mehr zurückgezogen werden. Bitte schreib der Redaktion.');
             zurueck_an_autor($db, ['ablehnungsgrund' => ''] + $note, $n);
             q($db, 'delete from noten where id = ?', [$note['id']]);
+            nachweise_aufraeumen($db);
             q($db, 'insert into loeschprotokoll (id, nummer, geloescht_von, am) values (?, ?, ?, ?)',
                 [neue_id(), $note['nummer'], anzeigename($n) . ' (zurückgezogen)', jetzt()]);
             $this->log('info', 'abrechnungen', "Zurückgezogen: {$note['nummer']}");
@@ -1022,6 +1077,7 @@ final class Honorare
             if (in_array('admin', $n['rollen'], true)) pruefe(noch_ein_admin($db, $n['id']), 'Es muss mindestens ein aktives Admin-Konto geben.');
             // abgeschickte Prämienabrechnungen bleiben als Buchhaltungsbelege erhalten (autor_id wird leer)
             q($db, 'delete from nutzer where id = ?', [$n['id']]);
+            nachweise_aufraeumen($db);
             $this->log('warnung', 'konten', 'Konto gelöscht: ' . anzeigename($n) . " ({$n['email']})");
             return true;
         });
@@ -1035,6 +1091,7 @@ final class Honorare
         return transaktion($db, function () use ($db, $admin, $noteId) {
             $x = note_holen($db, $noteId);
             q($db, 'delete from noten where id = ?', [$x['id']]);
+            nachweise_aufraeumen($db);
             q($db, 'insert into loeschprotokoll (id, nummer, geloescht_von, am) values (?, ?, ?, ?)', [neue_id(), $x['nummer'], anzeigename($admin), jetzt()]);
             $this->log('warnung', 'abrechnungen', "Prämienabrechnung gelöscht: {$x['nummer']}");
             return true;
@@ -1686,7 +1743,9 @@ function zurueck_an_autor(PDO $db, array $note, array $akteur): void
                 vereinbart_mit, notiz, betrag_cent, artikel_url, medium, anzahl, zurueck_nummer, zurueck_grund, erstellt_am)
                 values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)');
         foreach ($note['positionen'] as $p) {
-            $einf->execute([neue_id(), $note['autor_id'], $p['kategorie'], $p['art'], $p['kolumnenart'], $p['titel'], $p['veroeffentlichung'],
+            $neu = neue_id();
+            if ($p['kategorie'] === 'redigieren') nachweise_kopieren($db, $p['id'], $neu);
+            $einf->execute([$neu, $note['autor_id'], $p['kategorie'], $p['art'], $p['kolumnenart'], $p['titel'], $p['veroeffentlichung'],
                 $p['ausgabe'], $p['vereinbart_mit'], $p['notiz'], cent($p['betrag_eingereicht']), $p['artikel_url'], $note['medium'],
                 (int) ($p['anzahl'] ?? 0), $note['nummer'], $note['ablehnungsgrund'] ?? '', jetzt()]);
         }

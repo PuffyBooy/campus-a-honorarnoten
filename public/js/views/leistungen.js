@@ -11,6 +11,9 @@ import { satzFuer } from '../lib/honorarsaetze.js';
 import { darfRedigieren } from '../lib/konto.js';
 import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { noteKarte, notenAktionen } from './noten.js';
+import {
+  NACHWEISE_PRO_LEISTUNG, NACHWEIS_ACCEPT, NACHWEIS_MAX_MB, nachweisFehler, nachweiseHochladen, nachweiseHtml,
+} from '../lib/nachweise.js';
 
 let bearbeiteId = null; // Leistung, die gerade im Formular bearbeitet wird
 
@@ -147,6 +150,14 @@ function formularHtml(p, einstellungen, nutzer) {
         <input id="l-anzahl" name="anzahl" type="number" inputmode="numeric" min="1" max="1000" step="1" value="${red ? esc(p.anzahl) : ''}">
         <p class="feldfehler" data-fehler="anzahl"></p>
       </div>
+      <div class="feld" id="l-nachweis-feld" ${red ? '' : 'hidden'}>
+        <label for="l-nachweis">Nachweis <span class="optional">(optional)</span></label>
+        <div id="l-nachweise">${nachweiseHtml(p, { loeschen: true })}</div>
+        <input id="l-nachweis" name="nachweis" type="file" multiple accept="${NACHWEIS_ACCEPT}">
+        <p class="hinweis">z. B. ein PDF oder Word-Dokument, in dem steht, was du redigiert hast.
+          Bis ${NACHWEIS_MAX_MB} MB je Datei, höchstens ${NACHWEISE_PRO_LEISTUNG} Dateien.</p>
+        <p class="feldfehler" data-fehler="nachweis"></p>
+      </div>
       <div class="feld">
         <label for="l-titel"><span id="l-titel-label">${red ? 'Beschreibung' : 'Titel des Beitrags'}</span>
           <span class="pflicht" aria-hidden="true" ${red ? 'hidden' : ''}>*</span><span class="optional" ${red ? '' : 'hidden'}>(optional)</span></label>
@@ -269,6 +280,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
                     <span class="klein">${[KATEGORIE_LABEL[p.kategorie], artText(p), formatDatum(p.veroeffentlichung)].filter(Boolean).map(esc).join(' · ')}
                       ${p.vereinbart_mit ? ` · vereinbart mit ${esc(p.vereinbart_mit)}` : ''}
                       ${hatArtikel(p.artikel_url) ? ` · ${artikelLink(p.artikel_url, 'Artikel ansehen', '', medium)}` : ''}</span>
+                    ${nachweiseHtml(p)}
                   </span>
                 </label>
                 <span class="position-betrag">${esc(formatEuro(p.betrag))}</span>
@@ -315,6 +327,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     el.querySelector('#l-art-feld').hidden = kat !== 'ausserordentlich';
     el.querySelector('#l-kolumnenart-feld').hidden = kat !== 'kolumne';
     el.querySelector('#l-anzahl-feld').hidden = !red;
+    el.querySelector('#l-nachweis-feld').hidden = !red;
     el.querySelector('#l-medium-bereich').hidden = red;
     el.querySelector('#l-redigieren-medium').hidden = !red;
     el.querySelector('#l-titel-label').textContent = red ? 'Beschreibung' : 'Titel des Beitrags';
@@ -347,6 +360,27 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     }
   });
   el.querySelector('#l-abbrechen')?.addEventListener('click', () => { bearbeiteId = null; neuLaden(); });
+
+  // ---- Nachweise (nur Redigieren): Dateien prüfen, sobald gewählt; vorhandene entfernen
+  const nachweisDateien = () => Array.from(form.nachweis.files ?? []);
+  const vorhandeneNachweise = () => el.querySelectorAll('#l-nachweise [data-nachweis]').length;
+  const nachweiseFehler = () => nachweisDateien().map(nachweisFehler).find(Boolean)
+    || (vorhandeneNachweise() + nachweisDateien().length > NACHWEISE_PRO_LEISTUNG
+      ? `Höchstens ${NACHWEISE_PRO_LEISTUNG} Nachweise pro Leistung.` : '');
+  form.nachweis.addEventListener('change', () => fehler('nachweis', nachweiseFehler()));
+  el.querySelector('#l-nachweise').addEventListener('click', async (ev) => {
+    const knopf = ev.target.closest('[data-nachweis-loeschen]');
+    if (!knopf || !confirm('Nachweis entfernen?')) return;
+    await mitSperre(knopf, async () => {
+      try {
+        await store.nachweisLoeschen(knopf.dataset.nachweisLoeschen);
+        knopf.closest('li').remove();
+        meldung('Nachweis entfernt.');
+      } catch (e) {
+        meldung(fehlerText(e), 'fehler');
+      }
+    });
+  });
 
   // ---- Artikel von campus-a-college.at und campus-a.at
   const artikelAnzeige = el.querySelector('#l-artikel');
@@ -413,12 +447,13 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
 
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    ['titel', 'art', 'anzahl', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'formular'].forEach((n) => fehler(n, ''));
+    ['titel', 'art', 'anzahl', 'veroeffentlichung', 'betrag', 'vereinbart_mit', 'nachweis', 'formular'].forEach((n) => fehler(n, ''));
     const red = form.kategorie.value === 'redigieren';
     const betrag = parseBetrag(form.betrag.value);
     const anzahl = Number(form.anzahl.value);
     const f = {};
     if (red && !(Number.isInteger(anzahl) && anzahl >= 1 && anzahl <= 1000)) f.anzahl = 'Bitte die Anzahl der Texte angeben (1 bis 1000).';
+    if (red && nachweiseFehler()) f.nachweis = nachweiseFehler();
     if (!red && !form.titel.value.trim()) f.titel = 'Bitte den Titel angeben.';
     if (!form.veroeffentlichung.value) f.veroeffentlichung = 'Bitte Datum wählen.';
     if (!red && !betrag) f.betrag = 'Bitte einen Betrag wie 15 oder 15,50 eingeben.';
@@ -434,13 +469,24 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     const knopf = form.querySelector('button[type=submit]');
     knopf.disabled = true;
     try {
-      await store.leistungSpeichern({
+      const positionId = await store.leistungSpeichern({
         id: bearbeiteId ?? undefined,
         medium: form.medium.value, kategorie: form.kategorie.value, art: form.art.value, anzahl: red ? anzahl : undefined, kolumnenart: form.kolumnenart.value, titel: form.titel.value,
         artikel_url: form.artikel_url.value,
         veroeffentlichung: form.veroeffentlichung.value, betrag, vereinbart_mit: form.vereinbart_mit.value,
         ausgabe: form.ausgabe.value, notiz: form.notiz.value,
       });
+      if (red && nachweisDateien().length) {
+        try {
+          await nachweiseHochladen(store, positionId, nachweisDateien());
+        } catch (e) {
+          // Leistung ist gespeichert – zum Nachreichen offen lassen
+          meldung(`Leistung gespeichert, aber der Nachweis fehlt: ${fehlerText(e)}`, 'fehler');
+          bearbeiteId = positionId;
+          neuLaden();
+          return;
+        }
+      }
       meldung(bearbeiteId ? 'Änderung gespeichert.' : 'Leistung gespeichert.', 'erfolg');
       bearbeiteId = null;
       neuLaden();

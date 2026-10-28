@@ -271,6 +271,20 @@ const MIGRATIONEN = [
     alter table nutzer add column zwei_faktor_codes text;
     alter table nutzer add column zwei_faktor_schritt integer not null default 0;
     SQL,
+    // Version 16: Nachweise zum Redigieren (z. B. PDF oder Word mit den redigierten Texten), Inhalt als base64
+    <<<'SQL'
+    create table nachweise (
+      id          text primary key,
+      position_id text not null,
+      autor_id    text,
+      name        text not null,
+      typ         text not null,
+      groesse     integer not null,
+      inhalt      text not null,
+      erstellt_am text not null
+    );
+    create index nachweise_position on nachweise(position_id);
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -510,11 +524,25 @@ const MYSQL_MIGRATIONEN = [
     alter table nutzer add column zwei_faktor_codes text null;
     alter table nutzer add column zwei_faktor_schritt bigint not null default 0;
     SQL,
+    // Version 9 = SQLite-Version 16
+    <<<'SQL'
+    create table if not exists nachweise (
+      id          varchar(36) not null primary key,
+      position_id varchar(36) not null,
+      autor_id    varchar(36) null,
+      name        varchar(200) not null,
+      typ         varchar(100) not null,
+      groesse     int not null,
+      inhalt      mediumtext not null,
+      erstellt_am varchar(30) not null,
+      index nachweise_position (position_id)
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    SQL,
 ];
 
 /** Tabellen in der Reihenfolge, in der sie eingespielt werden können (für die Sicherung) */
 const TABELLEN = ['nutzer', 'sitzungen', 'anfragen', 'positionen', 'noten', 'note_positionen', 'kommentare', 'verlauf',
-    'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails', 'links', 'protokoll'];
+    'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails', 'links', 'protokoll', 'nachweise'];
 
 /**
  * Datenbank öffnen und auf den neuesten Stand bringen.

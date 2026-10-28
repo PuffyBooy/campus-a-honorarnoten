@@ -6,6 +6,7 @@ import {
 } from '../lib/format.js';
 import { bestaetigen, fehlerText, meldung, statusBadge } from '../lib/ui.js';
 import { hatArtikel, mediumBadge, titelLink } from '../lib/campus.js';
+import { nachweiseHtml } from '../lib/nachweise.js';
 import { standardBetrag, weichtAb } from '../lib/honorarsaetze.js';
 
 function verlaufDetails(e) {
@@ -27,7 +28,9 @@ function hinweise(p, n, info, saetze) {
     const soll = standardBetrag(saetze, pos);
     h.push(['warn', `${(p.betrag_eingereicht ?? p.betrag) > soll ? 'über' : 'unter'} Satz (${formatEuro(soll)})`]);
   }
-  if (p.kategorie !== 'redigieren') {
+  if (p.kategorie === 'redigieren') {
+    h.push(p.nachweise?.length ? ['ok', p.nachweise.length === 1 ? 'Nachweis angehängt' : `${p.nachweise.length} Nachweise`] : ['warn', 'ohne Nachweis']);
+  } else {
     if (!hatArtikel(p.artikel_url)) {
       h.push(['warn', 'ohne Artikel-Link']);
     } else {
@@ -54,6 +57,7 @@ function positionenHtml(n, info, saetze, aenderbar) {
             <span class="klein">${esc([KATEGORIE_LABEL[p.kategorie], artText(p)].filter(Boolean).join(' · '))}${
               p.vereinbart_mit ? ` · vereinbart mit ${esc(p.vereinbart_mit)}` : ''}${p.ausgabe ? ` · ${esc(p.ausgabe)}` : ''}</span>
             ${p.notiz ? `<br><span class="notiz-autor">Notiz: ${esc(p.notiz)}</span>` : ''}
+            ${nachweiseHtml(p)}
             ${p.betrag_vermerk ? `<br><span class="hinweisbox klein">Betrag angepasst: ${esc(p.betrag_vermerk)}</span>` : ''}</span></td>
           <td data-label="Datum">${esc(formatDatum(p.veroeffentlichung))}</td>
           <td data-label="Hinweis"><span class="hinweise">${hinweise(p, n, info, saetze)

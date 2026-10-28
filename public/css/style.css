@@ -388,6 +388,10 @@ section.fehlerbox { border: 0; }
 .wartung-seite .aktionen { justify-content: center; align-items: center; gap: 1rem; }
 .wartung-symbol { font-size: 2.5rem; margin: 0; }
 .code-eingabe { font-size: 1.5rem; letter-spacing: .3em; text-align: center; font-variant-numeric: tabular-nums; }
+/* Nachweise zum Redigieren */
+.nachweise { list-style: none; padding: 0; margin: .3rem 0; font-size: .9rem; }
+.nachweise li { display: flex; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; margin: .15rem 0; }
+.nachweise .link-knopf { text-align: left; word-break: break-word; }
 .login-vergessen { text-align: center; margin: .75rem 0 0; font-size: .9rem; }
 /* Bezahl-Terminal: eine Karte pro Kalenderwoche */
 .woche-kopf { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; }

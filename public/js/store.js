@@ -633,8 +633,75 @@ function leistungPruefen(p) {
 
 export function meineLeistungen() {
   const n = brauche('autor');
-  return kopie(db.positionen.filter((p) => p.autor_id === n.id)
-    .sort((a, b) => a.veroeffentlichung.localeCompare(b.veroeffentlichung)));
+  return mitNachweisen(kopie(db.positionen.filter((p) => p.autor_id === n.id)
+    .sort((a, b) => a.veroeffentlichung.localeCompare(b.veroeffentlichung))));
+}
+
+// ------------------------------------------------------------------ Nachweise zum Redigieren (wie auf dem Server;
+// in der Demo im Browser-Speicher, daher kleiner)
+
+const NACHWEIS_TYPEN = {
+  pdf: 'application/pdf', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  odt: 'application/vnd.oasis.opendocument.text', rtf: 'application/rtf', txt: 'text/plain', xls: 'application/vnd.ms-excel',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', ods: 'application/vnd.oasis.opendocument.spreadsheet',
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+};
+const NACHWEIS_MAX_DEMO = 1024 * 1024;
+
+function mitNachweisen(positionen) {
+  return positionen.map((p) => (p.kategorie === 'redigieren' ? {
+    ...p,
+    nachweise: (db.nachweise ?? []).filter((d) => d.position_id === p.id).map(({ id: nid, name, groesse }) => ({ id: nid, name, groesse })),
+  } : p));
+}
+
+export function nachweisHochladen(positionId, name, inhalt) {
+  const n = brauche('autor');
+  const p = db.positionen.find((x) => x.id === positionId && x.autor_id === n.id);
+  pruefe(p, 'Diese Leistung gibt es nicht (mehr) oder sie ist schon abgeschickt.');
+  pruefe(p.kategorie === 'redigieren', 'Nachweise gibt es nur beim Redigieren.');
+  name = trim(String(name ?? '').split(/[/\\]/).pop().replace(/[\x00-\x1f\x7f]+/g, ' '));
+  const typ = NACHWEIS_TYPEN[name.split('.').pop().toLowerCase()];
+  pruefe(name && typ, 'Diese Datei geht nicht. Erlaubt sind PDF, Word (doc, docx), odt, rtf, txt, Excel (xls, xlsx), ods, png und jpg.');
+  const groesse = Math.floor((String(inhalt ?? '').length * 3) / 4);
+  pruefe(groesse > 0, 'Die Datei ist leer oder beschädigt.');
+  pruefe(groesse <= NACHWEIS_MAX_DEMO, 'In der Demo gehen nur Dateien bis 1 MB (auf dem Server bis 5 MB).');
+  db.nachweise ??= [];
+  pruefe(db.nachweise.filter((d) => d.position_id === p.id).length < 5, 'Höchstens 5 Nachweise pro Leistung.');
+  const d = { id: id(), position_id: p.id, autor_id: n.id, name, typ, groesse, inhalt, erstellt_am: jetzt() };
+  db.nachweise.push(d);
+  try {
+    speichern();
+  } catch {
+    db.nachweise.pop();
+    pruefe(false, 'Der Speicher der Demo ist voll. Bitte eine kleinere Datei nehmen.');
+  }
+  return { id: d.id, name, groesse };
+}
+
+export function nachweisLoeschen(nid) {
+  const n = brauche('autor');
+  const i = (db.nachweise ?? []).findIndex((d) => d.id === nid && d.autor_id === n.id && db.positionen.some((p) => p.id === d.position_id));
+  pruefe(i >= 0, 'Diesen Nachweis gibt es nicht (mehr) oder die Leistung ist schon abgeschickt.');
+  db.nachweise.splice(i, 1);
+  speichern();
+  return true;
+}
+
+export function nachweisLaden(nid) {
+  const n = ich();
+  const d = (db.nachweise ?? []).find((x) => x.id === nid);
+  pruefe(d, 'Diesen Nachweis gibt es nicht (mehr).');
+  if (d.autor_id !== n.id) {
+    const note = db.noten.find((x) => x.positionen.some((p) => p.id === d.position_id));
+    pruefe(note && darfSehen(n, note), 'Dafür fehlt dir die Berechtigung.');
+  }
+  return { name: d.name, typ: d.typ, inhalt: d.inhalt };
+}
+
+function nachweiseAufraeumen() {
+  const ids = new Set([...db.positionen.map((p) => p.id), ...db.noten.flatMap((x) => x.positionen.map((p) => p.id))]);
+  db.nachweise = (db.nachweise ?? []).filter((d) => ids.has(d.position_id));
 }
 
 export function leistungSpeichern(daten) {
@@ -680,10 +747,14 @@ export function leistungSpeichern(daten) {
     const alt = db.positionen.find((x) => x.id === daten.id && x.autor_id === n.id);
     pruefe(alt, 'Diese Leistung gibt es nicht (mehr).');
     Object.assign(alt, p, { geaendert_am: jetzt() });
-  } else {
-    db.positionen.push({ id: id(), autor_id: n.id, ...p, erstellt_am: jetzt() });
+    if (!istRedigieren) db.nachweise = (db.nachweise ?? []).filter((d) => d.position_id !== alt.id);
+    speichern();
+    return alt.id;
   }
+  const neu = { id: id(), autor_id: n.id, ...p, erstellt_am: jetzt() };
+  db.positionen.push(neu);
   speichern();
+  return neu.id;
 }
 
 export function leistungLoeschen(pid) {
@@ -691,6 +762,7 @@ export function leistungLoeschen(pid) {
   const i = db.positionen.findIndex((x) => x.id === pid && x.autor_id === n.id);
   pruefe(i >= 0, 'Diese Leistung gibt es nicht (mehr).');
   db.positionen.splice(i, 1);
+  nachweiseAufraeumen();
   speichern();
 }
 
@@ -710,6 +782,7 @@ function darfZahlungsdaten(n, note) {
 /** Kopie der Note, bei der die Redaktion keine IBAN/Adresse bekommt */
 function sicht(n, note) {
   const k = kopie(note);
+  k.positionen = mitNachweisen(k.positionen);
   k.betrag = summe(k.positionen);
   if (!darfZahlungsdaten(n, note)) {
     delete k.zahlung;
@@ -851,8 +924,11 @@ export function meineNoten() {
 function zurueckAnAutor(note, akteur) {
   if (db.nutzer.some((x) => x.id === note.autor_id)) {
     for (const p of note.positionen) {
+      const neu = id();
+      // Nachweise gehen mit zurück (die Abrechnung behält ihre)
+      (db.nachweise ?? []).filter((d) => d.position_id === p.id).forEach((d) => db.nachweise.push({ ...d, id: id(), position_id: neu }));
       db.positionen.push({
-        id: id(), autor_id: note.autor_id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel,
+        id: neu, autor_id: note.autor_id, kategorie: p.kategorie, art: p.art, kolumnenart: p.kolumnenart ?? '', titel: p.titel,
         veroeffentlichung: p.veroeffentlichung, artikel_url: p.artikel_url ?? '', medium: mediumOder(note.medium), anzahl: p.anzahl ?? 0,
         ausgabe: p.ausgabe, vereinbart_mit: p.vereinbart_mit, betrag: p.betrag_eingereicht, notiz: p.notiz,
         zurueck_nummer: note.nummer, zurueck_grund: note.ablehnungsgrund ?? '', erstellt_am: jetzt(),
@@ -884,6 +960,7 @@ export function abrechnungZurueckziehen(noteId) {
   db.noten = db.noten.filter((y) => y.id !== noteId);
   db.kommentare = db.kommentare.filter((k) => k.note_id !== noteId);
   db.verlauf = db.verlauf.filter((v) => v.note_id !== noteId);
+  nachweiseAufraeumen();
   db.loeschprotokoll.push({ id: id(), nummer: note.nummer, geloescht_von: `${anzeigename(n)} (zurückgezogen)`, am: jetzt() });
   protokoll('info', 'abrechnungen', `Zurückgezogen: ${note.nummer}`);
   speichern();
@@ -1137,6 +1214,7 @@ export function nutzerLoeschen(uid) {
   if (n.rollen.includes('admin')) pruefe(nochEinAdmin(uid), 'Es muss mindestens ein aktives Admin-Konto geben.');
   db.nutzer = db.nutzer.filter((x) => x.id !== uid);
   db.positionen = db.positionen.filter((p) => p.autor_id !== uid);
+  nachweiseAufraeumen();
   protokoll('warnung', 'konten', `Konto gelöscht: ${anzeigename(n)} (${n.email})`);
   speichern();
 }
@@ -1147,6 +1225,7 @@ export function noteLoeschen(noteId) {
   db.noten = db.noten.filter((y) => y.id !== noteId);
   db.kommentare = db.kommentare.filter((k) => k.note_id !== noteId);
   db.verlauf = db.verlauf.filter((v) => v.note_id !== noteId);
+  nachweiseAufraeumen();
   db.loeschprotokoll.push({ id: id(), nummer: x.nummer, geloescht_von: anzeigename(admin), am: jetzt() });
   protokoll('warnung', 'abrechnungen', `Prämienabrechnung gelöscht: ${x.nummer}`);
   speichern();

@@ -815,6 +815,58 @@ test('Redigieren (campus a college): Kategorie wie Kolumne, Anzahl Texte × Satz
   assert.deepEqual([zurueck.kategorie, zurueck.anzahl, zurueck.betrag, zurueck.zurueck_grund], ['redigieren', 4, 10, 'Bitte Zeitraum angeben']);
 });
 
+test('Redigieren: Nachweis (PDF, Word …) anhängen, Redaktion sieht ihn, nur beim Redigieren', async () => {
+  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Nina', nachname: 'Nachweis', email: 'nina@example.org', rollen: ['redigieren'] });
+  const nina = client();
+  await anmeldenMitNeuemPasswort(nina, 'nina@example.org', z.passwort);
+  await nina.ok('profilSpeichern', {
+    vorname: 'Nina', nachname: 'Nachweis', email: 'nina@example.org', strasse: 'Weg 4', plz_ort: '1010 Wien',
+    kontoinhaber: 'Nina Nachweis', iban: AT_IBAN, campus_a_profil: `https://campus-a.at/profil/${CAMPUS_A_PROFIL}`,
+  });
+  const pid = await nina.ok('leistungSpeichern', { kategorie: 'redigieren', anzahl: 3, veroeffentlichung: '2026-10-01' });
+  assert.equal(typeof pid, 'string', 'liefert die Id der Leistung');
+  const pdf = Buffer.from('%PDF-1.4\nTexte: A, B, C\n%%EOF\n');
+  const d = await nina.ok('nachweisHochladen', pid, '../../Liste Oktober.pdf', pdf.toString('base64'));
+  assert.equal(d.name, 'Liste Oktober.pdf', 'kein Pfad im Namen');
+  assert.equal(d.groesse, pdf.length);
+  assert.match((await nina.aufruf('nachweisHochladen', pid, 'virus.exe', 'QQ==')).fehler, /Datei geht nicht/);
+  assert.match((await nina.aufruf('nachweisHochladen', pid, 'leer.pdf', '')).fehler, /leer/);
+  assert.match((await nina.aufruf('nachweisHochladen', pid, 'gross.pdf', Buffer.alloc(5 * 1024 * 1024 + 1).toString('base64'))).fehler, /zu groß/);
+  await nina.ok('nachweisHochladen', pid, 'Liste.docx', Buffer.from('PK word').toString('base64'));
+  // nur Redigieren, nur eigene Leistungen
+  const kol = await k.anna.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Mit Nachweis?', veroeffentlichung: '2026-10-02', betrag: 15 });
+  assert.match((await k.anna.aufruf('nachweisHochladen', kol, 'a.pdf', 'QQ==')).fehler, /nur beim Redigieren/);
+  await k.anna.ok('leistungLoeschen', kol);
+  assert.equal((await k.anna.aufruf('nachweisHochladen', pid, 'a.pdf', 'QQ==')).status, 404);
+  assert.equal((await k.anna.aufruf('nachweisLaden', d.id)).status, 403, 'fremde Autor:innen nicht');
+  assert.equal((await k.rita.aufruf('nachweisLaden', d.id)).status, 403, 'Entwürfe sieht die Redaktion nicht');
+  const [p] = await nina.ok('meineLeistungen');
+  assert.deepEqual(p.nachweise.map((x) => x.name), ['Liste Oktober.pdf', 'Liste.docx']);
+  const geladen = await nina.ok('nachweisLaden', d.id);
+  assert.deepEqual([geladen.typ, Buffer.from(geladen.inhalt, 'base64').equals(pdf)], ['application/pdf', true]);
+
+  // abgeschickt: Redaktion sieht und lädt ihn, Löschen geht nicht mehr
+  const note = await nina.ok('abrechnungAbschicken', [pid]);
+  assert.equal(note.positionen[0].nachweise.length, 2);
+  const fuerRita = await k.rita.ok('note', note.id);
+  assert.equal(fuerRita.positionen[0].nachweise[0].name, 'Liste Oktober.pdf');
+  assert.ok(Buffer.from((await k.rita.ok('nachweisLaden', d.id)).inhalt, 'base64').equals(pdf));
+  assert.equal((await nina.aufruf('nachweisLoeschen', d.id)).status, 404);
+  // zurückgegeben: Nachweise kommen mit zurück, die Abrechnung behält ihre
+  await k.rita.ok('ablehnen', note.id, 'Bitte Anzahl prüfen');
+  const [zurueck] = await nina.ok('meineLeistungen');
+  assert.deepEqual(zurueck.nachweise.map((x) => x.name), ['Liste Oktober.pdf', 'Liste.docx']);
+  assert.notEqual(zurueck.nachweise[0].id, d.id);
+  await nina.ok('nachweisLoeschen', zurueck.nachweise[1].id);
+  assert.equal((await k.rita.ok('note', note.id)).positionen[0].nachweise.length, 2);
+  // Kategorie gewechselt oder gelöscht: Nachweise weg
+  await nina.ok('leistungSpeichern', { id: zurueck.id, kategorie: 'kolumne', titel: 'Doch Kolumne', veroeffentlichung: '2026-10-01', betrag: 15, medium: 'campus-a' });
+  assert.equal(php.sql('select count(*) n from nachweise where position_id = ?', [zurueck.id]).zeilen[0].n, 0);
+  await k.admin.ok('noteLoeschen', note.id);
+  assert.equal(php.sql('select count(*) n from nachweise where id = ?', [d.id]).zeilen[0].n, 0, 'mit der Abrechnung gelöscht');
+  await k.admin.ok('nutzerLoeschen', (await nina.ok('aktuellerNutzer')).id);
+});
+
 test('E-Mails: Anfrage, Zugang, Einreichen, Annehmen, Ablehnen, Bezahlen', async () => {
   const mail = (an, betreff) => mailAbwarten(php.smtp, (m) => m.an === an && betreff.test(m.betreff));
   const anfrage = await mail('admin@example.org', /^Neue Zugangsanfrage: Anna Autorin$/);

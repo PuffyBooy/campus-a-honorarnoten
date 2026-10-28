@@ -8,6 +8,7 @@ require_once __DIR__ . '/lib/app.php';
 const COOKIE = 'hn_sitzung';
 const MAX_BODY = 100 * 1024;
 const MAX_BODY_PDF = 9 * 1024 * 1024; // pdfMailen: PDF als base64 (bis 6 MB)
+const MAX_BODY_NACHWEIS = 7 * 1024 * 1024 + 100 * 1024; // nachweisHochladen: bis 5 MB als base64
 
 const SICHERHEITS_HEADER = [
     'Content-Security-Policy' => "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
@@ -74,9 +75,13 @@ function api(): array
     $name = (string) ($_GET['f'] ?? '');
     if (!in_array($name, Honorare::FUNKTIONEN, true)) return [404, ['fehler' => 'Unbekannte Funktion.']];
 
-    $max = $name === 'pdfMailen' ? MAX_BODY_PDF : MAX_BODY;
+    $max = match ($name) { 'pdfMailen' => MAX_BODY_PDF, 'nachweisHochladen' => MAX_BODY_NACHWEIS, default => MAX_BODY };
     $roh = file_get_contents('php://input', false, null, 0, $max + 1);
-    if (strlen((string) $roh) > $max) return [413, ['fehler' => $name === 'pdfMailen' ? 'Das PDF ist zu groß zum Verschicken. Bitte herunterladen.' : 'Anfrage zu groß.']];
+    if (strlen((string) $roh) > $max) return [413, ['fehler' => match ($name) {
+        'pdfMailen' => 'Das PDF ist zu groß zum Verschicken. Bitte herunterladen.',
+        'nachweisHochladen' => 'Die Datei ist zu groß (höchstens 5 MB).',
+        default => 'Anfrage zu groß.',
+    }]];
     $body = $roh === '' || $roh === false ? [] : json_decode($roh, true);
     if (!is_array($body)) return [400, ['fehler' => 'Ungültige Anfrage.']];
     $args = is_array($body['args'] ?? null) ? array_values($body['args']) : [];
