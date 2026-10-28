@@ -1377,6 +1377,7 @@ export function einstellungen() {
   e.honorarsaetze = saetzeNormalisieren(e.honorarsaetze); // ältere Sätze ohne Medium gelten für beide
   e.betreiber = betreiberOder(e.betreiber);
   e.rueckgabe_vorlagen = vorlagenNormalisieren(e.rueckgabe_vorlagen);
+  e.erinnerung_tage ??= 3;
   return e;
 }
 
@@ -1402,7 +1403,9 @@ export function hinweisBestaetigen() {
   return nutzerSicht(n);
 }
 
-export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorarsaetze, betreiber, rueckgabe_vorlagen: vorlagen }) {
+export function einstellungenSpeichern({
+  empfaenger, datenschutzKontakt, honorarsaetze, betreiber, rueckgabe_vorlagen: vorlagen, erinnerung_tage: erinnerung,
+}) {
   brauche('admin');
   pruefe(!leer(empfaenger?.name), 'Bitte den Namen des Rechnungsempfängers angeben.');
   let saetze;
@@ -1411,8 +1414,13 @@ export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorar
   } catch (e) {
     throw new Fehler(e.message);
   }
+  if (erinnerung !== undefined) {
+    erinnerung = Number(erinnerung);
+    pruefe(Number.isInteger(erinnerung) && erinnerung >= 0 && erinnerung <= 31, 'Erinnerung: bitte 0 bis 31 Tage vor Monatsende angeben (0 = aus).');
+  }
   db.einstellungen = {
     ...db.einstellungen,
+    erinnerung_tage: erinnerung ?? db.einstellungen.erinnerung_tage ?? 3,
     empfaenger: {
       name: trim(empfaenger.name), strasse: trim(empfaenger.strasse),
       plz_ort: trim(empfaenger.plz_ort), uid: trim(empfaenger.uid),

@@ -569,6 +569,11 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <p class="tipp">Die Redaktion übernimmt sie mit einem Klick beim Zurückgeben. Eine Vorlage pro Zeile, höchstens 15.</p>
       <label for="e-vorlagen" class="sr-only">Vorlagen</label>
       <textarea id="e-vorlagen" name="vorlagen" rows="6">${esc((e.rueckgabe_vorlagen ?? []).join('\n'))}</textarea>
+      <h2 class="abstand-oben">Erinnerung zum Monatsende</h2>
+      <p class="tipp">Wer Leistungen gespeichert, aber noch nicht eingereicht hat, bekommt einmal pro Monat eine E-Mail.
+        Jede Person kann das im Profil abschalten.</p>
+      <label for="e-erinnerung">Tage vor Monatsende (0 = keine Erinnerung)</label>
+      <input id="e-erinnerung" name="erinnerung" type="number" min="0" max="31" step="1" inputmode="numeric" value="${esc(e.erinnerung_tage ?? 3)}">
       <h2 class="abstand-oben">Datenschutz</h2>
       <label for="e-kontakt">Kontakt für Datenschutzanfragen (E-Mail)</label>
       <input id="e-kontakt" name="kontakt" type="email" value="${esc(e.datenschutzKontakt)}">
@@ -652,6 +657,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       datenschutzKontakt: form.kontakt.value,
       honorarsaetze,
       rueckgabe_vorlagen: form.vorlagen.value.split('\n'),
+      erinnerung_tage: Number(form.erinnerung.value || 0),
       betreiber: {
         name: form.b_name.value, anschrift: form.b_anschrift.value, email: form.b_email.value, telefon: form.b_telefon.value,
         extern: form.b_extern.checked, hoster: form.b_hoster.value,

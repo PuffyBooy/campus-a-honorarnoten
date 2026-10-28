@@ -101,12 +101,13 @@ function einstellungen_laden(PDO $db): array
     foreach (zeilen($db, 'select * from einstellungen') as $z) {
         // „auftraggeber“: früheres SEPA-Konto, „mail“: eigene Einstellungen (mit Passwort, nie an den Browser),
         // „zahlungskonto“: nur für Buchhaltung und Admin (eigene Funktion)
-        if (in_array($z['schluessel'], ['auftraggeber', 'mail', 'zahlungskonto', 'wartung', 'warnmail'], true)) continue;
+        if (in_array($z['schluessel'], ['auftraggeber', 'mail', 'zahlungskonto', 'wartung', 'warnmail', 'erinnerung_monat'], true)) continue;
         $e[$z['schluessel']] = json_decode($z['wert'], true);
     }
     $e['honorarsaetze'] = saetze_normalisieren($e['honorarsaetze']); // ältere Sätze ohne Medium gelten für beide
     $e['betreiber'] = array_merge(BETREIBER_STANDARD, array_intersect_key(is_array($e['betreiber']) ? $e['betreiber'] : [], BETREIBER_STANDARD));
     $e['rueckgabe_vorlagen'] = vorlagen_normalisieren($e['rueckgabe_vorlagen'] ?? null);
+    $e['erinnerung_tage'] = max(0, min(31, (int) ($e['erinnerung_tage'] ?? ERINNERUNG_TAGE)));
     return $e;
 }
 
@@ -1254,8 +1255,14 @@ final class Honorare
         $saetze = saetze_normalisieren($d['honorarsaetze'] ?? einstellungen_laden($db)['honorarsaetze']);
         $betreiber = betreiber_pruefen(einstellungen_laden($db)['betreiber'], $d['betreiber'] ?? null);
         $vorlagen = array_key_exists('rueckgabe_vorlagen', $d) ? vorlagen_normalisieren($d['rueckgabe_vorlagen']) : einstellungen_laden($db)['rueckgabe_vorlagen'];
+        $erinnerung = einstellungen_laden($db)['erinnerung_tage'];
+        if (array_key_exists('erinnerung_tage', $d)) {
+            $erinnerung = filter_var($d['erinnerung_tage'], FILTER_VALIDATE_INT);
+            pruefe($erinnerung !== false && $erinnerung >= 0 && $erinnerung <= 31, 'Erinnerung: bitte 0 bis 31 Tage vor Monatsende angeben (0 = aus).');
+        }
         $speichere = fn ($schluessel, $wert) => upsert($db, 'einstellungen', ['schluessel' => $schluessel, 'wert' => json_text($wert)], ['schluessel']);
-        transaktion($db, function () use ($speichere, $e, $kontakt, $saetze, $betreiber, $vorlagen) {
+        transaktion($db, function () use ($speichere, $e, $kontakt, $saetze, $betreiber, $vorlagen, $erinnerung) {
+            $speichere('erinnerung_tage', $erinnerung);
             $speichere('betreiber', $betreiber);
             $speichere('rueckgabe_vorlagen', $vorlagen);
             $speichere('empfaenger', [

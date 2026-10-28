@@ -90,11 +90,12 @@ function taegliche_sicherung(PDO $db): ?string
 /** Arbeiten nach der Antwort an den Browser: Warn-Mail, Mails verschicken, aufräumen, tägliche Sicherung */
 function hintergrundarbeit(PDO $db): void
 {
-    // zuerst die Warn-Mail einreihen, damit sie gleich mit verschickt wird
+    // zuerst Warn-Mail und Erinnerung zum Monatsende einreihen, damit sie gleich mit verschickt werden
     try {
         warnmail_pruefen($db);
+        monatserinnerung($db);
     } catch (Throwable $e) {
-        error_log('Prämienabrechnungen: Warn-Mail: ' . $e->getMessage());
+        error_log('Prämienabrechnungen: Warn-Mail/Erinnerung: ' . $e->getMessage());
     }
     try {
         mails_verschicken($db);

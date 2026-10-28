@@ -60,6 +60,8 @@ test('erstes Admin-Konto und Startpasswort', async () => {
   assert.match((await k.admin.aufruf('erstesPasswortSetzen', passwort)).fehler, /Startpasswort/);
   await k.admin.ok('erstesPasswortSetzen', 'admin-passwort-1');
   assert.equal((await k.admin.ok('aktuellerNutzer')).muss_passwort_aendern, false);
+  // Erinnerung zum Monatsende in den Tests aus (sonst kommen in den letzten Tagen des Monats zusätzliche E-Mails); eigener Test unten
+  php.sql("insert into einstellungen (schluessel, wert) values ('erinnerung_tage', '0')");
 });
 
 test('E-Mail-Versand einrichten (Admin): Passwort bleibt geheim, Test-E-Mail', async () => {
@@ -1055,6 +1057,24 @@ test('Impressum und Datenschutz: Betreiber, öffentlich lesbar, Hinweis bestäti
   assert.ok((await gast.ok('rechtliches')).betreiber.stand > anna.hinweis_bestaetigt_am, 'neue Anschrift: neu bestätigen');
   // auch für Angemeldete über die Einstellungen
   assert.equal((await k.anna.ok('einstellungen')).betreiber.name, 'Max Muster');
+});
+
+test('Erinnerung zum Monatsende: einmal pro Monat an alle mit gespeicherten Leistungen', async () => {
+  const e = await k.admin.ok('einstellungen');
+  assert.equal(e.erinnerung_tage, 0);
+  assert.match((await k.admin.aufruf('einstellungenSpeichern', { ...e, erinnerung_tage: 40 })).fehler, /0 bis 31/);
+  const id = await k.anna.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Vergessen?', veroeffentlichung: '2026-10-20', betrag: 15 });
+  await k.admin.ok('einstellungenSpeichern', { ...e, erinnerung_tage: 31 }); // 31: heute ist sicher „vor Monatsende“
+  await k.admin.ok('statistik');
+  const m = await mailAbwarten(php.smtp, (x) => x.an === 'anna@example.org' && /^Monatsende .*nicht eingereicht$/.test(x.betreff));
+  assert.ok(m.text.includes('#/leistungen'));
+  await k.admin.ok('statistik');
+  await k.admin.ok('statistik');
+  assert.equal(php.smtp.mails.filter((x) => x.an === 'anna@example.org' && x.betreff === m.betreff).length, 1, 'nur einmal pro Monat');
+  assert.ok(!php.smtp.mails.some((x) => x.an === 'rita@example.org' && x.betreff.startsWith('Monatsende')), 'nur wer Leistungen gespeichert hat');
+  assert.ok((await k.admin.ok('protokoll', { suche: 'Erinnerung zum Monatsende' })).eintraege.length);
+  await k.admin.ok('einstellungenSpeichern', { ...e, erinnerung_tage: 0 });
+  await k.anna.ok('leistungLoeschen', id);
 });
 
 test('Kommandozentrale: Zustand, Messwerte je Stunde, Leistungstest, Wartungsaktionen – nur für Admins', async () => {
