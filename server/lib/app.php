@@ -13,6 +13,7 @@ require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/pdf.php';
 require_once __DIR__ . '/mail-vorlagen.php';
 require_once __DIR__ . '/honorare.php';
+require_once __DIR__ . '/betrieb.php';
 
 date_default_timezone_set('Europe/Vienna');
 mb_internal_encoding('UTF-8');
@@ -84,9 +85,15 @@ function taegliche_sicherung(PDO $db): ?string
     return $ziel;
 }
 
-/** Arbeiten nach der Antwort an den Browser: Mails verschicken, aufräumen, tägliche Sicherung */
+/** Arbeiten nach der Antwort an den Browser: Warn-Mail, Mails verschicken, aufräumen, tägliche Sicherung */
 function hintergrundarbeit(PDO $db): void
 {
+    // zuerst die Warn-Mail einreihen, damit sie gleich mit verschickt wird
+    try {
+        warnmail_pruefen($db);
+    } catch (Throwable $e) {
+        error_log('Prämienabrechnungen: Warn-Mail: ' . $e->getMessage());
+    }
     try {
         mails_verschicken($db);
     } catch (Throwable $e) {

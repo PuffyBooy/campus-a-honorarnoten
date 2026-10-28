@@ -875,6 +875,47 @@ test('Benachrichtigungen: jedes Konto wählt selbst', async () => {
   await k.anna.ok('benachrichtigungenSpeichern', { eingang: true });
 });
 
+test('Wartungsmodus: nur Admins kommen hinein, alle anderen sehen den Hinweis', async () => {
+  assert.equal((await k.rita.aufruf('wartungSetzen', true)).status, 403);
+  const w = await k.admin.ok('wartungSetzen', true, 'Update läuft, gleich wieder da.');
+  assert.equal(w.an, true);
+  assert.equal(w.von, 'Alex Admin');
+  const r = await k.rita.aufruf('redaktionListe', {});
+  assert.deepEqual([r.status, r.wartung], [503, 'Update läuft, gleich wieder da.']);
+  assert.equal((await k.rita.aufruf('aktuellerNutzer')).status, 503);
+  assert.equal((await client().aufruf('aktuellerNutzer')).status, 503, 'auch ohne Anmeldung');
+  assert.equal((await client().aufruf('rechtliches')).status, 200, 'Impressum bleibt lesbar');
+  assert.equal((await client().aufruf('anmelden', 'rita@example.org', 'geheim12345')).status, 503, 'nur Admins können sich anmelden');
+  const admin2 = client();
+  await admin2.ok('anmelden', 'admin@example.org', 'admin-passwort-1');
+  assert.equal((await admin2.ok('aktuellerNutzer')).wartung, true, 'Admins sehen, dass er an ist');
+  assert.ok(!('wartung' in (await k.admin.ok('einstellungen'))));
+  await k.admin.ok('wartungSetzen', false);
+  assert.equal((await k.rita.aufruf('redaktionListe', {})).status, 200);
+  assert.equal((await k.rita.ok('aktuellerNutzer')).wartung, undefined);
+  assert.ok((await k.admin.ok('protokoll', { suche: 'Wartungsmodus' })).eintraege.length >= 2);
+});
+
+test('Warn-Mail an Admins bei Fehlern im Protokoll (höchstens eine pro Stunde)', async () => {
+  php.sql("update einstellungen set wert = json_object('bis', (select max(id) from protokoll), 'zeit', 0) where schluessel = 'warnmail'");
+  php.sql("insert into protokoll (zeit, stufe, bereich, text, wer, ip) values (?, 'fehler', 'sicherung', 'Tägliche Sicherung fehlgeschlagen: Platte voll', '', '')", [new Date().toISOString()]);
+  await k.admin.ok('statistik'); // danach läuft die Hintergrundarbeit
+  const m = await mailAbwarten(php.smtp, (x) => x.an === 'admin@example.org' && x.betreff === 'Probleme in der Anerkennungsprämien-App');
+  assert.ok(m.text.includes('Tägliche Sicherung fehlgeschlagen: Platte voll'));
+  assert.ok(m.html.includes('#/admin/protokoll'));
+  assert.ok(!php.smtp.mails.some((x) => x.an === 'rita@example.org' && x.betreff === m.betreff), 'nur an Admins');
+  // gleich danach: gesammelt, keine zweite Mail
+  php.sql("insert into protokoll (zeit, stufe, bereich, text, wer, ip) values (?, 'fehler', 'system', 'Noch ein Fehler', '', '')", [new Date().toISOString()]);
+  await k.admin.ok('statistik');
+  await k.admin.ok('statistik');
+  assert.equal(php.smtp.mails.filter((x) => x.betreff === m.betreff).length, 1);
+  // nach einer Stunde kommt der gesammelte Fehler
+  php.sql("update einstellungen set wert = json_set(wert, '$.zeit', 0) where schluessel = 'warnmail'");
+  await k.admin.ok('statistik');
+  const m2 = await mailAbwarten(php.smtp, (x) => x.betreff === m.betreff && x.text.includes('Noch ein Fehler'));
+  assert.ok(!m2.text.includes('Platte voll'), 'jeder Fehler nur einmal');
+});
+
 test('Admin: Note löschen mit Protokoll, Export ohne Passwörter', async () => {
   assert.equal((await k.rita.aufruf('noteLoeschen', k.note.id)).status, 403);
   await k.admin.ok('noteLoeschen', k.note.id);

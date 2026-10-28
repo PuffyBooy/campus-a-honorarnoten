@@ -511,9 +511,19 @@ async function noten(inhalt, { store, neuLaden }) {
 }
 
 async function einstellungen(inhalt, { store, neuLaden }) {
-  const [e, konto] = await Promise.all([store.einstellungen(), store.zahlungskonto()]);
+  const [e, konto, w] = await Promise.all([store.einstellungen(), store.zahlungskonto(), store.wartung()]);
   const b = betreiberOder(e.betreiber);
   inhalt.innerHTML = `
+    <form class="karte${w.an ? ' wartung-an' : ''}" id="w-form" novalidate>
+      <h2>Wartungsmodus ${w.an ? '<span class="badge badge-abgelehnt">An</span>' : ''}</h2>
+      <p class="tipp">${w.an ? `Eingeschaltet${w.seit ? ` am ${esc(formatZeitpunkt(w.seit))}` : ''}${w.von ? ` von ${esc(w.von)}` : ''}.
+        Nur Admins können die App benutzen, alle anderen sehen diesen Text.`
+        : 'Für Umbauten oder Updates: Solange er an ist, kommen nur Admins in die App. Alle anderen sehen diesen Text.'}</p>
+      <label for="w-text">Text für alle anderen</label>
+      <textarea id="w-text" name="text" rows="2" maxlength="500">${esc(w.text)}</textarea>
+      <p class="feldfehler" role="alert"></p>
+      <button type="submit" class="btn ${w.an ? 'btn-primaer' : 'btn-gefahr'}">${w.an ? 'Wartungsmodus ausschalten' : 'Wartungsmodus einschalten'}</button>
+    </form>
     <form class="karte" id="k-form" novalidate>
       <h2>Zahlungskonto für die Sammelüberweisung</h2>
       <p class="tipp">Von diesem Konto gehen die Auszahlungen ab. Die Buchhaltung erstellt damit pro Woche eine
@@ -587,6 +597,14 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <p class="feldfehler" role="alert"></p>
       <button type="submit" class="btn btn-primaer">Speichern</button>
     </form>`;
+  const wForm = inhalt.querySelector('#w-form');
+  wForm.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    if (!w.an && !confirm('Wartungsmodus einschalten? Alle außer Admins kommen dann nicht mehr in die App.')) return;
+    versuche(() => store.wartungSetzen(!w.an, wForm.text.value), w.an ? 'Wartungsmodus ausgeschaltet.' : 'Wartungsmodus eingeschaltet.',
+      neuLaden);
+  });
+
   const kForm = inhalt.querySelector('#k-form');
   kForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();

@@ -157,8 +157,38 @@ function nutzerSicht(n) {
   return { ...kopie(rest), zwei_faktor: Boolean(zf) };
 }
 
+// ------------------------------------------------------------------ Wartungsmodus (nur Admins kommen hinein)
+
+const WARTUNG_TEXT = 'Wir arbeiten gerade an der App. Bitte versuch es etwas später noch einmal.';
+function wartungLaden() {
+  const w = db.einstellungen?.wartung ?? {};
+  return { an: Boolean(w.an), text: trim(w.text ?? '') || WARTUNG_TEXT, seit: w.seit ?? null, von: w.von ?? '' };
+}
+function wartungPruefen(n) {
+  const w = wartungLaden();
+  if (w.an && !n?.rollen.includes('admin')) throw Object.assign(new Fehler(w.text), { wartung: w.text });
+}
+
 export function aktuellerNutzer() {
-  return nutzerSicht(sitzungsNutzer());
+  const n = sitzungsNutzer();
+  wartungPruefen(n);
+  const sicht = nutzerSicht(n);
+  if (sicht?.rollen.includes('admin') && wartungLaden().an) sicht.wartung = true;
+  return sicht;
+}
+
+export function wartung() {
+  brauche('admin');
+  return wartungLaden();
+}
+
+export function wartungSetzen(an, text = '') {
+  const admin = brauche('admin');
+  an = an === true;
+  db.einstellungen.wartung = { an, text: trim(text).slice(0, 500), seit: an ? jetzt() : null, von: an ? anzeigename(admin) : '' };
+  protokoll('warnung', 'einstellungen', an ? 'Wartungsmodus eingeschaltet' : 'Wartungsmodus ausgeschaltet');
+  speichern();
+  return wartungLaden();
 }
 
 /**
@@ -191,6 +221,7 @@ export async function anmelden(email, passwort, code = null) {
   if (!ok) { protokoll('warnung', 'anmeldung', `Anmeldung fehlgeschlagen für ${trim(email).toLowerCase()}`, n); speichern(); }
   pruefe(ok, 'E-Mail oder Passwort ist falsch.');
   pruefe(n.aktiv, 'Dieses Konto ist deaktiviert. Bitte wende dich an die Redaktion.');
+  if (wartungLaden().an) pruefe(n.rollen.includes('admin'), wartungLaden().text);
   if (n.zwei_faktor) {
     if (leer(code)) return { code_noetig: true };
     if (!(await zweiFaktorCodeOk(n, code))) {
@@ -1130,6 +1161,7 @@ export function einstellungen() {
   const e = { ...leereDb().einstellungen, ...kopie(db.einstellungen) };
   delete e.auftraggeber; // früheres SEPA-Konto, nicht mehr verwendet
   delete e.zahlungskonto; // nur über zahlungskonto() für Buchhaltung und Admin
+  delete e.wartung; // eigene Funktion wartung()
   e.honorarsaetze = saetzeNormalisieren(e.honorarsaetze); // ältere Sätze ohne Medium gelten für beide
   e.betreiber = betreiberOder(e.betreiber);
   e.rueckgabe_vorlagen = vorlagenNormalisieren(e.rueckgabe_vorlagen);

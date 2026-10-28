@@ -97,6 +97,11 @@ function api(): array
     $nutzer = $nutzerId ? nutzer_laden($db, $nutzerId) : null;
     if ($nutzer && !$nutzer['aktiv']) $nutzer = null;
     if (!$nutzer && !in_array($name, Honorare::OEFFENTLICH, true)) return [401, ['fehler' => 'Bitte melde dich an.', 'abgemeldet' => true]];
+    // Wartungsmodus: nur Admins arbeiten weiter, alle anderen sehen den Hinweis
+    $wartung = wartung_laden($db);
+    if ($wartung['an'] && !ist_admin($nutzer) && !in_array($name, WARTUNG_ERLAUBT, true)) {
+        return [503, ['fehler' => $wartung['text'], 'wartung' => $wartung['text']]];
+    }
 
     // Begrenzung von Versuchen (gegen Erraten von Passwörtern und Massenanfragen)
     if ($name === 'anmelden') {

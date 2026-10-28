@@ -101,7 +101,7 @@ function einstellungen_laden(PDO $db): array
     foreach (zeilen($db, 'select * from einstellungen') as $z) {
         // „auftraggeber“: früheres SEPA-Konto, „mail“: eigene Einstellungen (mit Passwort, nie an den Browser),
         // „zahlungskonto“: nur für Buchhaltung und Admin (eigene Funktion)
-        if (in_array($z['schluessel'], ['auftraggeber', 'mail', 'zahlungskonto'], true)) continue;
+        if (in_array($z['schluessel'], ['auftraggeber', 'mail', 'zahlungskonto', 'wartung', 'warnmail'], true)) continue;
         $e[$z['schluessel']] = json_decode($z['wert'], true);
     }
     $e['honorarsaetze'] = saetze_normalisieren($e['honorarsaetze']); // ältere Sätze ohne Medium gelten für beide
@@ -230,7 +230,7 @@ final class Honorare
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'noteLoeschen',
         'loeschprotokoll', 'einstellungenSpeichern', 'statistik', 'exportieren',
-        'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail', 'zweiFaktorStarten', 'zweiFaktorEinschalten', 'zweiFaktorAusschalten', 'zweiFaktorZuruecksetzen', 'passwortVergessen', 'passwortNeuSetzen', 'linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren',
+        'mailEinstellungen', 'mailEinstellungenSpeichern', 'testMail', 'wartung', 'wartungSetzen', 'zweiFaktorStarten', 'zweiFaktorEinschalten', 'zweiFaktorAusschalten', 'zweiFaktorZuruecksetzen', 'passwortVergessen', 'passwortNeuSetzen', 'linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren',
         'registrierungslinkErstellen', 'registrierungslinks', 'registrierungslinkWiderrufen',
         'dashboard', 'protokoll', 'sicherungen', 'jetztSichern', 'sicherungHerunterladen', 'rechtliches', 'hinweisBestaetigen', 'benachrichtigungenSpeichern',
     ];
@@ -257,7 +257,29 @@ final class Honorare
     // ---------------------------------------------------------------- Sitzung
     public function aktuellerNutzer(): ?array
     {
-        return $this->ctx->nutzer;
+        $n = $this->ctx->nutzer;
+        // Admins sehen oben, dass der Wartungsmodus an ist
+        if (ist_admin($n) && wartung_laden($this->db())['an']) $n['wartung'] = true;
+        return $n;
+    }
+
+    public function wartung(): array
+    {
+        brauche($this->ctx, 'admin');
+        return wartung_laden($this->db());
+    }
+
+    /** Wartungsmodus ein/aus: solange er an ist, kommen nur Admins in die App */
+    public function wartungSetzen(mixed $an = false, mixed $text = ''): array
+    {
+        $db = $this->db();
+        $admin = brauche($this->ctx, 'admin');
+        $an = $an === true;
+        $text = kuerze(tr($text), 500);
+        upsert($db, 'einstellungen', ['schluessel' => 'wartung', 'wert' => json_text(
+            ['an' => $an, 'text' => $text, 'seit' => $an ? jetzt() : null, 'von' => $an ? anzeigename($admin) : ''])], ['schluessel']);
+        $this->log('warnung', 'einstellungen', $an ? 'Wartungsmodus eingeschaltet' : 'Wartungsmodus ausgeschaltet');
+        return wartung_laden($db);
     }
 
     /**
@@ -274,6 +296,8 @@ final class Honorare
         pruefe($z && $ok, 'E-Mail oder Passwort ist falsch.', 401);
         if (!$z['aktiv']) $this->log('warnung', 'anmeldung', 'Anmeldeversuch mit deaktiviertem Konto', nutzer_aus_zeile($z));
         pruefe($z['aktiv'], 'Dieses Konto ist deaktiviert. Bitte wende dich an die Redaktion.', 403);
+        $wartung = wartung_laden($db);
+        if ($wartung['an'] && !ist_admin(nutzer_aus_zeile($z))) throw new Fehler($wartung['text'], 503);
         if (!empty($z['zwei_faktor'])) {
             if (leer($code)) return ['code_noetig' => true];
             if (!zwei_faktor_code_ok($db, $z, s($code))) {

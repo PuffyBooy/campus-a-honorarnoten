@@ -135,8 +135,10 @@ let renderZaehler = 0;
  */
 function hinweisBanner(nutzer, recht) {
   const zeigen = recht && nutzer && !kontoEinrichten(nutzer) && hinweisOffen(nutzer, recht.betreiber);
-  banner.innerHTML = zeigen ? `<aside class="hinweis-betreiber" role="note"><span>${zustimmungHtml(recht)}</span>
-    <button type="button" class="btn btn-klein" id="hinweis-ok">Gelesen und zur Kenntnis genommen</button></aside>` : '';
+  banner.innerHTML = (nutzer?.wartung ? `<aside class="wartung-banner" role="status"><span><strong>Wartungsmodus ist an.</strong>
+      Nur Admins können die App gerade benutzen.</span> <a class="btn btn-klein" href="#/admin/einstellungen">Ausschalten</a></aside>` : '')
+    + (zeigen ? `<aside class="hinweis-betreiber" role="note"><span>${zustimmungHtml(recht)}</span>
+    <button type="button" class="btn btn-klein" id="hinweis-ok">Gelesen und zur Kenntnis genommen</button></aside>` : '');
   banner.querySelector('#hinweis-ok')?.addEventListener('click', async (ev) => {
     ev.currentTarget.disabled = true;
     try {
@@ -160,6 +162,27 @@ function ladenSpaeter() {
   return () => clearTimeout(t);
 }
 
+/** Wartungsmodus: Hinweis für alle außer Admins (die sich hier anmelden können); Impressum und Datenschutz bleiben lesbar */
+async function wartungSeite(pfad, text) {
+  await renderNav(null, pfad);
+  banner.innerHTML = '';
+  if (pfad === 'impressum' || pfad === 'datenschutz') {
+    await rechtlichesSeite.render(main, { store, istDemo: IST_DEMO, seite: pfad, angemeldet: false }).catch(() => {});
+    return;
+  }
+  main.innerHTML = `<section class="karte schmal wartung-seite" role="status">
+      <p class="wartung-symbol" aria-hidden="true">🛠</p>
+      <h1>Gleich wieder da</h1>
+      <p>${esc(text)}</p>
+      <p class="aktionen"><button type="button" class="btn btn-primaer" id="nochmal">Erneut versuchen</button>
+        <button type="button" class="link-knopf" id="admin-anmelden">Als Admin anmelden</button></p>
+    </section>`;
+  main.querySelector('#nochmal').addEventListener('click', render);
+  main.querySelector('#admin-anmelden').addEventListener('click', () => login.render(main, {
+    store, istDemo: IST_DEMO, recht: null, nachAnmeldung: () => { history.replaceState(null, '', location.pathname + location.search); render(); },
+  }));
+}
+
 async function render() {
   const lauf = ++renderZaehler;
   const pfad = aktuellerPfad();
@@ -174,6 +197,10 @@ async function render() {
   try {
     nutzer = await store.aktuellerNutzer();
   } catch (e) {
+    if (e.wartung) {
+      await wartungSeite(pfad, e.wartung);
+      return;
+    }
     // Hinweis auf die Einrichtung als Link (z. B. „Bitte zuerst …/einrichten.php öffnen“)
     const text = esc(fehlerText(e)).replace(/(https?:\/\/[^\s<]+einrichten\.php)/, '<a href="$1">$1</a>');
     main.innerHTML = `<section class="karte fehlerbox" role="alert"><h1>Die App ist gerade nicht erreichbar</h1>
@@ -312,6 +339,8 @@ async function start() {
   });
   // Server: Sitzung abgelaufen -> zurück zur Anmeldung
   window.addEventListener('honorare:abgemeldet', () => render());
+  // Server: Wartungsmodus wurde eingeschaltet -> Hinweis zeigen
+  window.addEventListener('honorare:wartung', () => render());
   // Cookies: beim ersten Besuch fragen, über die Fußzeile jederzeit änderbar
   document.addEventListener('click', (ev) => {
     if (ev.target.closest('#cookie-einstellungen, [data-cookie-einstellungen]')) cookieBanner({ details: true });

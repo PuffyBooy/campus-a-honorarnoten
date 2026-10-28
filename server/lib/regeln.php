@@ -120,6 +120,7 @@ function darf_redigieren(?array $n): bool
 const BENACHRICHTIGUNGEN = [
     'neue_note' => ['redaktion'], 'zur_zahlung' => ['buchhaltung'], 'anfrage' => ['admin'],
     'eingang' => ['autor'], 'angenommen' => ['autor'], 'abgelehnt' => ['autor'], 'bezahlt' => ['autor'],
+    'probleme' => ['admin'],
 ];
 const BENACHRICHTIGUNGEN_FUER_ADMIN = ['neue_note', 'zur_zahlung'];
 
@@ -321,6 +322,13 @@ function datum_text(?string $iso): string
     if (!$iso) return '';
     [$j, $m, $t] = array_pad(explode('-', substr($iso, 0, 10)), 3, '');
     return "$t.$m.$j";
+}
+
+/** ISO-Zeitpunkt -> "28.10.2026, 14:05" (Wiener Zeit) */
+function zeitpunkt_text(string $iso): string
+{
+    $t = strtotime($iso);
+    return $t ? date('d.m.Y, H:i', $t) : $iso;
 }
 
 const MONATE = ['Jänner', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'];

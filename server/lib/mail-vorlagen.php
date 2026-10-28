@@ -410,6 +410,23 @@ function mail_zwei_faktor(PDO $db, string $vorname, bool $an): array
     ]);
 }
 
+const WARNMAIL_BETREFF = 'Probleme in der Anerkennungsprämien-App';
+
+/** Warn-Mail an Admins: neue Fehler aus dem Protokoll */
+function mail_probleme(PDO $db, array $eintraege, int $anzahl): array
+{
+    return mail_bauen([
+        'betreff' => WARNMAIL_BETREFF,
+        'vorschau' => $anzahl === 1 ? 'Im Protokoll steht ein neuer Fehler.' : "Im Protokoll stehen $anzahl neue Fehler.",
+        'titel' => 'Da stimmt etwas nicht',
+        'absaetze' => [$anzahl === 1 ? 'Im Protokoll der App steht ein neuer Fehler:' : "Im Protokoll der App stehen $anzahl neue Fehler oder Warnungen:"],
+        'tabelle' => array_map(fn ($e) => [zeitpunkt_text($e['zeit']), $e['text']], $eintraege),
+        'hinweis' => [($anzahl > count($eintraege) ? 'Hier stehen nur die ersten ' . count($eintraege) . '. ' : '')
+            . 'Weitere Fehler sammeln wir und schicken höchstens eine E-Mail pro Stunde. Ausschalten im Profil unter „E-Mail-Benachrichtigungen“.', 'gefahr'],
+        'knopf' => ['Protokoll öffnen', app_link($db, 'admin/protokoll')],
+    ]);
+}
+
 function mail_test(PDO $db, string $an): array
 {
     return mail_bauen([

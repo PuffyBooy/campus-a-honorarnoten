@@ -4,6 +4,7 @@ export const BENACHRICHTIGUNGEN = [
   { typ: 'neue_note', rollen: ['redaktion'], text: 'Neue Prämienabrechnung eingereicht (zum Prüfen)' },
   { typ: 'zur_zahlung', rollen: ['buchhaltung'], text: 'Prämienabrechnung angenommen (zur Zahlung)' },
   { typ: 'anfrage', rollen: ['admin'], text: 'Neue Zugangsanfrage' },
+  { typ: 'probleme', rollen: ['admin'], text: 'Warnung bei Problemen (Fehler im Protokoll, z. B. Sicherung oder E-Mail-Versand)' },
   { typ: 'eingang', rollen: ['autor'], text: 'Bestätigung, wenn ich eine Prämienabrechnung abschicke' },
   { typ: 'angenommen', rollen: ['autor'], text: 'Meine Prämienabrechnung wurde angenommen' },
   { typ: 'abgelehnt', rollen: ['autor'], text: 'Meine Prämienabrechnung wurde zum Überarbeiten zurückgegeben' },
