@@ -3,6 +3,7 @@ import {
   KATEGORIE_LABEL, artText, esc, formatDatum, formatEuro, formatMonat, formatZeitpunkt,
 } from '../lib/format.js';
 import { honorarnoteHerunterladen } from '../lib/beleg.js';
+import { downloadBlob } from '../lib/csv.js';
 import { standardBetrag, weichtAb } from '../lib/honorarsaetze.js';
 import { hatArtikel, mediumBadge, mediumName, titelLink } from '../lib/campus.js';
 import { bestaetigen, fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
@@ -94,6 +95,7 @@ export function noteKarte(n, { neu = false, kompakt = false } = {}) {
         <div class="aktionen">
           ${kannZurueckziehen(n) ? '<button type="button" class="btn btn-klein" data-zurueckziehen>Zurückziehen und bearbeiten</button>' : ''}
           <button type="button" class="btn btn-klein" data-word>Word herunterladen</button>
+          ${n.status === 'bezahlt' ? '<button type="button" class="btn btn-klein" data-avis>Zahlungsavis (PDF)</button>' : ''}
         </div>
       </li>`;
 }
@@ -107,6 +109,15 @@ export function notenAktionen(liste, noten, { store, neuLaden }) {
     if (!n || !knopf) return;
     if ('word' in knopf.dataset) {
       await mitSperre(knopf, () => honorarnoteHerunterladen(n).catch((e) => meldung(fehlerText(e), 'fehler')));
+    } else if ('avis' in knopf.dataset) {
+      await mitSperre(knopf, async () => {
+        try {
+          const r = await store.zahlungsavis(n.id);
+          downloadBlob(r.name, new Blob([Uint8Array.from(atob(r.inhalt), (c) => c.charCodeAt(0))], { type: 'application/pdf' }));
+        } catch (e) {
+          meldung(fehlerText(e), 'fehler');
+        }
+      });
     } else if ('zurueckziehen' in knopf.dataset) {
       if (await zurueckziehen(store, n)) location.hash = '#/leistungen';
     } else if ('zurueck' in knopf.dataset) {

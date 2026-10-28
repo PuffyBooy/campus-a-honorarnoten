@@ -260,6 +260,10 @@ const MIGRATIONEN = [
     create index noten_eingereicht on noten(eingereicht_am);
     create index note_positionen_artikel on note_positionen(artikel_url);
     SQL,
+    // Version 14: Anhänge an E-Mails (z. B. Zahlungsavis als PDF), als JSON mit base64
+    <<<'SQL'
+    alter table mails add column anhaenge text;
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -488,6 +492,9 @@ const MYSQL_MIGRATIONEN = [
     <<<'SQL'
     create index noten_eingereicht on noten(eingereicht_am);
     create index note_positionen_artikel on note_positionen(artikel_url);
+    SQL,    // Version 7 = SQLite-Version 14
+    <<<'SQL'
+    alter table mails add column anhaenge mediumtext null;
     SQL,
 ];
 

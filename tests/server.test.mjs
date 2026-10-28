@@ -226,6 +226,16 @@ test('Buchhaltung: bezahlen', async () => {
   assert.equal(bezahlt.status, 'bezahlt');
   assert.equal((await b.ok('bezahlteNoten', heute.slice(0, 7))).length, 1);
   assert.match((await k.rita.aufruf('betragKorrigieren', k.note.id, k.note.positionen[0].id, 20, 'x')).fehler, /Bezahlte/);
+  // Zahlungsavis: als PDF im Anhang der Bezahlt-Mail und zum Herunterladen
+  const mail = await mailAbwarten(php.smtp, (m) => m.betreff === `Prämienabrechnung ${k.note.nummer} bezahlt`);
+  assert.match(mail.roh, /Content-Disposition: attachment; filename="Zahlungsavis_[\w-]+\.pdf"/);
+  const avis = await b.ok('zahlungsavis', k.note.id);
+  const pdf = Buffer.from(avis.inhalt, 'base64').toString('latin1');
+  assert.ok(pdf.startsWith('%PDF-1.4') && pdf.trimEnd().endsWith('%%EOF'));
+  assert.ok(pdf.includes('Zahlungsavis') && pdf.includes(k.note.nummer));
+  assert.equal((await k.rita.aufruf('zahlungsavis', k.note.id)).status, 403);
+  assert.ok(php.sql("select anhaenge from mails where betreff like '%bezahlt' and gesendet_am is not null").zeilen.every((z) => z.anhaenge === null),
+    'Anhang wird nach dem Versand nicht aufgehoben');
 });
 
 test('Abgelehnte Note überarbeiten', async () => {

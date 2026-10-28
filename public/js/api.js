@@ -86,6 +86,7 @@ export const verlaufVon = f('verlaufVon');
 
 // Buchhaltung
 export const offeneZahlungen = f('offeneZahlungen');
+export const zahlungsavis = f('zahlungsavis');
 export const zahlungskonto = f('zahlungskonto');
 export const zahlungskontoSpeichern = f('zahlungskontoSpeichern');
 export const pdfMailen = f('pdfMailen');

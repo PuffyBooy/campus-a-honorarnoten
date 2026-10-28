@@ -69,8 +69,10 @@ function mail_einreihen(PDO $db, string $an, array $mail): ?string
     $e = mail_einstellungen($db);
     if (!$e['aktiv'] || !ist_email($an)) return null;
     $id = neue_id();
-    q($db, 'insert into mails (id, an, betreff, html, text, erstellt_am) values (?, ?, ?, ?, ?, ?)',
-        [$id, $an, $mail['betreff'], $mail['html'], $mail['text'], jetzt()]);
+    // Anhänge: [[Dateiname, Typ, Inhalt]] – gespeichert als JSON mit base64
+    $anhaenge = array_map(fn ($a) => [$a[0], $a[1], base64_encode($a[2])], $mail['anhaenge'] ?? []);
+    q($db, 'insert into mails (id, an, betreff, html, text, erstellt_am, anhaenge) values (?, ?, ?, ?, ?, ?, ?)',
+        [$id, $an, $mail['betreff'], $mail['html'], $mail['text'], jetzt(), $anhaenge ? json_text($anhaenge) : null]);
     return $id;
 }
 
@@ -97,8 +99,10 @@ function mail_versuchen(PDO $db, array $e, array $m, ?Smtp &$smtp): ?string
     if ($r->rowCount() !== 1) return 'Die E-Mail wird gerade schon verschickt.';
     try {
         $smtp ??= new Smtp($e);
-        $smtp->senden($m['an'], $m['betreff'], $m['html'], $m['text']);
-        q($db, 'update mails set gesendet_am = ?, fehler = \'\' where id = ?', [jetzt(), $m['id']]);
+        $anhaenge = array_map(fn ($a) => [$a[0], $a[1], base64_decode($a[2])], json_decode((string) ($m['anhaenge'] ?? ''), true) ?: []);
+        $smtp->senden($m['an'], $m['betreff'], $m['html'], $m['text'], $anhaenge);
+        // Anhänge nach dem Versand nicht aufheben (Datenschutz, Platz)
+        q($db, 'update mails set gesendet_am = ?, fehler = \'\', anhaenge = null where id = ?', [jetzt(), $m['id']]);
         return null;
     } catch (Throwable $f) {
         // nächster Versuch nach 5, 10, 20 … Minuten

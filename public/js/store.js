@@ -1182,6 +1182,11 @@ export function zahlungskontoSpeichern({ name, iban, bic } = {}) {
   return zahlungskonto();
 }
 
+export function zahlungsavis() {
+  ich();
+  throw new Fehler('Das Zahlungsavis als PDF erstellt der Server – in der Demo gibt es das nicht. Auf dem echten Server kommt es auch per E-Mail.');
+}
+
 export function pdfMailen() {
   brauche('buchhaltung');
   throw new Fehler('In der Demo werden keine E-Mails verschickt – das geht nur auf dem eigenen Server.');

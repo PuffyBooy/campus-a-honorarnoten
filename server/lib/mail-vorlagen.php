@@ -274,11 +274,16 @@ function mail_bezahlt_autor(PDO $db, array $note, string $datum): array
         'vorschau' => eur(note_summe($note)) . ' wurden am ' . datum_text($datum) . ' überwiesen.',
         'titel' => 'Deine Anerkennungsprämie ist unterwegs',
         'medium' => $note['medium'],
-        'absaetze' => ["Hallo $vorname,", 'die Buchhaltung hat deine Prämienabrechnung bezahlt. Je nach Bank ist das Geld in ein bis zwei Werktagen auf deinem Konto.'],
+        'absaetze' => ["Hallo $vorname,", 'die Buchhaltung hat deine Prämienabrechnung bezahlt. Je nach Bank ist das Geld in ein bis zwei Werktagen auf deinem Konto. Das Zahlungsavis liegt als PDF bei.'],
         'hinweis' => ['Überwiesen am ' . datum_text($datum) . ': ' . eur(note_summe($note)), 'erfolg'],
         'tabelle' => [['Prämienabrechnung', $note['nummer']], ['Betrag', eur(note_summe($note))], ['Bezahlt am', datum_text($datum)]],
         'knopf' => ['Meine Prämienabrechnungen', app_link($db, 'noten')],
-    ]);
+    ]) + ['anhaenge' => [[zahlungsavis_name($note), 'application/pdf', zahlungsavis_pdf($note, $datum)]]];
+}
+
+function zahlungsavis_name(array $note): string
+{
+    return 'Zahlungsavis_' . preg_replace('/[^\w-]/', '', $note['nummer']) . '.pdf';
 }
 
 function mail_anfrage_admin(PDO $db, array $a): array

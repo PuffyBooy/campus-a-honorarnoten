@@ -225,7 +225,7 @@ final class Honorare
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'meineArtikel',
         'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
-        'offeneZahlungen', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
+        'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'noteLoeschen',
         'loeschprotokoll', 'einstellungenSpeichern', 'statistik', 'exportieren',
@@ -1304,6 +1304,17 @@ final class Honorare
         pruefe($r->rowCount() === 1, 'Diesen Link gibt es nicht (mehr) oder er ist schon zurückgezogen.', 404);
         $this->log('info', 'konten', 'Registrierungslink zurückgezogen');
         return true;
+    }
+
+    /** Zahlungsavis (PDF, base64) einer bezahlten Abrechnung – für die Autor:in selbst und die Buchhaltung */
+    public function zahlungsavis(mixed $noteId = null): array
+    {
+        $db = $this->db();
+        $n = ich($this->ctx);
+        $note = note_holen($db, $noteId);
+        pruefe($note['autor_id'] === $n['id'] || hat($n, 'buchhaltung'), 'Dafür fehlt dir die Berechtigung.', 403);
+        pruefe($note['status'] === 'bezahlt', 'Ein Zahlungsavis gibt es erst, wenn die Prämienabrechnung bezahlt ist.');
+        return ['name' => zahlungsavis_name($note), 'inhalt' => base64_encode(zahlungsavis_pdf($note, (string) $note['bezahlt_am']))];
     }
 
     /** Konto, von dem die Sammelüberweisung (SEPA) abgeht – nur Buchhaltung und Admin */
