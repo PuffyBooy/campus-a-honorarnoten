@@ -15,6 +15,7 @@ require_once __DIR__ . '/nachweise.php';
 require_once __DIR__ . '/mail-vorlagen.php';
 require_once __DIR__ . '/honorare.php';
 require_once __DIR__ . '/betrieb.php';
+require_once __DIR__ . '/kommandozentrale.php';
 
 date_default_timezone_set('Europe/Vienna');
 mb_internal_encoding('UTF-8');

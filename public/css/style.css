@@ -411,6 +411,30 @@ section.fehlerbox { border: 0; }
 .chat-text { white-space: pre-wrap; word-break: break-word; }
 .chat-form textarea { margin-top: .25rem; }
 .chat-leer { margin: .25rem 0; }
+/* Kommandozentrale (Admin → Server) */
+.kommando-kopf { align-items: flex-end; flex-wrap: wrap; gap: .5rem 1rem; }
+.kommando-kopf h2 { margin: 0; }
+.ampel { display: inline-grid; place-items: center; width: 1.35rem; height: 1.35rem; border-radius: 50%; font-size: .8rem;
+  font-weight: 700; flex-shrink: 0; color: #fff; }
+.ampel-ok { background: var(--erfolg); }
+.ampel-warnung { background: var(--warnung); }
+.ampel-fehler { background: var(--gefahr); }
+.pruefliste { list-style: none; padding: 0; margin: .5rem 0 0; display: grid; gap: .5rem 1rem; }
+@media (min-width: 800px) { .pruefliste { grid-template-columns: 1fr 1fr; } }
+.pruefliste li { display: flex; gap: .6rem; align-items: flex-start; }
+.diagramm { margin: 0 0 1.25rem; }
+.diagramm figcaption { margin-bottom: .4rem; }
+.diagramm-flaeche { position: relative; }
+.diagramm svg { width: 100%; height: 140px; display: block; overflow: visible; }
+.diagramm text { font-size: 10px; fill: var(--text-leise); }
+.diagramm-achse { stroke: var(--rand); stroke-width: 1; }
+.diagramm-raster { stroke: var(--rand); stroke-width: 1; stroke-dasharray: 2 4; }
+.saeule-wert { fill: var(--marke); }
+.saeule.aktiv .saeule-wert { fill: var(--marke-dunkel); }
+.diagramm-tipp { position: absolute; top: -.25rem; transform: translate(-50%, -100%); background: var(--text); color: #fff;
+  font-size: .8rem; padding: .25rem .5rem; border-radius: 6px; pointer-events: none; white-space: nowrap; }
+.kommando-aktionen { display: flex; flex-wrap: wrap; gap: .5rem; }
+.test-name { display: inline-flex; gap: .5rem; align-items: center; }
 .login-vergessen { text-align: center; margin: .75rem 0 0; font-size: .9rem; }
 /* Bezahl-Terminal: eine Karte pro Kalenderwoche */
 .woche-kopf { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; }

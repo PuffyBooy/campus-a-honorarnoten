@@ -1057,6 +1057,38 @@ test('Impressum und Datenschutz: Betreiber, öffentlich lesbar, Hinweis bestäti
   assert.equal((await k.anna.ok('einstellungen')).betreiber.name, 'Max Muster');
 });
 
+test('Kommandozentrale: Zustand, Messwerte je Stunde, Leistungstest, Wartungsaktionen – nur für Admins', async () => {
+  for (const f of ['serverStatus', 'leistungstest']) assert.equal((await k.rita.aufruf(f)).status, 403);
+  assert.equal((await k.rita.aufruf('serverAktion', 'aufraeumen')).status, 403);
+  const s = await k.admin.ok('serverStatus');
+  assert.ok(s.pruefungen.length >= 8 && s.pruefungen.every((p) => ['ok', 'warnung', 'fehler'].includes(p.stufe) && p.titel && p.text));
+  assert.equal(s.auslastung.stunden.length, 48);
+  assert.ok(s.auslastung.anfragen_24h > 10, 'jede Anfrage wird gezählt');
+  assert.ok(s.auslastung.stunden.at(-1).anfragen > 0 && s.auslastung.stunden.at(-1).mittel_ms >= 0);
+  assert.equal(s.datenbank.typ, 'SQLite');
+  assert.ok(s.datenbank.schema >= 18 && s.datenbank.groesse > 0 && s.datenbank.tabellen.messwerte >= 1);
+  assert.ok(s.php.version && typeof s.php.erweiterungen.mbstring === 'boolean');
+  assert.ok(!JSON.stringify(s).includes('smtp-geheim'), 'kein Passwort');
+
+  const t = await k.admin.ok('leistungstest');
+  const namen = t.ergebnisse.map((e) => e.titel);
+  for (const n of ['Datenbank lesen', 'Datenbank schreiben', 'Rechenleistung', 'Dateien', 'PDF erstellen', 'campus-a-college.at', 'Mailserver']) assert.ok(namen.includes(n), n);
+  assert.ok(t.ergebnisse.every((e) => ['ok', 'warnung', 'fehler'].includes(e.stufe)));
+  assert.equal(t.ergebnisse.find((e) => e.titel === 'Mailserver').stufe === 'fehler', false, 'Test-Mailserver erreichbar');
+  assert.equal(php.sql("select count(*) n from versuche where schluessel like 'leistungstest-%'").zeilen[0].n, 0, 'räumt hinter sich auf');
+
+  assert.match(await k.admin.ok('serverAktion', 'artikel_neu'), /Artikellisten/);
+  assert.match(await k.admin.ok('serverAktion', 'aufraeumen'), /entfernt/);
+  assert.match(await k.admin.ok('serverAktion', 'mails_wiederholen'), /neu versucht/);
+  assert.match((await k.admin.aufruf('serverAktion', 'rm -rf')).fehler, /Unbekannte Aktion/);
+  const andere = client();
+  await andere.ok('anmelden', 'admin@example.org', 'admin-passwort-1');
+  assert.match(await k.admin.ok('serverAktion', 'sitzungen_beenden'), /Sitzungen beendet/);
+  assert.equal((await andere.aufruf('aktuellerNutzer')).daten, null, 'andere abgemeldet');
+  assert.equal((await k.admin.ok('aktuellerNutzer')).email, 'admin@example.org', 'eigene Sitzung bleibt');
+  assert.ok((await k.admin.ok('protokoll', { suche: 'Kommandozentrale' })).eintraege.length >= 4);
+});
+
 test('Schutz: CSRF-Header, fremde Origin, unbekannte Funktionen', async () => {
   const ohne = await fetch(`${basis}/api/aktuellerNutzer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(ohne.status, 403);
