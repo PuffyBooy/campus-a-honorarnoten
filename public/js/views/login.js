@@ -27,14 +27,21 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
           <input id="a-email" name="email" type="email" autocomplete="username" inputmode="email" required>
           <label for="a-pw">Passwort</label>
           <input id="a-pw" name="passwort" type="password" autocomplete="current-password" required>
-          <div id="a-code-feld" hidden>
-            <label for="a-code">Code aus der Authenticator-App</label>
-            <input id="a-code" name="code" autocomplete="one-time-code" inputmode="numeric" maxlength="11" spellcheck="false">
-            <p class="tipp">6 Ziffern aus der App – oder einer deiner Ersatz-Codes.</p>
-          </div>
           <p class="feldfehler" role="alert"></p>
           <button class="btn btn-primaer btn-breit" type="submit">Anmelden</button>
           <p class="login-vergessen"><button type="button" class="link-knopf" id="a-vergessen">Passwort vergessen?</button></p>
+        </form>
+
+        <form id="p-code" hidden novalidate>
+          <h2>Bestätigungscode</h2>
+          <p>Für dein Konto ist die Zwei-Faktor-Anmeldung eingeschaltet. Öffne deine Authenticator-App und gib den Code ein.</p>
+          <label for="a-code">Code aus der App</label>
+          <input id="a-code" class="code-eingabe" name="code" autocomplete="one-time-code" inputmode="numeric" maxlength="11"
+                 spellcheck="false" placeholder="123 456">
+          <p class="tipp">Handy nicht zur Hand? Dann einen deiner Ersatz-Codes eingeben.</p>
+          <p class="feldfehler" role="alert"></p>
+          <button class="btn btn-primaer btn-breit" type="submit">Bestätigen</button>
+          <p class="login-vergessen"><button type="button" class="link-knopf" data-zurueck>Zurück zur Anmeldung</button></p>
         </form>
 
         <form id="p-vergessen" hidden novalidate>
@@ -93,7 +100,16 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
     });
   }
 
-  const codeFeld = el.querySelector('#a-code-feld');
+  // Zweiter Schritt nur für Konten mit Zwei-Faktor: eigene Ansicht für den Code
+  const codeForm = el.querySelector('#p-code');
+  const codeZeigen = (an) => {
+    codeForm.hidden = !an;
+    el.querySelector('.reiter').hidden = an;
+    panels.anmelden.hidden = an;
+    codeForm.code.value = '';
+    codeForm.querySelector('.feldfehler').textContent = '';
+    (an ? codeForm.code : panels.anmelden.passwort).focus();
+  };
   panels.anmelden.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const f = ev.currentTarget;
@@ -101,22 +117,31 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
     fehler.textContent = '';
     await mitSperre(f.querySelector('button[type=submit]'), async () => {
       try {
-        const r = await store.anmelden(f.email.value, f.passwort.value, codeFeld.hidden ? null : f.code.value);
-        if (r?.code_noetig) {
-          // Passwort stimmt, jetzt noch der Code aus der App
-          codeFeld.hidden = false;
-          f.code.focus();
-          return;
-        }
-        nachAnmeldung();
+        const r = await store.anmelden(f.email.value, f.passwort.value);
+        if (r?.code_noetig) codeZeigen(true); // Passwort stimmt, jetzt noch der Code
+        else nachAnmeldung();
       } catch (e) {
         fehler.textContent = fehlerText(e);
-        if (!codeFeld.hidden) f.code.select();
       }
     });
   });
-  // andere E-Mail-Adresse: Code erst wieder fragen, wenn das Passwort stimmt
-  panels.anmelden.email.addEventListener('input', () => { codeFeld.hidden = true; panels.anmelden.code.value = ''; });
+  const codeAbschicken = () => {
+    const fehler = codeForm.querySelector('.feldfehler');
+    fehler.textContent = '';
+    mitSperre(codeForm.querySelector('button[type=submit]'), async () => {
+      try {
+        await store.anmelden(panels.anmelden.email.value, panels.anmelden.passwort.value, codeForm.code.value);
+        nachAnmeldung();
+      } catch (e) {
+        fehler.textContent = fehlerText(e);
+        codeForm.code.select();
+      }
+    });
+  };
+  codeForm.addEventListener('submit', (ev) => { ev.preventDefault(); codeAbschicken(); });
+  // 6 Ziffern eingetippt: gleich bestätigen
+  codeForm.code.addEventListener('input', () => { if (/^\d{3} ?\d{3}$/.test(codeForm.code.value.trim())) codeAbschicken(); });
+  codeForm.addEventListener('click', (ev) => { if (ev.target.closest('[data-zurueck]')) codeZeigen(false); });
 
   // Passwort vergessen: eigene Ansicht statt der Reiter
   const vergessen = el.querySelector('#p-vergessen');
