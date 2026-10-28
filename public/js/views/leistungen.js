@@ -109,7 +109,32 @@ const AUTO_REDIGIER_TITEL = /^Redigieren \(\d+ Texte?\)$/;
 /** Betrag fürs Redigieren: Anzahl × Satz pro Text */
 const redigierBetrag = (anzahl, saetze) => Math.round((Number(anzahl) || 0) * (satzFuer(saetze, 'college', 'redigieren') ?? 0) * 100) / 100;
 
-function formularHtml(p, einstellungen, nutzer) {
+/**
+ * „Wie letzten Monat“: wiederkehrende Leistungen aus den Abrechnungen der letzten drei Monate
+ * (je Medium, Kategorie und Art eine, neueste zuerst) – zum schnellen Übernehmen ins Formular.
+ */
+function wiederkehrende(noten, nutzer) {
+  const seit = new Date(Date.now() - 92 * 86400000).toISOString().slice(0, 7);
+  const gesehen = new Set();
+  const liste = [];
+  const sortiert = noten.filter((n) => n.status !== 'abgelehnt' && n.monat >= seit).sort((a, b) => b.eingereicht_am.localeCompare(a.eingereicht_am));
+  for (const n of sortiert) {
+    for (const p of n.positionen) {
+      if (p.kategorie === 'redigieren' && !darfRedigieren(nutzer)) continue;
+      const v = { ...p, medium: mediumOder(n.medium) };
+      const schluessel = [v.medium, v.kategorie, v.art, v.kolumnenart, v.vereinbart_mit].join('|');
+      if (gesehen.has(schluessel)) continue;
+      gesehen.add(schluessel);
+      liste.push(v);
+    }
+  }
+  return liste.slice(0, 6);
+}
+
+const vorlageText = (v) => [KATEGORIE_LABEL[v.kategorie], v.kategorie === 'redigieren' ? `${v.anzahl} Texte` : artText(v) || v.kolumnenart,
+  formatEuro(v.betrag_eingereicht ?? v.betrag)].filter(Boolean).join(' · ');
+
+function formularHtml(p, einstellungen, nutzer, vorlagen = []) {
   const saetze = einstellungen.honorarsaetze;
   const kat = p?.kategorie ?? 'kolumne';
   const red = kat === 'redigieren';
@@ -120,6 +145,11 @@ function formularHtml(p, einstellungen, nutzer) {
   return `
     <form class="karte" id="l-form" novalidate>
       <h2>${p ? 'Leistung bearbeiten' : 'Neue Leistung speichern'}</h2>
+      ${!p && vorlagen.length ? `<div class="wiederholen" aria-label="Wie letzten Monat">
+        <span class="klein">Wie letzten Monat:</span>
+        ${vorlagen.map((v, i) => `<button type="button" class="vorlage" data-wiederholen="${i}" title="Übernehmen – nur noch Titel und Datum eintragen">
+          ${new Set(vorlagen.map((x) => x.medium)).size > 1 ? mediumBadge(v.medium) : ''} ${esc(vorlageText(v))}</button>`).join('')}
+      </div>` : ''}
       <p class="medium-fest" id="l-redigieren-medium" ${red ? '' : 'hidden'}>Für ${mediumBadge('college')}
         <span class="klein">Redigieren gibt es nur bei campus a college.</span></p>
       <div id="l-medium-bereich" ${red ? 'hidden' : ''}>
@@ -219,8 +249,9 @@ function formularHtml(p, einstellungen, nutzer) {
 }
 
 export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, istAktuell }) {
-  const [liste, meineNoten, naechste, einstellungen] = await Promise.all([
+  const [liste, meineNoten, naechste, einstellungen, zeiten] = await Promise.all([
     store.meineLeistungen(), store.meineNoten(), store.naechsteNummer(), store.einstellungen(),
+    Promise.resolve(store.ablaufZeiten()).catch(() => null),
   ]);
   if (!istAktuell()) return;
   const heute = heuteIso();
@@ -229,6 +260,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
   const unterwegs = meineNoten.filter((n) => ['eingereicht', 'angenommen'].includes(n.status) || (n.status === 'abgelehnt' && !n.zurueckgeholt_am));
   const ausgezahlt = meineNoten.filter((n) => n.status === 'bezahlt' && n.monat.startsWith(heute.slice(0, 4)));
   const bearbeite = liste.find((p) => p.id === bearbeiteId) ?? null;
+  const vorlagen = wiederkehrende(meineNoten, nutzer);
   if (!bearbeite) bearbeiteId = null;
   // campus a und campus a college werden getrennt abgerechnet: eine Karte pro Medium
   const gruppen = MEDIUM_KEYS.map((m) => ({ medium: m, positionen: liste.filter((p) => mediumOder(p.medium) === m) }))
@@ -256,7 +288,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
 
     <div class="spalten">
       <div>
-        ${formularHtml(bearbeite, einstellungen, nutzer)}
+        ${formularHtml(bearbeite, einstellungen, nutzer, vorlagen)}
         <section class="karte" id="artikel-karte" aria-live="polite">
           <h2>Meine Artikel</h2>
           <div id="artikel-inhalt">${artikelKarteHtml(null)}</div>
@@ -307,7 +339,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     ${unterwegs.length ? `
     <section class="unterwegs">
       <div class="kopfzeile"><h2>Eingereicht und unterwegs</h2><a href="#/noten" class="klein">Alle Abrechnungen</a></div>
-      <ul class="liste" id="unterwegs">${unterwegs.map((n) => noteKarte(n, { kompakt: true })).join('')}</ul>
+      <ul class="liste" id="unterwegs">${unterwegs.map((n) => noteKarte(n, { kompakt: true, zeiten })).join('')}</ul>
     </section>` : ''}`;
   notenAktionen(el.querySelector('#unterwegs'), unterwegs, { store, neuLaden });
 
@@ -360,6 +392,30 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     }
   });
   el.querySelector('#l-abbrechen')?.addEventListener('click', () => { bearbeiteId = null; neuLaden(); });
+
+  // ---- „Wie letzten Monat“: Kategorie, Art, Betrag usw. übernehmen; Titel und Datum sind neu
+  el.querySelector('.wiederholen')?.addEventListener('click', (ev) => {
+    const v = vorlagen[ev.target.closest('[data-wiederholen]')?.dataset.wiederholen];
+    if (!v) return;
+    form.kategorie.value = v.kategorie;
+    if (form.medium.type !== 'hidden' || form.medium.value === v.medium) form.medium.value = v.medium;
+    auswahlAnpassen();
+    artikelSetzen('');
+    form.art.value = v.art ? artText(v) : '';
+    form.kolumnenart.value = v.kolumnenart ?? '';
+    form.vereinbart_mit.value = v.vereinbart_mit ?? '';
+    if (v.kategorie === 'redigieren') {
+      form.anzahl.value = v.anzahl;
+      form.betrag.value = satzText(redigierBetrag(v.anzahl, saetze));
+    } else {
+      form.betrag.value = formatBetragPlain(v.betrag_eingereicht ?? v.betrag);
+      letzterSatz = null; // Betrag nicht beim Umschalten überschreiben
+    }
+    form.titel.value = '';
+    form.veroeffentlichung.value = heuteIso();
+    form.titel.focus();
+    meldung('Übernommen – jetzt Titel und Datum eintragen.');
+  });
 
   // ---- Nachweise (nur Redigieren): Dateien prüfen, sobald gewählt; vorhandene entfernen
   const nachweisDateien = () => Array.from(form.nachweis.files ?? []);

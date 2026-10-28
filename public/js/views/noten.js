@@ -89,8 +89,29 @@ function rueckfrageHtml(n, kompakt) {
     </details>`;
 }
 
+/**
+ * Wann kommt das Geld ungefähr? Aus den üblichen Zeiten (ablaufZeiten) – nur solange noch nicht bezahlt.
+ */
+export function prognoseHtml(n, zeiten) {
+  if (!zeiten?.zahlung_tage && zeiten?.zahlung_tage !== 0) return '';
+  const plus = (iso, tage) => new Date(new Date(iso).getTime() + tage * 86400000);
+  let ziel;
+  let text = '';
+  if (n.status === 'eingereicht' && zeiten.pruefung_tage != null) {
+    ziel = plus(n.eingereicht_am, zeiten.pruefung_tage + zeiten.zahlung_tage);
+    text = `Die Redaktion prüft meist innerhalb von ${zeiten.pruefung_tage === 1 ? 'einem Tag' : `${zeiten.pruefung_tage} Tagen`}. `;
+  } else if (n.status === 'angenommen' && n.entschieden_am) {
+    ziel = plus(n.entschieden_am, zeiten.zahlung_tage);
+  } else {
+    return '';
+  }
+  const datum = ziel.toLocaleDateString('de-AT', { day: 'numeric', month: 'long' });
+  return `<p class="prognose klein">⏱ ${esc(text)}${ziel < new Date()
+    ? 'Die Überweisung sollte bald kommen.' : `Überweisung voraussichtlich bis <strong>${esc(datum)}</strong>.`}</p>`;
+}
+
 /** Karte einer Abrechnung mit Verlauf (auch in „Mein Monat“ verwendet) */
-export function noteKarte(n, { neu = false, kompakt = false } = {}) {
+export function noteKarte(n, { neu = false, kompakt = false, zeiten = null } = {}) {
   return `
       <li class="karte note-karte${neu ? ' neu' : ''}" data-id="${esc(n.id)}">
         <div class="note-kopf">
@@ -99,6 +120,7 @@ export function noteKarte(n, { neu = false, kompakt = false } = {}) {
         </div>
         <p class="meta">Monatsabrechnung ${esc(formatMonat(n.monat))} · abgeschickt am ${esc(formatZeitpunkt(n.eingereicht_am))}</p>
         ${schritteHtml(n)}
+        ${prognoseHtml(n, zeiten)}
         <p class="betrag">${esc(formatEuro(n.betrag))} <span class="klein">(${n.positionen.length}
           ${n.positionen.length === 1 ? 'Leistung' : 'Leistungen'})</span></p>
         ${n.status === 'abgelehnt' ? `<div class="fehlerbox"><strong>Begründung der Ablehnung:</strong> ${esc(n.ablehnungsgrund)}
@@ -168,7 +190,7 @@ export function notenAktionen(liste, noten, { store, neuLaden }) {
 let gewaehltesJahr = null; // bleibt beim Neuladen der Seite erhalten
 
 export async function render(el, { store, flash, neuLaden, istAktuell }) {
-  const alle = await store.meineNoten();
+  const [alle, zeiten] = await Promise.all([store.meineNoten(), Promise.resolve(store.ablaufZeiten()).catch(() => null)]);
   if (!istAktuell()) return;
   const diesesJahr = new Date().getFullYear();
   const jahre = [...new Set([diesesJahr, ...alle.map(jahrVon)])].sort((a, b) => b - a);
@@ -192,7 +214,7 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
       <div class="kennzahl kennzahl-wahl"><label for="n-jahr" class="kennzahl-titel">Jahr</label>
         <select id="n-jahr">${jahre.map((j) => `<option ${j === gewaehltesJahr ? 'selected' : ''}>${j}</option>`).join('')}</select></div>
     </section>
-    ${noten.length ? `<ul class="liste">${noten.map((n) => noteKarte(n, { neu: flash?.neu === n.nummer })).join('')}</ul>`
+    ${noten.length ? `<ul class="liste">${noten.map((n) => noteKarte(n, { neu: flash?.neu === n.nummer, zeiten })).join('')}</ul>`
     : `<section class="karte"><p>${gewaehltesJahr} noch keine Prämienabrechnungen.</p></section>`}`;
 
   el.querySelector('#n-jahr').addEventListener('change', (ev) => { gewaehltesJahr = Number(ev.target.value); neuLaden(); });

@@ -1267,6 +1267,28 @@ export function serverAktion() {
   return 'In der Demo gibt es keinen Server – die Aktion läuft nur auf dem echten Server.';
 }
 
+export function neuigkeitenGesehen(nid) {
+  const n = ich();
+  pruefe(/^\d{4}-\d{2}-\d{2}[a-z]?$/.test(String(nid)), 'Ungültiger Eintrag.');
+  n.neuigkeiten_gesehen = nid;
+  speichern();
+  return true;
+}
+
+/** Median in Tagen: Einreichen bis Entscheidung, Entscheidung bis Zahlung (bezahlte Abrechnungen der letzten 12 Monate) */
+export function ablaufZeiten() {
+  ich();
+  const seit = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10);
+  const bezahlt = db.noten.filter((x) => x.status === 'bezahlt' && x.entschieden_am && x.bezahlt_am >= seit);
+  const tage = (von, bis) => Math.max(0, (new Date(bis) - new Date(von)) / 86400000);
+  const median = (w) => (w.length < 3 ? null : Math.ceil([...w].sort((a, b) => a - b)[Math.floor(w.length / 2)]));
+  return {
+    pruefung_tage: median(bezahlt.map((x) => tage(x.eingereicht_am, x.entschieden_am))),
+    zahlung_tage: median(bezahlt.map((x) => tage(x.entschieden_am.slice(0, 10), x.bezahlt_am))),
+    anzahl: bezahlt.length,
+  };
+}
+
 export function navZaehler() {
   const n = ich();
   return {

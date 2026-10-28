@@ -1135,6 +1135,17 @@ test('Sicherung zurückspielen: Stand davor wird gesichert, Daten wie in der Sic
   assert.ok((await k.admin.ok('nutzerListe')).length > 3, 'Konten wieder da, Admin bleibt angemeldet');
 });
 
+test('Ablaufzeiten (für die Prognose) und „Was ist neu?“ gesehen', async () => {
+  const z = await k.anna.ok('ablaufZeiten');
+  assert.ok('pruefung_tage' in z && 'zahlung_tage' in z && typeof z.anzahl === 'number');
+  assert.ok(z.anzahl < 3 ? z.zahlung_tage === null : z.zahlung_tage >= 0, 'erst ab drei bezahlten Abrechnungen');
+  assert.equal((await client().aufruf('ablaufZeiten')).status, 401);
+  assert.equal((await k.anna.ok('aktuellerNutzer')).neuigkeiten_gesehen, null);
+  assert.match((await k.anna.aufruf('neuigkeitenGesehen', "x'; drop table nutzer;--")).fehler, /Ungültig/);
+  await k.anna.ok('neuigkeitenGesehen', '2026-10-29');
+  assert.equal((await k.anna.ok('aktuellerNutzer')).neuigkeiten_gesehen, '2026-10-29');
+});
+
 test('Kommandozentrale: Zustand, Messwerte je Stunde, Leistungstest, Wartungsaktionen – nur für Admins', async () => {
   for (const f of ['serverStatus', 'leistungstest']) assert.equal((await k.rita.aufruf(f)).status, 403);
   assert.equal((await k.rita.aufruf('serverAktion', 'aufraeumen')).status, 403);

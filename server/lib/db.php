@@ -315,6 +315,10 @@ const MIGRATIONEN = [
     <<<'SQL'
     alter table sitzungen add column ansicht_als text;
     SQL,
+    // Version 20: bis zu welchem Eintrag „Was ist neu?“ gesehen wurde
+    <<<'SQL'
+    alter table nutzer add column neuigkeiten_gesehen text;
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -597,6 +601,10 @@ const MYSQL_MIGRATIONEN = [
     // Version 12 = SQLite-Version 19
     <<<'SQL'
     alter table sitzungen add column ansicht_als varchar(36) null;
+    SQL,
+    // Version 13 = SQLite-Version 20
+    <<<'SQL'
+    alter table nutzer add column neuigkeiten_gesehen varchar(20) null;
     SQL,
 ];
 

@@ -66,6 +66,7 @@ function nutzer_aus_zeile(?array $z): ?array
         'letzter_login' => $z['letzter_login'],
         'hinweis_bestaetigt_am' => $z['hinweis_bestaetigt_am'] ?? null,
         'zwei_faktor' => !empty($z['zwei_faktor']),
+        'neuigkeiten_gesehen' => $z['neuigkeiten_gesehen'] ?? null,
         'benachrichtigungen' => (object) (json_decode($z['benachrichtigungen'] ?? '{}', true) ?: []),
     ];
 }
@@ -251,7 +252,7 @@ final class Honorare
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'nachweisHochladen', 'nachweisLoeschen', 'nachweisLaden', 'meineArtikel',
         'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
-        'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'serverStatus', 'leistungstest', 'serverAktion', 'funktionstest', 'sicherungZurueckspielen', 'ansichtStarten', 'ansichtBeenden',
+        'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'ablaufZeiten', 'neuigkeitenGesehen', 'serverStatus', 'leistungstest', 'serverAktion', 'funktionstest', 'sicherungZurueckspielen', 'ansichtStarten', 'ansichtBeenden',
         'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'noteLoeschen',
@@ -262,7 +263,7 @@ final class Honorare
     ];
 
     /** „Als Person ansehen“: nur diese Funktionen (lesen) – alles andere ist gesperrt (lib/ansicht.js) */
-    public const NUR_ANSEHEN = ['aktuellerNutzer', 'abmelden', 'ansichtBeenden', 'einstellungen', 'rechtliches', 'navZaehler',
+    public const NUR_ANSEHEN = ['aktuellerNutzer', 'abmelden', 'ansichtBeenden', 'einstellungen', 'rechtliches', 'navZaehler', 'ablaufZeiten',
         'meineLeistungen', 'meineArtikel', 'naechsteNummer', 'notenDiesenMonat', 'meineNoten', 'note', 'nachrichten', 'nachweisLaden',
         'zahlungsavis', 'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'kommentare', 'verlaufVon',
         'offeneZahlungen', 'bezahlteNoten', 'bezahlteNotenSeit', 'zahlungskonto'];
@@ -1053,6 +1054,37 @@ final class Honorare
         };
         $this->log('warnung', 'system', 'Kommandozentrale: ' . $meldung, $admin);
         return $meldung;
+    }
+
+    /**
+     * Wie lange dauert es meistens? Mittelwert (Median) in Tagen aus den bezahlten Abrechnungen der letzten 12 Monate:
+     * Einreichen bis Entscheidung und Entscheidung bis Zahlung. null, solange es zu wenige gibt.
+     */
+    public function ablaufZeiten(): array
+    {
+        ich($this->ctx);
+        $zeilen = zeilen($this->db(), "select eingereicht_am, entschieden_am, bezahlt_am from noten
+            where status = 'bezahlt' and entschieden_am is not null and bezahlt_am >= ?", [date('Y-m-d', time() - 365 * 86400)]);
+        $median = function (array $werte): ?int {
+            if (count($werte) < 3) return null;
+            sort($werte);
+            return (int) ceil($werte[intdiv(count($werte), 2)]);
+        };
+        $tage = fn ($von, $bis) => max(0, (strtotime($bis) - strtotime($von)) / 86400);
+        return [
+            'pruefung_tage' => $median(array_map(fn ($z) => $tage($z['eingereicht_am'], $z['entschieden_am']), $zeilen)),
+            'zahlung_tage' => $median(array_map(fn ($z) => $tage(substr($z['entschieden_am'], 0, 10), $z['bezahlt_am']), $zeilen)),
+            'anzahl' => count($zeilen),
+        ];
+    }
+
+    /** „Was ist neu?“ bis zu diesem Eintrag gesehen */
+    public function neuigkeitenGesehen(mixed $id = null): bool
+    {
+        $n = ich($this->ctx);
+        pruefe(preg_match('/^\d{4}-\d{2}-\d{2}[a-z]?$/', s($id)) === 1, 'Ungültiger Eintrag.');
+        q($this->db(), 'update nutzer set neuigkeiten_gesehen = ? where id = ?', [s($id), $n['id']]);
+        return true;
     }
 
     /** Zahlen für die Navigation: offene Zugangsanfragen (Admin), Rückfragen an mich, Antworten an die Redaktion */
