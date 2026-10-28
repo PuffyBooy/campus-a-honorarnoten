@@ -120,7 +120,7 @@ function darf_redigieren(?array $n): bool
 const BENACHRICHTIGUNGEN = [
     'neue_note' => ['redaktion'], 'zur_zahlung' => ['buchhaltung'], 'anfrage' => ['admin'],
     'eingang' => ['autor'], 'angenommen' => ['autor'], 'abgelehnt' => ['autor'], 'bezahlt' => ['autor'],
-    'probleme' => ['admin'],
+    'probleme' => ['admin'], 'rueckfrage' => ['autor'],
 ];
 const BENACHRICHTIGUNGEN_FUER_ADMIN = ['neue_note', 'zur_zahlung'];
 

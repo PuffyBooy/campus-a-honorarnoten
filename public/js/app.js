@@ -107,11 +107,17 @@ async function renderNav(nutzer, pfad) {
     nav.innerHTML = '';
     return;
   }
-  const anfragen = await Promise.resolve(store.offeneAnfragenAnzahl()).catch(() => 0);
+  // Zähler: offene Zugangsanfragen (Admin), Rückfragen an mich (Autor:in), Antworten auf Rückfragen (Redaktion)
+  const z = await Promise.resolve(store.navZaehler()).catch(() => ({}));
+  const ZAEHLER = {
+    admin: [z.anfragen, 'offene Zugangsanfragen'],
+    noten: [z.rueckfragen, 'Rückfragen der Redaktion – bitte antworten'],
+    redaktion: [z.antworten, 'Antworten auf Rückfragen'],
+  };
   const links = ROUTEN.filter((r) => r.titel && darf(nutzer, r)).map((r) => {
     const aktiv = pfad === r.pfad || pfad.startsWith(r.pfad + '/');
-    const zusatz = r.pfad === 'admin' && anfragen
-      ? ` <span class="zaehler" title="offene Zugangsanfragen">${anfragen}</span>` : '';
+    const [anzahl, titel] = ZAEHLER[r.pfad] ?? [];
+    const zusatz = anzahl ? ` <span class="zaehler" title="${esc(titel)}">${anzahl}</span>` : '';
     return `<a href="#/${r.pfad}"${aktiv ? ' aria-current="page"' : ''}>${esc(r.titel)}${zusatz}</a>`;
   }).join('');
   nav.innerHTML = `<div class="nav-links">${links}</div>

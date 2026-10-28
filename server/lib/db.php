@@ -285,6 +285,21 @@ const MIGRATIONEN = [
     );
     create index nachweise_position on nachweise(position_id);
     SQL,
+    // Version 17: Rückfragen der Redaktion an die Autor:in (kleiner Chat pro Abrechnung);
+    // noten.rueckfrage: 'offen' (wartet auf Antwort) oder 'beantwortet' (Antwort da, Redaktion noch nicht reagiert)
+    <<<'SQL'
+    create table nachrichten (
+      id            text primary key,
+      note_id       text not null references noten(id) on delete cascade,
+      von_id        text,
+      von_name      text not null,
+      von_redaktion integer not null default 0,
+      text          text not null,
+      am            text not null
+    );
+    create index nachrichten_note on nachrichten(note_id, am);
+    alter table noten add column rueckfrage text;
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -538,11 +553,26 @@ const MYSQL_MIGRATIONEN = [
       index nachweise_position (position_id)
     ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
     SQL,
+    // Version 10 = SQLite-Version 17
+    <<<'SQL'
+    create table if not exists nachrichten (
+      id            varchar(36) not null primary key,
+      note_id       varchar(36) not null,
+      von_id        varchar(36) null,
+      von_name      varchar(250) not null,
+      von_redaktion tinyint not null default 0,
+      text          text not null,
+      am            varchar(30) not null,
+      index nachrichten_note (note_id, am),
+      foreign key (note_id) references noten(id) on delete cascade
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    alter table noten add column rueckfrage varchar(20) null;
+    SQL,
 ];
 
 /** Tabellen in der Reihenfolge, in der sie eingespielt werden können (für die Sicherung) */
 const TABELLEN = ['nutzer', 'sitzungen', 'anfragen', 'positionen', 'noten', 'note_positionen', 'kommentare', 'verlauf',
-    'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails', 'links', 'protokoll', 'nachweise'];
+    'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails', 'links', 'protokoll', 'nachweise', 'nachrichten'];
 
 /**
  * Datenbank öffnen und auf den neuesten Stand bringen.

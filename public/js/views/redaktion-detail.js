@@ -7,6 +7,7 @@ import {
 import { bestaetigen, fehlerText, meldung, statusBadge } from '../lib/ui.js';
 import { hatArtikel, mediumBadge, titelLink } from '../lib/campus.js';
 import { nachweiseHtml } from '../lib/nachweise.js';
+import { chatAnzeigen } from '../lib/rueckfrage.js';
 import { standardBetrag, weichtAb } from '../lib/honorarsaetze.js';
 
 function verlaufDetails(e) {
@@ -83,6 +84,7 @@ export async function pruefungRendern(el, { store, nutzer, params, einstellungen
   if (!istAktuell()) return;
   const kannAnnehmen = ['eingereicht', 'abgelehnt'].includes(n.status) && !n.zurueckgeholt_am;
   const kannAblehnen = ['eingereicht', 'angenommen'].includes(n.status);
+  const kannRueckfrage = kannAblehnen;
   const aenderbar = n.status !== 'bezahlt';
   const geprueft = () => n.positionen.filter((p) => p.geprueft_am).length;
 
@@ -124,6 +126,7 @@ export async function pruefungRendern(el, { store, nutzer, params, einstellungen
     <div class="entscheidung">
       <div class="aktionen">
         ${kannAnnehmen ? '<button type="button" class="btn btn-erfolg" id="d-annehmen">Annehmen</button>' : ''}
+        ${kannRueckfrage && !n.nachrichten ? '<button type="button" class="btn" id="d-rueckfrage-oeffnen">Nachfragen …</button>' : ''}
         ${kannAblehnen ? '<button type="button" class="btn btn-gefahr" id="d-ablehnen-oeffnen">Zurückgeben …</button>' : ''}
         ${n.status === 'bezahlt' ? '<span class="klein">Bereits bezahlt.</span>' : ''}
       </div>
@@ -132,6 +135,14 @@ export async function pruefungRendern(el, { store, nutzer, params, einstellungen
         ${naechste ? `<a class="btn" href="#/redaktion/${esc(naechste.id)}">Nächste →</a>` : ''}
       </div>
     </div>
+    <section id="d-rueckfrage" class="unterkarte rueckfrage" ${n.nachrichten ? '' : 'hidden'}>
+      <div class="kopfzeile"><h3>Rückfrage an ${esc(n.autor.vorname || 'die Autor:in')}</h3>
+        ${n.rueckfrage === 'offen' ? '<span class="rueckfrage-marke">Wartet auf Antwort</span>' : ''}
+        ${n.rueckfrage === 'beantwortet' ? `<span><span class="rueckfrage-marke rueckfrage-antwort">Antwort da</span>
+          <button type="button" class="btn btn-klein" id="d-rueckfrage-erledigt">Als geklärt markieren</button></span>` : ''}</div>
+      <p class="klein">Statt gleich zurückzugeben: Die Autor:in bekommt eine E-Mail und antwortet in der App. Die Abrechnung bleibt so lange, wie sie ist.</p>
+      <div id="d-chat"><p class="laden">Wird geladen …</p></div>
+    </section>
     <form id="d-ablehnen-form" class="unterkarte" hidden novalidate>
       <p class="klein">Die Leistungen gehen sofort zurück an die Autor:in. Sie überarbeitet sie in „Mein Monat“ und reicht neu ein.</p>
       ${einstellungen.rueckgabe_vorlagen?.length ? `<p class="klein">Vorlage übernehmen:</p>
@@ -186,6 +197,25 @@ export async function pruefungRendern(el, { store, nutzer, params, einstellungen
       knoepfe.forEach((k) => { k.disabled = false; });
     }
   };
+
+  // ---- Rückfrage (Chat mit der Autor:in)
+  const rueckfrage = el.querySelector('#d-rueckfrage');
+  let chatGeladen = false;
+  const chatLaden = async () => {
+    if (chatGeladen) return;
+    chatGeladen = true;
+    await chatAnzeigen(el.querySelector('#d-chat'), { store, note: n, rolle: 'redaktion', nachAenderung: neuLaden })
+      .catch((e) => { el.querySelector('#d-chat').innerHTML = `<p class="fehlerbox">${esc(fehlerText(e))}</p>`; });
+  };
+  if (!rueckfrage.hidden) chatLaden();
+  el.querySelector('#d-rueckfrage-oeffnen')?.addEventListener('click', async (ev) => {
+    ev.currentTarget.hidden = true;
+    rueckfrage.hidden = false;
+    await chatLaden();
+    rueckfrage.querySelector('textarea')?.focus();
+    rueckfrage.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
+  el.querySelector('#d-rueckfrage-erledigt')?.addEventListener('click', () => aktion(() => store.rueckfrageErledigt(n.id), 'Rückfrage als geklärt markiert.'));
 
   // ---- Haken „geprüft“: sofort speichern, ohne die Seite neu aufzubauen
   el.querySelector('.pruef-tabelle').addEventListener('change', async (ev) => {

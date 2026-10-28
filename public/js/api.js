@@ -93,6 +93,11 @@ export const betragKorrigieren = f('betragKorrigieren');
 export const positionPruefen = f('positionPruefen');
 export const kommentieren = f('kommentieren');
 export const kommentare = f('kommentare');
+export const nachrichten = f('nachrichten');
+export const nachfragen = f('nachfragen');
+export const rueckfrageBeantworten = f('rueckfrageBeantworten');
+export const rueckfrageErledigt = f('rueckfrageErledigt');
+export const navZaehler = f('navZaehler');
 export const verlaufVon = f('verlaufVon');
 
 // Buchhaltung
