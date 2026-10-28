@@ -371,6 +371,45 @@ function mail_einladung(PDO $db, string $link, int $tage, array $von): array
     ]);
 }
 
+function mail_passwort_vergessen(PDO $db, string $vorname, string $link): array
+{
+    return mail_bauen([
+        'betreff' => 'Neues Passwort für die Anerkennungsprämien',
+        'vorschau' => 'Mit diesem Link legst du ein neues Passwort fest.',
+        'titel' => 'Neues Passwort festlegen',
+        'absaetze' => ["Hallo $vorname,", 'du hast ein neues Passwort angefordert. Mit dem Knopf legst du es fest. Der Link gilt eine Stunde und nur einmal.',
+            'Warst du das nicht? Dann ignoriere diese E-Mail einfach, dein bisheriges Passwort bleibt gültig.'],
+        'knopf' => ['Neues Passwort festlegen', $link],
+        'nachsatz' => 'Oder diese Adresse im Browser öffnen:',
+    ]);
+}
+
+function mail_passwort_geaendert(PDO $db, string $vorname): array
+{
+    return mail_bauen([
+        'betreff' => 'Dein Passwort wurde geändert',
+        'vorschau' => 'Für dein Konto gilt jetzt ein neues Passwort.',
+        'titel' => 'Passwort geändert',
+        'absaetze' => ["Hallo $vorname,", 'das Passwort deines Kontos bei den Anerkennungsprämien wurde gerade geändert.'],
+        'hinweis' => ['Warst du das nicht? Dann melde dich bitte sofort beim Admin.', 'gefahr'],
+        'knopf' => ['Zur Anmeldung', app_link($db)],
+    ]);
+}
+
+function mail_zwei_faktor(PDO $db, string $vorname, bool $an): array
+{
+    return mail_bauen([
+        'betreff' => $an ? 'Zwei-Faktor-Anmeldung eingeschaltet' : 'Zwei-Faktor-Anmeldung ausgeschaltet',
+        'vorschau' => $an ? 'Beim Anmelden brauchst du ab jetzt den Code aus der App.' : 'Beim Anmelden reicht wieder das Passwort.',
+        'titel' => $an ? 'Zwei-Faktor-Anmeldung ist an' : 'Zwei-Faktor-Anmeldung ist aus',
+        'absaetze' => ["Hallo $vorname,", $an
+            ? 'für dein Konto ist jetzt die Zwei-Faktor-Anmeldung eingeschaltet. Beim Anmelden brauchst du zusätzlich den Code aus deiner App. Bewahre die Ersatz-Codes gut auf.'
+            : 'für dein Konto ist die Zwei-Faktor-Anmeldung jetzt ausgeschaltet. Beim Anmelden reicht wieder das Passwort.'],
+        'hinweis' => ['Warst du das nicht? Dann melde dich bitte sofort beim Admin.', $an ? 'info' : 'gefahr'],
+        'knopf' => ['Zur App', app_link($db)],
+    ]);
+}
+
 function mail_test(PDO $db, string $an): array
 {
     return mail_bauen([

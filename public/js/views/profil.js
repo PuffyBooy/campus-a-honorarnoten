@@ -4,6 +4,8 @@ import { formatIban, ibanFehler, bicIstGueltig } from '../lib/iban.js';
 import { MEDIEN, MEDIUM_KEYS, PROFIL_FELD, profilIdAusLink, profilLink } from '../lib/campus.js';
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { bekommt, verfuegbareBenachrichtigungen } from '../lib/benachrichtigungen.js';
+import { downloadBlob } from '../lib/csv.js';
+import qrcode from '../../vendor/qrcode-generator.mjs';
 
 function feld(name, label, wert, { typ = 'text', pflicht = true, attrs = '' } = {}) {
   return `
@@ -84,6 +86,20 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
           <p class="feldfehler" role="alert"></p>
           <button class="btn" type="submit">Passwort ändern</button>
         </form>
+        <section class="karte" id="zf-karte">
+          <h2>Zwei-Faktor-Anmeldung ${nutzer.zwei_faktor ? '<span class="badge badge-bezahlt">Eingeschaltet</span>' : ''}</h2>
+          ${nutzer.zwei_faktor ? `
+          <p>Beim Anmelden fragen wir nach dem Passwort zusätzlich nach einem Code aus deiner Authenticator-App.</p>
+          <form id="zf-aus" novalidate>
+            <label for="zf-pw">Zum Ausschalten: dein Passwort</label>
+            <input id="zf-pw" name="passwort" type="password" autocomplete="current-password" required>
+            <p class="feldfehler" role="alert"></p>
+            <button class="btn btn-gefahr" type="submit">Zwei-Faktor ausschalten</button>
+          </form>` : `
+          <p>Freiwillig, aber sicherer: Beim Anmelden brauchst du dann zusätzlich einen Code aus einer App am Handy
+            (z. B. Google Authenticator, Microsoft Authenticator oder Aegis).</p>
+          <div id="zf-schritte"><button class="btn" type="button" id="zf-start">Zwei-Faktor einrichten</button></div>`}
+        </section>
       </div>
     </div>`;
 
@@ -163,6 +179,8 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
     });
   });
 
+  zweiFaktor(el, { store, neuLaden });
+
   pwForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const fehler = pwForm.querySelector('.feldfehler');
@@ -172,6 +190,79 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
         await store.passwortAendern(pwForm.alt.value, pwForm.neu.value);
         pwForm.reset();
         meldung('Passwort geändert.', 'erfolg');
+      } catch (e) {
+        fehler.textContent = fehlerText(e);
+      }
+    });
+  });
+}
+
+/** Zwei-Faktor im Profil: QR-Code zeigen, mit erstem Code bestätigen, Ersatz-Codes einmal anzeigen; Ausschalten mit Passwort */
+function zweiFaktor(el, { store, neuLaden }) {
+  const schritte = el.querySelector('#zf-schritte');
+  el.querySelector('#zf-start')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    let r;
+    try {
+      r = await store.zweiFaktorStarten();
+    } catch (e) {
+      meldung(fehlerText(e), 'fehler');
+      return;
+    }
+    const qr = qrcode(0, 'M');
+    qr.addData(r.uri);
+    qr.make();
+    schritte.innerHTML = `
+      <ol class="zf-liste">
+        <li>Scanne den QR-Code mit deiner Authenticator-App.
+          <div class="zf-qr">${qr.createSvgTag({ cellSize: 4, margin: 4, scalable: true, alt: 'QR-Code für die Authenticator-App' })}</div>
+          <details class="aufklapp"><summary>Kein Scannen möglich? Schlüssel abtippen</summary>
+            <p><code class="zf-schluessel">${esc(r.geheimnis.match(/.{1,4}/g).join(' '))}</code></p></details></li>
+        <li><form id="zf-an" novalidate>
+          <label for="zf-code">Code aus der App</label>
+          <input id="zf-code" name="code" autocomplete="one-time-code" inputmode="numeric" maxlength="7" required>
+          <p class="feldfehler" role="alert"></p>
+          <div class="aktionen"><button class="btn btn-primaer" type="submit">Einschalten</button>
+            <button class="btn" type="button" id="zf-abbrechen">Abbrechen</button></div>
+        </form></li>
+      </ol>`;
+    const form = schritte.querySelector('#zf-an');
+    form.code.focus();
+    schritte.querySelector('#zf-abbrechen').addEventListener('click', neuLaden);
+    form.addEventListener('submit', (e2) => {
+      e2.preventDefault();
+      const fehler = form.querySelector('.feldfehler');
+      fehler.textContent = '';
+      mitSperre(form.querySelector('[type=submit]'), async () => {
+        try {
+          const { ersatzcodes } = await store.zweiFaktorEinschalten(form.code.value);
+          schritte.innerHTML = `
+            <p class="erfolgbox" role="status"><strong>Zwei-Faktor ist eingeschaltet.</strong> Auf anderen Geräten wurdest du abgemeldet.</p>
+            <p><strong>Deine Ersatz-Codes</strong> – falls das Handy verloren geht. Jeder gilt einmal.
+              Bitte jetzt speichern oder ausdrucken: Sie werden nur dieses eine Mal angezeigt.</p>
+            <ul class="zf-codes">${ersatzcodes.map((c) => `<li><code>${esc(c)}</code></li>`).join('')}</ul>
+            <div class="aktionen"><button class="btn" type="button" id="zf-laden">Codes herunterladen</button>
+              <button class="btn btn-primaer" type="button" id="zf-fertig">Fertig</button></div>`;
+          schritte.querySelector('#zf-laden').addEventListener('click', () => downloadBlob('ersatz-codes-campus-a-praemien.txt',
+            new Blob([`Ersatz-Codes für die Anerkennungsprämien (campus a / campus a college)\nJeder Code gilt einmal.\n\n${ersatzcodes.join('\n')}\n`], { type: 'text/plain' })));
+          schritte.querySelector('#zf-fertig').addEventListener('click', neuLaden);
+        } catch (e) {
+          fehler.textContent = fehlerText(e);
+          form.code.select();
+        }
+      });
+    });
+  }));
+
+  const aus = el.querySelector('#zf-aus');
+  aus?.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    const fehler = aus.querySelector('.feldfehler');
+    fehler.textContent = '';
+    mitSperre(aus.querySelector('[type=submit]'), async () => {
+      try {
+        await store.zweiFaktorAusschalten(aus.passwort.value);
+        meldung('Zwei-Faktor-Anmeldung ausgeschaltet.', 'erfolg');
+        neuLaden();
       } catch (e) {
         fehler.textContent = fehlerText(e);
       }

@@ -111,6 +111,13 @@ function api(): array
         protokoll($db, 'warnung', 'anmeldung', 'Zu viele Versuche mit Links (Anmelde- oder Registrierungslink), vorübergehend gesperrt');
         return [429, ['fehler' => 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.']];
     }
+    if ($name === 'passwortVergessen' && (!versuch_erlaubt($db, "vergessen:$ip", 10, 3600)
+        || !versuch_erlaubt($db, 'vergessen:' . strtolower(tr($args[0] ?? '')), 3, 3600))) {
+        return [429, ['fehler' => 'Zu viele Anfragen. Bitte in einer Stunde erneut versuchen.']];
+    }
+    if ($name === 'passwortNeuSetzen' && !versuch_erlaubt($db, "link:$ip", 30, 900)) {
+        return [429, ['fehler' => 'Zu viele Versuche. Bitte in 15 Minuten erneut versuchen.']];
+    }
     if ($name === 'zugangAnfragen' && !versuch_erlaubt($db, "anfrage:$ip", 5, 3600)) {
         return [429, ['fehler' => 'Zu viele Anfragen. Bitte später erneut versuchen.']];
     }

@@ -4,12 +4,13 @@
 set -euo pipefail
 JSZIP_VERSION=3.10.1
 PDFLIB_VERSION=1.17.1
+QRCODE_VERSION=2.0.4
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 cd "$TMP"
 npm init -y >/dev/null
-npm install --silent --no-audit --no-fund "jszip@$JSZIP_VERSION" "pdf-lib@$PDFLIB_VERSION" esbuild
+npm install --silent --no-audit --no-fund "jszip@$JSZIP_VERSION" "pdf-lib@$PDFLIB_VERSION" "qrcode-generator@$QRCODE_VERSION" esbuild
 mkdir -p "$ROOT/public/vendor"
 echo "import JSZip from 'jszip'; export default JSZip;" > entry.js
 npx esbuild entry.js --bundle --format=esm --minify --platform=browser --target=es2020 \
@@ -17,9 +18,14 @@ npx esbuild entry.js --bundle --format=esm --minify --platform=browser --target=
 echo "export { PDFDocument, StandardFonts, rgb } from 'pdf-lib';" > pdf-entry.js
 npx esbuild pdf-entry.js --bundle --format=esm --minify --platform=browser --target=es2020 \
   --legal-comments=eof --outfile="$ROOT/public/vendor/pdf-lib.mjs"
+# QR-Code für die Zwei-Faktor-Anmeldung
+{ echo "/*! qrcode-generator $QRCODE_VERSION | Copyright (c) 2009 Kazuhiko Arase | MIT License | http://www.d-project.com/ */"
+  npx esbuild node_modules/qrcode-generator/dist/qrcode.mjs --minify --format=esm --target=es2020; } \
+  > "$ROOT/public/vendor/qrcode-generator.mjs"
 cat > "$ROOT/public/vendor/VERSIONS.txt" <<TXT
 jszip $JSZIP_VERSION (MIT)
 pdf-lib $PDFLIB_VERSION (MIT)
+qrcode-generator $QRCODE_VERSION (MIT)
 Neu erzeugen: bash scripts/vendor.sh
 TXT
 ls -la "$ROOT/public/vendor"

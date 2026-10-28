@@ -264,6 +264,13 @@ const MIGRATIONEN = [
     <<<'SQL'
     alter table mails add column anhaenge text;
     SQL,
+    // Version 15: optionale Zwei-Faktor-Anmeldung (Geheimnis, beim Einrichten, Ersatz-Codes als Hash, letzter Schritt)
+    <<<'SQL'
+    alter table nutzer add column zwei_faktor text;
+    alter table nutzer add column zwei_faktor_neu text;
+    alter table nutzer add column zwei_faktor_codes text;
+    alter table nutzer add column zwei_faktor_schritt integer not null default 0;
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -495,6 +502,13 @@ const MYSQL_MIGRATIONEN = [
     SQL,    // Version 7 = SQLite-Version 14
     <<<'SQL'
     alter table mails add column anhaenge mediumtext null;
+    SQL,
+    // Version 8 = SQLite-Version 15
+    <<<'SQL'
+    alter table nutzer add column zwei_faktor varchar(64) null;
+    alter table nutzer add column zwei_faktor_neu varchar(64) null;
+    alter table nutzer add column zwei_faktor_codes text null;
+    alter table nutzer add column zwei_faktor_schritt bigint not null default 0;
     SQL,
 ];
 

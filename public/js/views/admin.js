@@ -357,7 +357,8 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
         <tr data-id="${esc(n.id)}" class="${n.aktiv ? '' : 'inaktiv'}">
           <td data-label="Name"><span><strong>${esc(vollerName(n))}</strong>${n.id === ich.id ? ' <span class="klein">(du)</span>' : ''}
             ${n.aktiv ? '' : '<br><span class="badge badge-abgelehnt">deaktiviert</span>'}
-            ${n.muss_passwort_aendern ? '<br><span class="klein">noch nicht angemeldet</span>' : ''}</span></td>
+            ${n.muss_passwort_aendern ? '<br><span class="klein">noch nicht angemeldet</span>' : ''}
+            ${n.zwei_faktor ? '<br><span class="klein">🔒 Zwei-Faktor an</span>' : ''}</span></td>
           <td data-label="E-Mail">${esc(n.email)}</td>
           <td data-label="Rollen"><span class="rollen-wahl">${Object.entries(ROLLEN_LABEL).map(([r, l]) => `
             <label class="check"><input type="checkbox" data-rolle="${r}" ${n.rollen.includes(r) ? 'checked' : ''}> ${esc(l)}</label>`).join('')}
@@ -367,6 +368,7 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
           <td data-label="Aktionen"><span class="aktionen eng">
             <button type="button" class="btn btn-klein" data-aktion="email">E-Mail ändern</button>
             <button type="button" class="btn btn-klein" data-aktion="pw">Passwort zurücksetzen</button>
+            ${n.zwei_faktor ? '<button type="button" class="btn btn-klein" data-aktion="zf">Zwei-Faktor zurücksetzen</button>' : ''}
             <button type="button" class="btn btn-klein" data-aktion="aktiv">${n.aktiv ? 'Deaktivieren' : 'Aktivieren'}</button>
             <button type="button" class="btn btn-klein btn-gefahr" data-aktion="loeschen">Löschen</button>
           </span></td>
@@ -421,6 +423,10 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
       } catch (e) {
         meldung(fehlerText(e), 'fehler');
       }
+    } else if (knopf.dataset.aktion === 'zf') {
+      if (!confirm(`Zwei-Faktor-Anmeldung von ${vollerName(n)} ausschalten?\n\nNur, wenn die Person Handy und Ersatz-Codes verloren hat. `
+        + 'Sie meldet sich danach nur mit dem Passwort an und kann Zwei-Faktor im Profil neu einrichten.')) return;
+      versuche(() => store.zweiFaktorZuruecksetzen(n.id), 'Zwei-Faktor zurückgesetzt.', neuLaden);
     } else if (knopf.dataset.aktion === 'pw') {
       if (!confirm(`Passwort von ${vollerName(n)} zurücksetzen? Es wird ein neues Startpasswort erzeugt.`)) return;
       try {

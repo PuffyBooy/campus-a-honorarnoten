@@ -15,6 +15,7 @@ import {
 } from './lib/campus.js';
 import { KONTO_FEHLT, darfRedigieren, kontoFertig, rollenNormalisieren } from './lib/konto.js';
 import { DEMO_PASSWORT } from './demo-konten.js';
+import { ersatzcodes, totpGeheimnis, totpPruefen, totpUri } from './lib/totp.js';
 import { BETREIBER_STANDARD, betreiberOder } from './lib/rechtliches.js';
 import { benachrichtigungenNormalisieren } from './lib/benachrichtigungen.js';
 import { vorlagenNormalisieren } from './lib/vorlagen.js';
@@ -152,8 +153,8 @@ const anzeigename = (n) => `${n.vorname} ${n.nachname}`.trim() || n.email;
 /** öffentliche Sicht auf eine:n Nutzer:in (ohne Passwort) */
 function nutzerSicht(n) {
   if (!n) return null;
-  const { passwort, ...rest } = n;
-  return kopie(rest);
+  const { passwort, zwei_faktor: zf, zwei_faktor_neu: zn, zwei_faktor_codes: zc, zwei_faktor_schritt: zs, ...rest } = n;
+  return { ...kopie(rest), zwei_faktor: Boolean(zf) };
 }
 
 export function aktuellerNutzer() {
@@ -183,13 +184,22 @@ export async function demoKontoFrisch(email) {
   speichern();
 }
 
-export async function anmelden(email, passwort) {
+/** Mit Zwei-Faktor: zuerst ohne Code -> { code_noetig: true }, dann noch einmal mit Code */
+export async function anmelden(email, passwort, code = null) {
   const n = db.nutzer.find((x) => x.email === trim(email).toLowerCase());
   const ok = n && (await passwortPasst(n, passwort));
   if (!ok) { protokoll('warnung', 'anmeldung', `Anmeldung fehlgeschlagen für ${trim(email).toLowerCase()}`, n); speichern(); }
   pruefe(ok, 'E-Mail oder Passwort ist falsch.');
   pruefe(n.aktiv, 'Dieses Konto ist deaktiviert. Bitte wende dich an die Redaktion.');
-  protokoll('info', 'anmeldung', 'Angemeldet', n);
+  if (n.zwei_faktor) {
+    if (leer(code)) return { code_noetig: true };
+    if (!(await zweiFaktorCodeOk(n, code))) {
+      protokoll('warnung', 'anmeldung', 'Falscher Zwei-Faktor-Code', n);
+      speichern();
+      pruefe(false, 'Der Code stimmt nicht. Bitte den aktuellen Code aus der App eingeben.');
+    }
+  }
+  protokoll('info', 'anmeldung', n.zwei_faktor ? 'Angemeldet (mit Zwei-Faktor)' : 'Angemeldet', n);
   sessionStorage.setItem(SITZUNG_KEY, n.id);
   n.letzter_login = jetzt();
   speichern();
@@ -328,12 +338,12 @@ const LINK_TAGE = [1, 3, 7, 14, 30];
 const LINK_ROLLEN = ['autor', 'redigieren', 'redaktion', 'buchhaltung'];
 const appLink = (pfad) => `${location.origin}${location.pathname}#/${pfad}`;
 
-function linkErstellen(art, { nutzer_id = null, rollen = [], max = null, tage, notiz = '', von = '' }) {
+function linkErstellen(art, { nutzer_id = null, rollen = [], max = null, tage, sekunden = tage * 86400, notiz = '', von = '' }) {
   const token = Array.from(crypto.getRandomValues(new Uint8Array(24)), (b) => b.toString(16).padStart(2, '0')).join('');
   db.links ??= [];
   db.links.push({
     id: id(), token, art, nutzer_id, rollen, max_nutzungen: max, nutzungen: 0,
-    gueltig_bis: new Date(Date.now() + tage * 86400000).toISOString(), notiz, erstellt_von: von, erstellt_am: jetzt(), widerrufen_am: null,
+    gueltig_bis: new Date(Date.now() + sekunden * 1000).toISOString(), notiz, erstellt_von: von, erstellt_am: jetzt(), widerrufen_am: null,
   });
   return token;
 }
@@ -369,14 +379,112 @@ function zugang(n, passwort) {
 
 export function linkAnmelden(token) {
   const l = linkPruefen(token, 'anmelden');
+  pruefe(l.notiz !== PASSWORT_LINK, 'Dieser Link ist ungültig. Bitte prüfe, ob er vollständig kopiert wurde.');
   const n = db.nutzer.find((x) => x.id === l.nutzer_id);
   pruefe(n?.aktiv, 'Dieses Konto ist deaktiviert. Bitte wende dich an die Redaktion.');
+  pruefe(!n.zwei_faktor, 'Für dieses Konto ist die Zwei-Faktor-Anmeldung eingeschaltet. Bitte mit E-Mail, Passwort und Code anmelden.');
   l.nutzungen++;
   sessionStorage.setItem(SITZUNG_KEY, n.id);
   n.letzter_login = jetzt();
   protokoll('info', 'anmeldung', 'Mit Anmeldelink aus der Zugangs-Mail angemeldet', n);
   speichern();
   return nutzerSicht(n);
+}
+
+// ------------------------------------------------------------------ Passwort vergessen
+
+const PASSWORT_LINK = 'passwort-vergessen'; // Merkmal der Links aus „Passwort vergessen“
+
+/**
+ * Link zum Festlegen eines neuen Passworts (1 Stunde, einmal). Auf dem Server kommt er per E-Mail;
+ * die Demo verschickt keine Mails und gibt ihn deshalb zurück (demo_link), sonst ist die Antwort immer gleich.
+ */
+export function passwortVergessen(email) {
+  email = trim(email).toLowerCase();
+  pruefe(EMAIL_MUSTER.test(email), 'Bitte eine gültige E-Mail-Adresse angeben.');
+  const n = db.nutzer.find((x) => x.email === email && x.aktiv);
+  if (!n) {
+    protokoll('warnung', 'anmeldung', `Passwort vergessen für unbekannte oder deaktivierte Adresse: ${email}`);
+    speichern();
+    return { demo_link: null };
+  }
+  (db.links ?? []).filter((l) => l.nutzer_id === n.id && l.notiz === PASSWORT_LINK && !l.widerrufen_am)
+    .forEach((l) => { l.widerrufen_am = jetzt(); });
+  const link = appLink(`passwort/${linkErstellen('anmelden', { nutzer_id: n.id, max: 1, sekunden: 3600, notiz: PASSWORT_LINK })}`);
+  protokoll('info', 'anmeldung', 'Passwort vergessen: Link angefordert', n);
+  speichern();
+  return { demo_link: link };
+}
+
+export async function passwortNeuSetzen(token, neu) {
+  passwortPruefen(neu);
+  const l = linkPruefen(token, 'anmelden');
+  pruefe(l.notiz === PASSWORT_LINK, 'Dieser Link ist ungültig. Bitte fordere unter „Passwort vergessen“ einen neuen an.');
+  const n = db.nutzer.find((x) => x.id === l.nutzer_id);
+  pruefe(n?.aktiv, 'Dieses Konto ist deaktiviert. Bitte wende dich an die Redaktion.');
+  l.nutzungen++;
+  n.passwort = await passwortHash(neu);
+  n.muss_passwort_aendern = false;
+  anmeldelinksWiderrufen(n.id);
+  protokoll('info', 'anmeldung', 'Neues Passwort über „Passwort vergessen“ festgelegt', n);
+  if (!n.zwei_faktor) {
+    sessionStorage.setItem(SITZUNG_KEY, n.id);
+    n.letzter_login = jetzt();
+  }
+  speichern();
+  return { angemeldet: !n.zwei_faktor };
+}
+
+// ------------------------------------------------------------------ Zwei-Faktor-Anmeldung (freiwillig, im Profil)
+
+async function zweiFaktorCodeOk(n, code) {
+  const schritt = await totpPruefen(n.zwei_faktor, code);
+  if (schritt !== null && schritt > (n.zwei_faktor_schritt ?? 0)) {
+    n.zwei_faktor_schritt = schritt;
+    return true;
+  }
+  const c = trim(code).toLowerCase();
+  if (!(n.zwei_faktor_codes ?? []).includes(c)) return false;
+  n.zwei_faktor_codes = n.zwei_faktor_codes.filter((x) => x !== c);
+  protokoll('warnung', 'anmeldung', `Mit Ersatz-Code angemeldet (${n.zwei_faktor_codes.length} übrig)`, n);
+  return true;
+}
+
+export function zweiFaktorStarten() {
+  const n = ich();
+  pruefe(!n.zwei_faktor, 'Die Zwei-Faktor-Anmeldung ist schon eingeschaltet.');
+  n.zwei_faktor_neu = totpGeheimnis();
+  speichern();
+  return { geheimnis: n.zwei_faktor_neu, uri: totpUri(n.zwei_faktor_neu, n.email) };
+}
+
+export async function zweiFaktorEinschalten(code) {
+  const n = ich();
+  pruefe(n.zwei_faktor_neu, 'Bitte zuerst „Zwei-Faktor einrichten“ starten.');
+  const schritt = await totpPruefen(n.zwei_faktor_neu, code);
+  pruefe(schritt !== null, 'Der Code stimmt nicht. Bitte den aktuellen Code aus der App eingeben (die Uhr am Handy muss stimmen).');
+  const codes = ersatzcodes();
+  Object.assign(n, { zwei_faktor: n.zwei_faktor_neu, zwei_faktor_neu: null, zwei_faktor_schritt: schritt, zwei_faktor_codes: codes });
+  protokoll('info', 'konten', 'Zwei-Faktor-Anmeldung eingeschaltet', n);
+  speichern();
+  return { ersatzcodes: [...codes] };
+}
+
+export async function zweiFaktorAusschalten(passwort) {
+  const n = ich();
+  pruefe(await passwortPasst(n, passwort), 'Das Passwort stimmt nicht.');
+  Object.assign(n, { zwei_faktor: null, zwei_faktor_neu: null, zwei_faktor_codes: null });
+  protokoll('warnung', 'konten', 'Zwei-Faktor-Anmeldung ausgeschaltet', n);
+  speichern();
+  return true;
+}
+
+export function zweiFaktorZuruecksetzen(uid) {
+  const { n } = adminNutzer(uid);
+  Object.assign(n, { zwei_faktor: null, zwei_faktor_neu: null, zwei_faktor_codes: null });
+  protokoll('warnung', 'konten', `Zwei-Faktor-Anmeldung zurückgesetzt: ${anzeigename(n)}`);
+  speichern();
+  return true;
 }
 
 export function einladungPruefen(token) {

@@ -13,6 +13,7 @@ import * as admin from './views/admin.js';
 import * as generator from './views/generator.js';
 import * as rechtlichesSeite from './views/rechtliches.js';
 import * as registrieren from './views/registrieren.js';
+import * as passwortSeite from './views/passwort.js';
 import { hinweisOffen, zustimmungHtml } from './lib/rechtliches.js';
 import { cookieBanner, gewaehlt } from './lib/cookies.js';
 
@@ -206,6 +207,14 @@ async function render() {
       main.innerHTML = `<section class="karte schmal"><h1>Anmelden</h1><p class="fehlerbox">${esc(fehlerText(e))}</p>
         <p><a href="#/" class="btn btn-primaer">Zur Anmeldung</a></p></section>`;
     }
+    return;
+  }
+  // Link aus „Passwort vergessen“
+  if (pfad.startsWith('passwort/')) {
+    passwortSeite.render(main, { store, token: pfad.slice(9), fertig: () => {
+      history.replaceState(null, '', location.pathname + location.search);
+      render();
+    } });
     return;
   }
   // Registrierungslink vom Admin

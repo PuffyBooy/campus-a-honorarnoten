@@ -371,6 +371,15 @@ section.fehlerbox { border: 0; }
   background: none; border: 0; padding: 0; font: inherit; color: var(--marke);
   text-decoration: underline; cursor: pointer;
 }
+/* Zwei-Faktor im Profil */
+.zf-liste { padding-left: 1.2rem; margin: 0; }
+.zf-liste > li + li { margin-top: 1rem; }
+.zf-qr { width: 180px; margin: .5rem 0; background: #fff; border-radius: 8px; overflow: hidden; }
+.zf-qr svg { display: block; width: 100%; height: auto; }
+.zf-schluessel { word-break: break-all; font-size: .9rem; }
+.zf-codes { list-style: none; padding: 0; margin: .5rem 0 1rem; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .35rem; }
+.zf-codes code { font-size: .95rem; }
+.login-vergessen { text-align: center; margin: .75rem 0 0; font-size: .9rem; }
 /* Bezahl-Terminal: eine Karte pro Kalenderwoche */
 .woche-kopf { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: .25rem 1rem; }
 .woche-kopf h2 { margin: 0; }

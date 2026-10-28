@@ -6,6 +6,7 @@ require_once __DIR__ . '/basis.php';
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/regeln.php';
 require_once __DIR__ . '/auth.php';
+require_once __DIR__ . '/totp.php';
 require_once __DIR__ . '/protokoll.php';
 require_once __DIR__ . '/artikel.php';
 require_once __DIR__ . '/mail.php';
