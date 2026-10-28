@@ -548,6 +548,10 @@ async function einstellungen(inhalt, { store, neuLaden }) {
                  value="${wert('redigieren')}"></div>` : ''}
       </div>`;
       }).join('')}
+      <h2 class="abstand-oben">Vorlagen für Rückgabegründe</h2>
+      <p class="tipp">Die Redaktion übernimmt sie mit einem Klick beim Zurückgeben. Eine Vorlage pro Zeile, höchstens 15.</p>
+      <label for="e-vorlagen" class="sr-only">Vorlagen</label>
+      <textarea id="e-vorlagen" name="vorlagen" rows="6">${esc((e.rueckgabe_vorlagen ?? []).join('\n'))}</textarea>
       <h2 class="abstand-oben">Datenschutz</h2>
       <label for="e-kontakt">Kontakt für Datenschutzanfragen (E-Mail)</label>
       <input id="e-kontakt" name="kontakt" type="email" value="${esc(e.datenschutzKontakt)}">
@@ -622,6 +626,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       empfaenger: { name: form.name.value, strasse: form.strasse.value, plz_ort: form.plz_ort.value, uid: form.uid.value },
       datenschutzKontakt: form.kontakt.value,
       honorarsaetze,
+      rueckgabe_vorlagen: form.vorlagen.value.split('\n'),
       betreiber: {
         name: form.b_name.value, anschrift: form.b_anschrift.value, email: form.b_email.value, telefon: form.b_telefon.value,
         extern: form.b_extern.checked, hoster: form.b_hoster.value,

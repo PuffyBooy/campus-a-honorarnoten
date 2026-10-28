@@ -105,6 +105,7 @@ function einstellungen_laden(PDO $db): array
     }
     $e['honorarsaetze'] = saetze_normalisieren($e['honorarsaetze']); // ältere Sätze ohne Medium gelten für beide
     $e['betreiber'] = array_merge(BETREIBER_STANDARD, array_intersect_key(is_array($e['betreiber']) ? $e['betreiber'] : [], BETREIBER_STANDARD));
+    $e['rueckgabe_vorlagen'] = vorlagen_normalisieren($e['rueckgabe_vorlagen'] ?? null);
     return $e;
 }
 
@@ -633,13 +634,22 @@ final class Honorare
         $where = $wo ? 'where ' . implode(' and ', $wo) : '';
         $limit = max(1, min(200, (int) ($f['limit'] ?? 100)));
         $offset = max(0, (int) ($f['offset'] ?? 0));
+        // Zähler je Status für das gewählte Medium, dazu „zu prüfen“ je Medium für den Umschalter
+        $medium = ist_medium($f['medium'] ?? '') ? $f['medium'] : null;
         $zaehler = array_fill_keys(array_keys(STATUS_LABEL), 0);
-        foreach (zeilen($db, 'select status, count(*) anzahl from noten group by status') as $z) $zaehler[$z['status']] = (int) $z['anzahl'];
+        foreach (zeilen($db, 'select status, count(*) anzahl from noten' . ($medium ? ' where medium = ?' : '') . ' group by status', $medium ? [$medium] : []) as $z) {
+            $zaehler[$z['status']] = (int) $z['anzahl'];
+        }
+        $zuPruefen = array_fill_keys(MEDIUM_KEYS, 0);
+        foreach (zeilen($db, "select medium, count(*) anzahl from noten where status = 'eingereicht' group by medium") as $z) {
+            $zuPruefen[medium_oder($z['medium'])] += (int) $z['anzahl'];
+        }
         return [
             'noten' => noten_liste($db, $n, $where, $p, REDAKTION_SORTIERUNG[$f['sortierung'] ?? ''] ?? 'eingereicht_am asc', "limit $limit offset $offset"),
             'anzahl' => (int) wert($db, "select count(*) from noten $where", $p),
             'summe' => euro((int) wert($db, "select coalesce(sum(np.betrag_cent), 0) from note_positionen np where np.note_id in (select id from noten $where)", $p)),
             'zaehler' => $zaehler,
+            'zu_pruefen_medium' => $zuPruefen,
             'monate' => array_column(zeilen($db, 'select distinct monat from noten order by monat desc limit 36'), 'monat'),
         ];
     }
@@ -1012,9 +1022,11 @@ final class Honorare
         pruefe($kontakt === '' || ist_email($kontakt), 'Bitte eine gültige E-Mail-Adresse für Datenschutzanfragen angeben.');
         $saetze = saetze_normalisieren($d['honorarsaetze'] ?? einstellungen_laden($db)['honorarsaetze']);
         $betreiber = betreiber_pruefen(einstellungen_laden($db)['betreiber'], $d['betreiber'] ?? null);
+        $vorlagen = array_key_exists('rueckgabe_vorlagen', $d) ? vorlagen_normalisieren($d['rueckgabe_vorlagen']) : einstellungen_laden($db)['rueckgabe_vorlagen'];
         $speichere = fn ($schluessel, $wert) => upsert($db, 'einstellungen', ['schluessel' => $schluessel, 'wert' => json_text($wert)], ['schluessel']);
-        transaktion($db, function () use ($speichere, $e, $kontakt, $saetze, $betreiber) {
+        transaktion($db, function () use ($speichere, $e, $kontakt, $saetze, $betreiber, $vorlagen) {
             $speichere('betreiber', $betreiber);
+            $speichere('rueckgabe_vorlagen', $vorlagen);
             $speichere('empfaenger', [
                 'name' => kuerze(tr($e['name']), 150), 'strasse' => kuerze(tr($e['strasse'] ?? ''), 150),
                 'plz_ort' => kuerze(tr($e['plz_ort'] ?? ''), 100), 'uid' => kuerze(tr($e['uid'] ?? ''), 30),

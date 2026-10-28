@@ -653,3 +653,26 @@ a.kennzahl-link.kennzahl-marke { color: #fff; }
 }
 /* der Fuß bleibt unten, auch solange der Inhalt noch lädt */
 .inhalt { min-height: calc(100vh - 67px); box-sizing: border-box; }
+
+/* ---- Redaktion: Umschalter campus a / campus a college */
+.medium-schalter { display: inline-flex; flex-wrap: wrap; gap: .25rem; padding: .25rem; background: #e8eeec; border-radius: 999px; }
+.medium-knopf {
+  font: inherit; font-weight: 600; font-size: .9rem; padding: .45rem 1rem; border: 0; border-radius: 999px;
+  background: transparent; color: var(--text-leise); cursor: pointer;
+}
+.medium-knopf[aria-pressed="true"] { background: var(--flaeche); color: var(--text); box-shadow: 0 1px 4px rgb(0 0 0 / 12%); }
+.medium-knopf-college[aria-pressed="true"] { background: var(--college); color: #fff; }
+.medium-knopf-campus-a[aria-pressed="true"] { background: var(--campus-a); color: #fff; }
+.medium-knopf[aria-pressed="true"] .zaehler { background: rgb(255 255 255 / 30%); color: inherit; }
+@media (min-width: 700px) { .redaktion-filter { grid-template-columns: 1fr 1.6fr 1fr; } }
+.medium-knopf .zaehler { background: var(--flaeche); color: var(--text); }
+.medium-knopf[aria-pressed="true"] .zaehler { background: rgb(255 255 255 / 30%); color: inherit; }
+.vorlagen { display: flex; flex-wrap: wrap; gap: .35rem; margin: .25rem 0 .75rem; }
+.vorlage {
+  font: inherit; font-size: .82rem; text-align: left; padding: .35rem .7rem; border-radius: var(--radius-klein);
+  border: 1px solid var(--rand); background: var(--flaeche); cursor: pointer; max-width: 100%;
+}
+.vorlage:hover { border-color: var(--marke); background: var(--marke-hell); }
+kbd { font-family: var(--mono); font-size: .78rem; padding: .05rem .35rem; border: 1px solid var(--rand); border-bottom-width: 2px; border-radius: 4px; background: var(--flaeche); }
+.kuerzel-hinweis { margin: .75rem 0 0; color: var(--text-leise); }
+@media (hover: none) { .kuerzel-hinweis { display: none; } }

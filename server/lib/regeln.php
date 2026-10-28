@@ -277,6 +277,22 @@ function saetze_normalisieren(mixed $saetze = []): array
 
 const STATUS_LABEL = ['eingereicht' => 'Eingereicht', 'angenommen' => 'Angenommen', 'abgelehnt' => 'Abgelehnt', 'bezahlt' => 'Bezahlt'];
 const KATEGORIE_LABEL = ['kolumne' => 'Kolumne', 'ausserordentlich' => 'Außerordentliche Anerkennungsprämie', 'redigieren' => 'Redigieren'];
+// Vorlagen für Rückgabegründe der Redaktion (wie public/js/lib/vorlagen.js)
+const STANDARD_RUECKGABE = [
+    'Der Artikel ist noch nicht erschienen. Bitte erst nach der Veröffentlichung abrechnen.',
+    'Der Betrag war so nicht vereinbart. Bitte mit dem vereinbarten Betrag neu einreichen.',
+    'Diese Leistung wurde schon in einer anderen Abrechnung abgerechnet.',
+    'Bitte den Link zum Artikel ergänzen.',
+    'Die Leistung gehört in einen anderen Abrechnungsmonat.',
+];
+
+function vorlagen_normalisieren(mixed $liste): array
+{
+    if (!is_array($liste)) return STANDARD_RUECKGABE;
+    $r = array_map(fn ($x) => mb_substr(trim((string) preg_replace('/\s+/u', ' ', is_scalar($x) ? (string) $x : '')), 0, 300), array_values($liste));
+    return array_slice(array_values(array_filter($r, fn ($x) => $x !== '')), 0, 15);
+}
+
 const ROLLEN_LABEL = [
     'autor' => 'Autor:in', 'redaktion' => 'Redaktion', 'buchhaltung' => 'Buchhaltung', 'admin' => 'Admin',
     'redigieren' => 'Redigieren (campus a college)',

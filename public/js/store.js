@@ -17,6 +17,7 @@ import { KONTO_FEHLT, darfRedigieren, kontoFertig, rollenNormalisieren } from '.
 import { DEMO_PASSWORT } from './demo-konten.js';
 import { BETREIBER_STANDARD, betreiberOder } from './lib/rechtliches.js';
 import { benachrichtigungenNormalisieren } from './lib/benachrichtigungen.js';
+import { vorlagenNormalisieren } from './lib/vorlagen.js';
 
 const SPEICHER_KEY = 'campus-a-honorare:v1';
 const SITZUNG_KEY = 'campus-a-honorare:sitzung';
@@ -779,7 +780,8 @@ export function redaktionListe({ status = '', medium = '', monat = '', suche = '
     noten: treffer.slice(Number(offset) || 0, (Number(offset) || 0) + limit).map((x) => sicht(n, x)),
     anzahl: treffer.length,
     summe: treffer.reduce((s, x) => s + Math.round(summe(x.positionen) * 100), 0) / 100,
-    zaehler: Object.fromEntries(STATUS_WERTE.map((st) => [st, db.noten.filter((x) => x.status === st).length])),
+    zaehler: Object.fromEntries(STATUS_WERTE.map((st) => [st, db.noten.filter((x) => x.status === st && (!medium || mediumOder(x.medium) === medium)).length])),
+    zu_pruefen_medium: Object.fromEntries(MEDIUM_KEYS.map((m) => [m, db.noten.filter((x) => x.status === 'eingereicht' && mediumOder(x.medium) === m).length])),
     monate: [...new Set(db.noten.map((x) => x.monat))].sort().reverse().slice(0, 36),
   };
 }
@@ -1022,6 +1024,7 @@ export function einstellungen() {
   delete e.zahlungskonto; // nur über zahlungskonto() für Buchhaltung und Admin
   e.honorarsaetze = saetzeNormalisieren(e.honorarsaetze); // ältere Sätze ohne Medium gelten für beide
   e.betreiber = betreiberOder(e.betreiber);
+  e.rueckgabe_vorlagen = vorlagenNormalisieren(e.rueckgabe_vorlagen);
   return e;
 }
 
@@ -1047,7 +1050,7 @@ export function hinweisBestaetigen() {
   return nutzerSicht(n);
 }
 
-export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorarsaetze, betreiber }) {
+export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorarsaetze, betreiber, rueckgabe_vorlagen: vorlagen }) {
   brauche('admin');
   pruefe(!leer(empfaenger?.name), 'Bitte den Namen des Rechnungsempfängers angeben.');
   let saetze;
@@ -1065,6 +1068,7 @@ export function einstellungenSpeichern({ empfaenger, datenschutzKontakt, honorar
     datenschutzKontakt: trim(datenschutzKontakt),
     honorarsaetze: saetze,
     betreiber: betreiber ? betreiberPruefen(betreiberOder(db.einstellungen.betreiber), betreiber) : betreiberOder(db.einstellungen.betreiber),
+    rueckgabe_vorlagen: vorlagen === undefined ? vorlagenNormalisieren(db.einstellungen.rueckgabe_vorlagen) : vorlagenNormalisieren(vorlagen),
   };
   speichern();
 }

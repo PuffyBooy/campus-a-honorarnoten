@@ -463,6 +463,18 @@ test('Redaktion: Liste am Server gefiltert und seitenweise, Prüf-Infos, Jahress
   assert.equal((await k.rita.aufruf('ausgezahltImJahr')).status, 403);
 });
 
+test('Vorlagen für Rückgabegründe: Standard, vom Admin änderbar, gesäubert', async () => {
+  const e = await k.rita.ok('einstellungen');
+  assert.equal(e.rueckgabe_vorlagen.length, 5);
+  const basis = { empfaenger: e.empfaenger, datenschutzKontakt: e.datenschutzKontakt };
+  await k.admin.ok('einstellungenSpeichern', { ...basis, rueckgabe_vorlagen: ['  Eigene   Vorlage ', '', 'x'.repeat(400)] });
+  const neu = (await k.rita.ok('einstellungen')).rueckgabe_vorlagen;
+  assert.deepEqual([neu.length, neu[0], neu[1].length], [2, 'Eigene Vorlage', 300]);
+  await k.admin.ok('einstellungenSpeichern', basis); // ohne Angabe bleiben sie
+  assert.equal((await k.rita.ok('einstellungen')).rueckgabe_vorlagen.length, 2);
+  await k.admin.ok('einstellungenSpeichern', { ...basis, rueckgabe_vorlagen: e.rueckgabe_vorlagen });
+});
+
 test('Admin: E-Mail-Adresse ändern, alte und neue Adresse bekommen eine Info', async () => {
   const bert = (await k.admin.ok('nutzerListe')).find((n) => n.email === 'bert@example.org');
   assert.equal((await k.rita.aufruf('emailAendern', bert.id, 'b@example.org')).status, 403);

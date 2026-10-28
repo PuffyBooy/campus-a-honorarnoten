@@ -5,8 +5,10 @@ import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { MEDIEN, mediumBadge, mediumOder } from '../lib/campus.js';
 import { pruefungRendern } from './redaktion-detail.js';
 
-// Filter bleiben beim Wechseln zwischen Abrechnungen erhalten
-const filter = { status: 'eingereicht', medium: '', monat: '', suche: '', sortierung: 'eingereicht_asc' };
+// Filter bleiben beim Wechseln zwischen Abrechnungen erhalten; das Medium merkt sich der Browser
+const MEDIUM_KEY = 'campus-a-honorare:redaktion-medium';
+const gemerktesMedium = () => { try { return localStorage.getItem(MEDIUM_KEY) ?? ''; } catch { return ''; } };
+const filter = { status: 'eingereicht', medium: gemerktesMedium(), monat: '', suche: '', sortierung: 'eingereicht_asc' };
 
 const REITER = [
   ['eingereicht', 'Zu prüfen'], ['angenommen', 'Angenommen'], ['abgelehnt', 'Zurückgegeben'], ['bezahlt', 'Bezahlt'], ['', 'Alle'],
@@ -17,6 +19,21 @@ const SORTIERUNGEN = {
   eingereicht_asc: 'Älteste zuerst', eingereicht_desc: 'Neueste zuerst', betrag_desc: 'Höchster Betrag', name: 'Name A–Z',
 };
 const SEITE = 100;
+
+// Tastenkürzel (gelten nur auf der Redaktionsseite und nicht beim Tippen)
+let tastenAbbrechen = null;
+const KUERZEL = [
+  ['J', 'nächste Abrechnung'], ['K', 'vorige Abrechnung'], ['Leertaste', 'nächste Leistung als geprüft abhaken'],
+  ['A', 'annehmen'], ['R', 'zurückgeben (mit Vorlagen)'], ['?', 'diese Hilfe'],
+];
+const kuerzelHinweis = () => `<p class="kuerzel-hinweis klein">Tastenkürzel: ${KUERZEL.slice(0, 5)
+  .map(([k, t]) => `<kbd>${esc(k)}</kbd> ${esc(t)}`).join(' · ')} · <kbd>?</kbd> Hilfe</p>`;
+const kuerzelHilfe = () => bestaetigen({
+  titel: 'Tastenkürzel in der Redaktion',
+  html: `<dl class="angaben">${KUERZEL.map(([k, t]) => `<dt><kbd>${esc(k)}</kbd></dt><dd>${esc(t)}</dd>`).join('')}</dl>
+    <p class="klein">Gelten nicht, solange du in ein Feld tippst.</p>`,
+  ja: 'Ok', nein: 'Schließen',
+});
 
 const euroSumme = (noten) => noten.reduce((s, n) => s + Math.round(n.betrag * 100), 0) / 100;
 
@@ -47,16 +64,20 @@ export async function render(el, ctx) {
   const gewaehlt = params.id ? { id: params.id } : null;
   const mitAuswahl = filter.status === 'eingereicht' && liste.length > 1;
 
+  const offenGesamt = Object.values(daten.zu_pruefen_medium ?? {}).reduce((a, b) => a + b, 0);
   el.innerHTML = `
-    <div class="kopfzeile"><h1>Redaktion</h1></div>
+    <div class="kopfzeile"><h1>Redaktion</h1>
+      <div class="medium-schalter" role="group" aria-label="Medium">
+        ${[['', 'Beide', offenGesamt], ...Object.entries(MEDIEN).map(([m, x]) => [m, x.name, daten.zu_pruefen_medium?.[m] ?? 0])].map(([m, name, n]) => `
+          <button type="button" class="medium-knopf${m ? ` medium-knopf-${m}` : ''}" data-medium="${m}" aria-pressed="${filter.medium === m}">
+            ${esc(name)}${n ? ` <span class="zaehler" title="zu prüfen">${n}</span>` : ''}</button>`).join('')}
+      </div>
+    </div>
     <nav class="reiter" aria-label="Status">${REITER.map(([s, l]) => `
       <button type="button" class="reiter-knopf" data-status="${s}" aria-pressed="${filter.status === s}">
         ${esc(l)} <span class="zaehler${s === 'eingereicht' && zaehler[s] ? ' zaehler-wichtig' : ''}">${zaehler[s]}</span></button>`).join('')}
     </nav>
     <section class="filterleiste redaktion-filter" aria-label="Filter">
-      <div class="feld"><label for="r-medium">Medium</label>
-        <select id="r-medium"><option value="">Beide</option>
-          ${Object.entries(MEDIEN).map(([m, x]) => `<option value="${m}">${esc(x.name)}</option>`).join('')}</select></div>
       <div class="feld"><label for="r-monat">Abrechnungsmonat</label>
         <select id="r-monat"><option value="">Alle Monate</option>
           ${monate.map((m) => `<option value="${esc(m)}">${esc(formatMonat(m))}</option>`).join('')}</select></div>
@@ -81,7 +102,8 @@ export async function render(el, ctx) {
           : `<div class="pruefung-leer"><p><strong>Wähle links eine Abrechnung aus.</strong></p>
             <p class="klein">Tipp: Mit „Nächste“ geht es nach dem Prüfen ohne Zurückspringen weiter.</p></div>`}
       </section>
-    </div>`;
+    </div>
+    ${kuerzelHinweis()}`;
 
   // ---- Filter
   const setzen = (feld, wert) => { filter[feld] = wert; neuLaden(); };
@@ -89,12 +111,17 @@ export async function render(el, ctx) {
     const k = ev.target.closest('[data-status]');
     if (k) setzen('status', k.dataset.status);
   });
+  el.querySelector('.medium-schalter').addEventListener('click', (ev) => {
+    const k = ev.target.closest('[data-medium]');
+    if (!k) return;
+    try { localStorage.setItem(MEDIUM_KEY, k.dataset.medium); } catch { /* nur für dieses Mal */ }
+    setzen('medium', k.dataset.medium);
+  });
   const sel = (id, feld) => {
     const e = el.querySelector(id);
     e.value = filter[feld];
     e.addEventListener('change', () => setzen(feld, e.value));
   };
-  sel('#r-medium', 'medium');
   sel('#r-monat', 'monat');
   sel('#r-sort', 'sortierung');
   const suche = el.querySelector('#r-suche');
@@ -157,6 +184,26 @@ export async function render(el, ctx) {
     });
     neuLaden();
   });
+
+  // ---- Tastenkürzel
+  tastenAbbrechen?.abort();
+  tastenAbbrechen = new AbortController();
+  document.addEventListener('keydown', (ev) => {
+    if (!location.hash.startsWith('#/redaktion')) { tastenAbbrechen.abort(); return; }
+    if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.target.closest?.('input, textarea, select, [contenteditable]')
+      || document.querySelector('dialog[open]')) return;
+    const i = gewaehlt ? liste.findIndex((n) => n.id === gewaehlt.id) : -1;
+    const ziel = (n) => { if (n) location.hash = `#/redaktion/${n.id}`; };
+    const taste = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
+    if (taste === 'j') ziel(i < 0 ? liste[0] : liste[i + 1]);
+    else if (taste === 'k') ziel(i > 0 ? liste[i - 1] : null);
+    else if (taste === 'a') el.querySelector('#d-annehmen')?.click();
+    else if (taste === 'r') el.querySelector('#d-ablehnen-oeffnen')?.click();
+    else if (taste === ' ' && gewaehlt) el.querySelector('[data-pruefen]:not(:checked):not(:disabled)')?.click();
+    else if (taste === '?') kuerzelHilfe();
+    else return;
+    ev.preventDefault();
+  }, { signal: tastenAbbrechen.signal });
 
   // ---- Prüfansicht
   if (gewaehlt) {
