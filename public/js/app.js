@@ -16,6 +16,7 @@ import * as registrieren from './views/registrieren.js';
 import * as passwortSeite from './views/passwort.js';
 import { hinweisOffen, zustimmungHtml } from './lib/rechtliches.js';
 import { cookieBanner, gewaehlt } from './lib/cookies.js';
+import { nachweisHerunterladen } from './lib/nachweise.js';
 
 // Demo: Daten im Browser (store.js). Server: Daten über die API (api.js).
 const IST_DEMO = MODUS !== 'server';
@@ -341,6 +342,20 @@ async function start() {
   window.addEventListener('honorare:abgemeldet', () => render());
   // Server: Wartungsmodus wurde eingeschaltet -> Hinweis zeigen
   window.addEventListener('honorare:wartung', () => render());
+  // Nachweise zum Redigieren herunterladen – überall, wo sie angezeigt werden
+  document.addEventListener('click', async (ev) => {
+    const knopf = ev.target.closest('[data-nachweis]');
+    if (!knopf) return;
+    ev.preventDefault();
+    knopf.disabled = true;
+    try {
+      await nachweisHerunterladen(store, knopf.dataset.nachweis);
+    } catch (e) {
+      alert(fehlerText(e));
+    } finally {
+      knopf.disabled = false;
+    }
+  });
   // Cookies: beim ersten Besuch fragen, über die Fußzeile jederzeit änderbar
   document.addEventListener('click', (ev) => {
     if (ev.target.closest('#cookie-einstellungen, [data-cookie-einstellungen]')) cookieBanner({ details: true });

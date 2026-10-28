@@ -11,6 +11,7 @@ require_once __DIR__ . '/protokoll.php';
 require_once __DIR__ . '/artikel.php';
 require_once __DIR__ . '/mail.php';
 require_once __DIR__ . '/pdf.php';
+require_once __DIR__ . '/nachweise.php';
 require_once __DIR__ . '/mail-vorlagen.php';
 require_once __DIR__ . '/honorare.php';
 require_once __DIR__ . '/betrieb.php';

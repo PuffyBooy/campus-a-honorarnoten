@@ -8,6 +8,7 @@ import { standardBetrag, weichtAb } from '../lib/honorarsaetze.js';
 import { hatArtikel, mediumBadge, mediumName, titelLink } from '../lib/campus.js';
 import { bestaetigen, fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
 import { kannZurueckziehen, schritteHtml } from '../lib/schritte.js';
+import { nachweiseHtml } from '../lib/nachweise.js';
 
 /**
  * Tabelle der Leistungen einer Prämienabrechnung. Jeder Titel ist ein Link (neuer Tab): zum verknüpften
@@ -25,7 +26,8 @@ export function positionenTabelle(note, { mitKorrektur = false, saetze = null, p
           <td data-label="Titel"><span>${p.kategorie === 'redigieren' ? `<strong>${esc(p.titel)}</strong>` : `<strong>${titelLink(p.artikel_url, p.titel, 'artikel-titel', note.medium)}</strong> <span aria-hidden="true">↗</span>
             ${!hatArtikel(p.artikel_url) && pruefen ? '<br><span class="ohne-link">nicht verknüpft – Klick sucht den Titel</span>' : ''}`}
             ${p.ausgabe ? `<br><span class="klein">${esc(p.ausgabe)}</span>` : ''}
-            ${p.notiz ? `<br><span class="klein">Notiz: ${esc(p.notiz)}</span>` : ''}</span></td>
+            ${p.notiz ? `<br><span class="klein">Notiz: ${esc(p.notiz)}</span>` : ''}
+            ${nachweiseHtml(p)}</span></td>
           <td data-label="Kategorie"><span>${esc(KATEGORIE_LABEL[p.kategorie])}<br><span class="klein">${esc(artText(p))}${
             p.vereinbart_mit ? ` · vereinbart mit ${esc(p.vereinbart_mit)}` : ''}</span></span></td>
           <td data-label="Veröffentlichung">${esc(formatDatum(p.veroeffentlichung))}</td>
