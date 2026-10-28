@@ -1254,6 +1254,14 @@ export async function leistungstest() {
   return { zeit: jetzt(), ergebnisse, gesamt_ms: ergebnisse.reduce((s, x) => s + x.ms, 0), demo: true };
 }
 
+export async function funktionstest() {
+  brauche('admin');
+  return {
+    zeit: jetzt(), ok: null,
+    schritte: [{ titel: 'Demo', stufe: 'warnung', text: 'Der Funktionstest läuft nur auf dem echten Server. In der Demo kannst du den Ablauf mit den Demo-Konten selbst durchklicken.', ms: null }],
+  };
+}
+
 export function serverAktion() {
   brauche('admin');
   return 'In der Demo gibt es keinen Server – die Aktion läuft nur auf dem echten Server.';

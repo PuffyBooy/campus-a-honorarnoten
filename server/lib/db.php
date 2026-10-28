@@ -675,9 +675,13 @@ function ist_mysql(PDO $db): bool
 /** Führt $fn in einer Transaktion aus (alles oder nichts). Verschachtelt: läuft in der äußeren mit. */
 function transaktion(PDO $db, callable $fn): mixed
 {
-    if ($db->inTransaction()) return $fn();
+    // PDO kennt ein selbst gestartetes „begin immediate“ (SQLite) nicht – darum selbst mitzählen
+    static $laufend = [];
+    $nr = spl_object_id($db);
+    if ($db->inTransaction() || isset($laufend[$nr])) return $fn();
     // SQLite: gleich die Schreibsperre holen, damit zwei Anfragen sich nicht gegenseitig blockieren
     ist_mysql($db) ? $db->beginTransaction() : $db->exec('begin immediate');
+    $laufend[$nr] = true;
     try {
         $r = $fn();
         ist_mysql($db) ? $db->commit() : $db->exec('commit');
@@ -685,6 +689,8 @@ function transaktion(PDO $db, callable $fn): mixed
     } catch (Throwable $e) {
         ist_mysql($db) ? $db->rollBack() : $db->exec('rollback');
         throw $e;
+    } finally {
+        unset($laufend[$nr]);
     }
 }
 
@@ -760,4 +766,51 @@ function sichern(PDO $db, string $ziel): string
         });
     }
     return $ziel;
+}
+
+/**
+ * Sicherung in die laufende Datenbank zurückspielen.
+ * SQLite: Kopie der Sicherung öffnen (bringt sie auf den neuesten Stand) und alle Tabellen in einer Transaktion übernehmen.
+ * MySQL: die SQL-Datei Anweisung für Anweisung ausführen, danach fehlende Änderungen am Aufbau nachholen.
+ */
+function sicherung_einspielen(PDO $db, string $datei): void
+{
+    if (ist_mysql($db)) {
+        $f = fopen($datei, 'r');
+        $anweisung = '';
+        try {
+            while (($zeile = fgets($f)) !== false) {
+                if ($anweisung === '' && (trim($zeile) === '' || str_starts_with($zeile, '--'))) continue;
+                $anweisung .= $zeile;
+                if (str_ends_with(rtrim($zeile), ';')) {
+                    $db->exec($anweisung);
+                    $anweisung = '';
+                }
+            }
+        } finally {
+            fclose($f);
+            $db->exec('set foreign_key_checks = 1');
+        }
+        datenbank(true); // Aufbau auf den neuesten Stand bringen
+        return;
+    }
+    $kopie = daten_ordner() . '/zurueckspielen-' . bin2hex(random_bytes(4)) . '.sqlite';
+    if (!copy($datei, $kopie)) throw new RuntimeException('Die Sicherung konnte nicht gelesen werden.');
+    try {
+        $quelle = oeffne_sqlite($kopie);
+        $spalten = fn (PDO $d, string $t) => array_column($d->query("pragma table_info($t)")->fetchAll(), 'name');
+        transaktion($db, function () use ($db, $quelle, $spalten) {
+            foreach (array_reverse(TABELLEN) as $t) $db->exec("delete from $t");
+            foreach (TABELLEN as $t) {
+                $gemeinsam = array_values(array_intersect($spalten($db, $t), $spalten($quelle, $t)));
+                if (!$gemeinsam) continue;
+                $liste = implode(', ', $gemeinsam);
+                $einf = $db->prepare("insert into $t ($liste) values (" . implode(', ', array_fill(0, count($gemeinsam), '?')) . ')');
+                foreach ($quelle->query("select $liste from $t", PDO::FETCH_NUM) as $z) $einf->execute($z);
+            }
+        });
+        $quelle = null;
+    } finally {
+        @unlink($kopie);
+    }
 }

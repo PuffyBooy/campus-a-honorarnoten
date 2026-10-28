@@ -776,7 +776,8 @@ async function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
           <td data-label="Datei" class="mono umbruch">${esc(b.name)}</td>
           <td data-label="Erstellt">${esc(formatZeitpunkt(b.zeit))}</td>
           <td data-label="Größe" class="rechts">${esc(groesse(b.groesse))}</td>
-          <td data-label=""><button type="button" class="btn btn-klein" data-laden>Herunterladen</button></td></tr>`).join('')}</tbody></table>`
+          <td data-label=""><span class="aktionen eng"><button type="button" class="btn btn-klein" data-laden>Herunterladen</button>
+            <button type="button" class="btn btn-klein btn-gefahr" data-zurueckspielen>Zurückspielen …</button></span></td></tr>`).join('')}</tbody></table>`
         : '<p class="klein">Noch keine Sicherung vorhanden. Die erste entsteht beim nächsten Aufruf der App oder mit „Jetzt sichern“.</p>'}
     </section>
     <section class="karte">
@@ -794,7 +795,30 @@ async function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
       meldung(fehlerText(e), 'fehler');
     }
   }));
-  inhalt.querySelector('tbody')?.addEventListener('click', (ev) => {
+  inhalt.querySelector('tbody')?.addEventListener('click', async (ev) => {
+    const z = ev.target.closest('[data-zurueckspielen]');
+    if (z) {
+      const name = z.closest('tr').dataset.name;
+      const eingabe = await bestaetigen({
+        titel: 'Sicherung zurückspielen?',
+        html: `<p>Alle Daten werden auf den Stand von <strong>${esc(name)}</strong> zurückgesetzt. Was seitdem eingegeben wurde, ist dann weg.</p>
+          <p>Vorher wird der jetzige Stand automatisch gesichert. Danach müssen sich alle neu anmelden.</p>`,
+        eingabe: { label: 'Zur Bestätigung WIEDERHERSTELLEN eintippen', wert: '' },
+        ja: 'Zurückspielen',
+        gefahr: true,
+      });
+      if (!eingabe) return;
+      await mitSperre(z, async () => {
+        try {
+          const r = await store.sicherungZurueckspielen(name, eingabe);
+          alert(`Sicherung zurückgespielt. Der Stand davor liegt in ${r.vorher}. Die Seite wird neu geladen.`);
+          location.reload();
+        } catch (e) {
+          meldung(fehlerText(e), 'fehler');
+        }
+      });
+      return;
+    }
     const k = ev.target.closest('[data-laden]');
     if (!k) return;
     mitSperre(k, async () => {

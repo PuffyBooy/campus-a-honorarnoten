@@ -251,7 +251,7 @@ final class Honorare
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'nachweisHochladen', 'nachweisLoeschen', 'nachweisLaden', 'meineArtikel',
         'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
-        'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'serverStatus', 'leistungstest', 'serverAktion', 'ansichtStarten', 'ansichtBeenden',
+        'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'serverStatus', 'leistungstest', 'serverAktion', 'funktionstest', 'sicherungZurueckspielen', 'ansichtStarten', 'ansichtBeenden',
         'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
         'anfragen', 'offeneAnfragenAnzahl', 'anfrageFreischalten', 'anfrageAblehnen', 'nutzerAnlegen', 'nutzerListe',
         'rollenSetzen', 'nutzerAktivSetzen', 'passwortZuruecksetzen', 'emailAendern', 'nutzerLoeschen', 'noteLoeschen',
@@ -1002,6 +1002,38 @@ final class Honorare
         $r = leistungstest($this->db());
         $this->log('info', 'system', 'Leistungstest: ' . implode(', ', array_map(fn ($e) => $e['titel'] . ' ' . ($e['ms'] ?? '–') . ' ms', $r['ergebnisse'])));
         return $r;
+    }
+
+    /** Der ganze Ablauf mit Testkonten – wird danach vollständig zurückgenommen */
+    public function funktionstest(): array
+    {
+        brauche($this->ctx, 'admin');
+        $r = funktionstest($this->db());
+        $fehler = array_values(array_filter($r['schritte'], fn ($s) => $s['stufe'] === 'fehler'));
+        $this->log($r['ok'] ? 'info' : 'fehler', 'system', $r['ok'] ? 'Funktionstest: alles in Ordnung'
+            : 'Funktionstest fehlgeschlagen bei „' . $fehler[0]['titel'] . '“: ' . $fehler[0]['text']);
+        return $r;
+    }
+
+    /** Sicherung zurückspielen (vorher wird der jetzige Stand gesichert); danach müssen sich alle neu anmelden */
+    public function sicherungZurueckspielen(mixed $name = null, mixed $bestaetigung = null): array
+    {
+        $db = $this->db();
+        $admin = brauche($this->ctx, 'admin');
+        pruefe(s($bestaetigung) === 'WIEDERHERSTELLEN', 'Zur Bestätigung bitte WIEDERHERSTELLEN eintippen.');
+        $datei = sicherung_pfad(s($name));
+        pruefe($datei, 'Diese Sicherung gibt es nicht (mehr).', 404);
+        pruefe(str_ends_with($datei, ist_mysql($db) ? '.sql' : '.sqlite'), 'Diese Sicherung passt nicht zur Datenbank (SQLite und MySQL lassen sich nicht mischen).');
+        $vorher = sichern($db, daten_ordner() . '/backups/honorarnoten-' . date('Y-m-d-His') . '.sqlite');
+        try {
+            sicherung_einspielen($db, $datei);
+        } catch (Throwable $e) {
+            protokoll(datenbank(true), 'fehler', 'sicherung', 'Zurückspielen von ' . basename($datei) . ' fehlgeschlagen: ' . $e->getMessage()
+                . ' – der Stand davor liegt in ' . basename($vorher), $admin);
+            throw new Fehler('Das Zurückspielen ist fehlgeschlagen: ' . $e->getMessage() . ' Der Stand davor ist gesichert (' . basename($vorher) . ').', 500);
+        }
+        protokoll(datenbank(true), 'warnung', 'sicherung', 'Sicherung zurückgespielt: ' . basename($datei) . ' (Stand davor gesichert als ' . basename($vorher) . ')', $admin);
+        return ['vorher' => basename($vorher)];
     }
 
     /** Wartungsaktionen der Kommandozentrale; liefert eine kurze Meldung */

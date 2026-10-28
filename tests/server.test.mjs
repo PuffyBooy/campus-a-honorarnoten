@@ -1104,6 +1104,37 @@ test('Admin: Als Person ansehen – nur lesen, nur in dieser Sitzung, nicht für
   assert.ok((await k.admin.ok('protokoll', { suche: 'Ansehen als' })).eintraege.length >= 2);
 });
 
+test('Funktionstest: ganzer Ablauf mit Testkonten, danach ist nichts mehr da', async () => {
+  assert.equal((await k.rita.aufruf('funktionstest')).status, 403);
+  const zaehlen = () => php.sql('select (select count(*) from nutzer) n, (select count(*) from noten) a, (select count(*) from mails) m').zeilen[0];
+  const vorher = zaehlen();
+  const r = await k.admin.ok('funktionstest');
+  assert.equal(r.ok, true, JSON.stringify(r.schritte.filter((x) => x.stufe !== 'ok')));
+  assert.deepEqual(r.schritte.map((x) => x.titel), ['Testkonten anlegen', 'Leistungen speichern', 'Prämienabrechnung einreichen',
+    'Redaktion sieht die Abrechnung', 'Rückfrage und Antwort', 'Prüfen und annehmen', 'Buchhaltung bezahlt', 'Zahlungsavis (PDF)',
+    'E-Mails vorbereitet', 'Aufgeräumt']);
+  const nachher = zaehlen();
+  assert.equal(nachher.n, vorher.n);
+  assert.equal(nachher.a, vorher.a);
+  assert.ok(!php.smtp.mails.some((m) => m.an.endsWith('@example.invalid')), 'keine E-Mail verschickt');
+  assert.ok((await k.admin.ok('protokoll', { suche: 'Funktionstest' })).eintraege.some((e) => e.text.includes('alles in Ordnung')));
+});
+
+test('Sicherung zurückspielen: Stand davor wird gesichert, Daten wie in der Sicherung', async () => {
+  const s = await k.admin.ok('jetztSichern');
+  const id = await k.anna.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Nach der Sicherung', veroeffentlichung: '2026-10-21', betrag: 15 });
+  assert.equal((await k.rita.aufruf('sicherungZurueckspielen', s.name, 'WIEDERHERSTELLEN')).status, 403);
+  assert.match((await k.admin.aufruf('sicherungZurueckspielen', s.name, 'ja')).fehler, /WIEDERHERSTELLEN/);
+  assert.equal((await k.admin.aufruf('sicherungZurueckspielen', 'honorarnoten-1999-01-01.sqlite', 'WIEDERHERSTELLEN')).status, 404);
+  await new Promise((r) => setTimeout(r, 1100)); // eigener Dateiname (Sekunde) für die Sicherung „davor“
+  const r = await k.admin.ok('sicherungZurueckspielen', s.name, 'WIEDERHERSTELLEN');
+  assert.ok(r.vorher.startsWith('honorarnoten-') && r.vorher !== s.name);
+  assert.ok(!(await k.anna.ok('meineLeistungen')).some((p) => p.id === id), 'Stand der Sicherung');
+  assert.ok((await k.admin.ok('sicherungen')).liste.some((x) => x.name === r.vorher), 'Stand davor gesichert');
+  assert.ok((await k.admin.ok('protokoll', { suche: 'zurückgespielt' })).eintraege.length);
+  assert.ok((await k.admin.ok('nutzerListe')).length > 3, 'Konten wieder da, Admin bleibt angemeldet');
+});
+
 test('Kommandozentrale: Zustand, Messwerte je Stunde, Leistungstest, Wartungsaktionen – nur für Admins', async () => {
   for (const f of ['serverStatus', 'leistungstest']) assert.equal((await k.rita.aufruf(f)).status, 403);
   assert.equal((await k.rita.aufruf('serverAktion', 'aufraeumen')).status, 403);
