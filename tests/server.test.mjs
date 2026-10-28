@@ -327,9 +327,13 @@ test('Buchhaltung: PDF an sich selbst mailen (als Anhang)', async () => {
 });
 
 test('Link in der Zugangs-Mail meldet direkt an (einmal, danach eigenes Passwort)', async () => {
+  const vorher = php.smtp.mails.length;
   const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Lina', nachname: 'Link', email: 'lina@example.org', rollen: ['autor'] });
   assert.match(z.link, /#\/link\/[\w-]{20,}$/);
-  const mail = await mailAbwarten(php.smtp, (m) => m.an === 'lina@example.org' && m.betreff.startsWith('Dein Zugang'));
+  assert.deepEqual([z.mail, z.mail_fehler, z.mail_id], [true, '', undefined], 'gleich verschickt, Ergebnis für den Admin');
+  // schon verschickt, bevor die Antwort kam (nicht erst im Hintergrund)
+  const mail = php.smtp.mails.slice(vorher).find((m) => m.an === 'lina@example.org' && m.betreff.startsWith('Dein Zugang'));
+  assert.ok(mail, 'Zugangs-Mail sofort verschickt');
   assert.ok(mail.html.includes(z.link.replace(/&/g, '&amp;')), 'der Knopf führt zum Anmeldelink');
   const token = z.link.split('#/link/')[1];
   const lina = client();
@@ -347,6 +351,25 @@ test('Link in der Zugangs-Mail meldet direkt an (einmal, danach eigenes Passwort
   php.sql("update links set gueltig_bis = '2020-01-01T00:00:00.000Z' where nutzer_id = ?", [n.id]);
   assert.match((await client().aufruf('linkAnmelden', z3.link.split('#/link/')[1])).fehler, /abgelaufen/);
   await k.admin.ok('nutzerLoeschen', n.id);
+});
+
+test('Zugangs-Mail: Mailserver nicht erreichbar -> der Admin sieht den Fehler, später neuer Versuch', async () => {
+  const e = await k.admin.ok('mailEinstellungen');
+  await k.admin.ok('mailEinstellungenSpeichern', { ...e, port: 1 });
+  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Otto', nachname: 'Offline', email: 'otto@example.org', rollen: ['autor'] });
+  assert.equal(z.mail, true);
+  assert.match(z.mail_fehler, /Keine Verbindung zum Mailserver/);
+  assert.ok((await k.admin.ok('protokoll', { stufe: 'warnung', suche: 'otto@example.org' })).eintraege.length, 'steht im Protokoll');
+  await k.admin.ok('mailEinstellungenSpeichern', { ...e, port: php.smtp.port });
+  php.sql('update mails set gesperrt_bis = 0');
+  await k.admin.ok('statistik'); // nächste Anfrage verschickt im Hintergrund
+  assert.ok(await mailAbwarten(php.smtp, (m) => m.an === 'otto@example.org'), 'zweiter Versuch klappt');
+  const otto = (await k.admin.ok('nutzerListe')).find((n) => n.email === 'otto@example.org');
+  await k.admin.ok('nutzerLoeschen', otto.id);
+  // die erwartete Meldung im PHP-Fehlerprotokoll ist kein Fehler der App
+  const erwartet = php.fehler.filter((f) => /otto@example\.org nicht verschickt/.test(f));
+  assert.equal(erwartet.length, 1);
+  php.fehler.splice(php.fehler.indexOf(erwartet[0]), 1);
 });
 
 test('Registrierungslink: Konto selbst anlegen, begrenzt in Zeit und Anzahl', async () => {

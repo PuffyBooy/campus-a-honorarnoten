@@ -856,7 +856,7 @@ final class Honorare
         pruefe($r, 'Bitte mindestens eine Rolle wählen.');
         $passwort = startpasswort();
         $hash = passwort_hash($passwort);
-        return transaktion($db, function () use ($db, $admin, $anfrageId, $r, $passwort, $hash) {
+        return zugang_senden($db, transaktion($db, function () use ($db, $admin, $anfrageId, $r, $passwort, $hash) {
             $a = zeile($db, 'select * from anfragen where id = ?', [s($anfrageId)]);
             pruefe($a, 'Diese Anfrage gibt es nicht (mehr).', 404);
             pruefe($a['status'] === 'offen', 'Diese Anfrage wurde bereits bearbeitet.');
@@ -865,7 +865,7 @@ final class Honorare
             q($db, "update anfragen set status = 'freigeschaltet', bearbeitet_am = ?, bearbeitet_von = ? where id = ?", [jetzt(), anzeigename($admin), $a['id']]);
             $this->log('info', 'konten', "Zugangsanfrage freigeschaltet: {$a['vorname']} {$a['nachname']} ({$a['email']})");
             return zugang_melden($db, ['id' => $id, 'email' => $a['email'], 'vorname' => $a['vorname'], 'passwort' => $passwort]);
-        });
+        }));
     }
 
     public function anfrageAblehnen(mixed $anfrageId = null): bool
@@ -890,13 +890,13 @@ final class Honorare
         pruefe($r, 'Bitte mindestens eine Rolle wählen.');
         $passwort = startpasswort();
         $hash = passwort_hash($passwort);
-        return transaktion($db, function () use ($db, $d, $email, $r, $passwort, $hash) {
+        return zugang_senden($db, transaktion($db, function () use ($db, $d, $email, $r, $passwort, $hash) {
             pruefe(!wert($db, 'select 1 from nutzer where email = ?', [$email]), 'Für diese E-Mail-Adresse gibt es schon ein Konto.');
             $id = konto_einfuegen($db, s($d['vorname']), s($d['nachname']), $email, $r, $hash);
             q($db, "update anfragen set status = 'freigeschaltet', bearbeitet_am = ? where email = ? and status = 'offen'", [jetzt(), $email]);
             $this->log('info', 'konten', 'Konto angelegt: ' . tr($d['vorname']) . ' ' . tr($d['nachname']) . " ($email), Rollen: " . implode(', ', $r));
             return zugang_melden($db, ['id' => $id, 'email' => $email, 'vorname' => tr($d['vorname']), 'passwort' => $passwort]);
-        });
+        }));
     }
 
     public function nutzerListe(): array
@@ -946,7 +946,7 @@ final class Honorare
         q($db, 'update nutzer set passwort = ?, muss_passwort_aendern = 1 where id = ?', [passwort_hash($passwort), $n['id']]);
         alle_sitzungen_beenden($db, $n['id'], $n['id'] === $this->ctx->nutzer['id'] ? $this->ctx->token : null);
         $this->log('info', 'konten', 'Passwort zurückgesetzt: ' . anzeigename($n));
-        return zugang_melden($db, ['id' => $n['id'], 'email' => $n['email'], 'vorname' => $n['vorname'], 'passwort' => $passwort], false);
+        return zugang_senden($db, zugang_melden($db, ['id' => $n['id'], 'email' => $n['email'], 'vorname' => $n['vorname'], 'passwort' => $passwort], false));
     }
 
     /** E-Mail-Adresse eines Kontos ändern (z. B. Tippfehler). Alte und neue Adresse bekommen eine Info-Mail. */
@@ -1265,9 +1265,10 @@ final class Honorare
             'rollen' => $rollen, 'max' => $max, 'tage' => $tage, 'notiz' => kuerze(tr($d['notiz'] ?? '') ?: $an, 200), 'von' => anzeigename($admin),
         ]));
         $mail = $an !== '' && mail_einstellungen($db)['aktiv'];
-        if ($mail) mail_einreihen($db, $an, mail_einladung($db, $link, $tage, $admin));
+        // gleich verschicken, damit der Admin sieht, ob es geklappt hat
+        $mailFehler = $mail ? (mail_jetzt_senden($db, (string) mail_einreihen($db, $an, mail_einladung($db, $link, $tage, $admin))) ?? '') : '';
         $this->log('info', 'konten', "Registrierungslink erstellt: $tage Tage, " . ($max === null ? 'beliebig oft' : "{$max}×") . ($an !== '' ? ", an $an" : ''));
-        return ['link' => $link, 'mail' => $mail, 'tage' => $tage, 'max' => $max];
+        return ['link' => $link, 'mail' => $mail, 'mail_fehler' => $mailFehler, 'tage' => $tage, 'max' => $max];
     }
 
     public function registrierungslinks(): array
@@ -1469,7 +1470,21 @@ function zugang_melden(PDO $db, array $z, bool $neu = true): array
     $z['link'] = app_link($db, 'link/' . link_erstellen($db, 'anmelden', ['nutzer_id' => $z['id'], 'max' => 1, 'tage' => LINK_ANMELDEN_TAGE]));
     $e = mail_einstellungen($db);
     $z['mail'] = $e['aktiv'] && $e['zugangsdaten'];
-    if ($z['mail']) mail_einreihen($db, $z['email'], mail_zugang($db, $z, $neu));
+    if ($z['mail']) $z['mail_id'] = mail_einreihen($db, $z['email'], mail_zugang($db, $z, $neu));
+    return $z;
+}
+
+/**
+ * Zugangs-Mail sofort verschicken (nach dem Speichern, außerhalb der Transaktion), damit der Admin das Ergebnis
+ * sieht: mail_fehler leer = verschickt, sonst die Meldung des Mailservers (weitere Versuche folgen automatisch).
+ */
+function zugang_senden(PDO $db, array $z): array
+{
+    $id = $z['mail_id'] ?? null;
+    unset($z['mail_id']);
+    if (!$id) return $z;
+    $z['mail_fehler'] = mail_jetzt_senden($db, $id) ?? '';
+    if ($z['mail_fehler'] === '') protokoll($db, 'info', 'mail', "Zugangs-Mail an {$z['email']} verschickt");
     return $z;
 }
 
