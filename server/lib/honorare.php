@@ -67,6 +67,7 @@ function nutzer_aus_zeile(?array $z): ?array
         'hinweis_bestaetigt_am' => $z['hinweis_bestaetigt_am'] ?? null,
         'zwei_faktor' => !empty($z['zwei_faktor']),
         'neuigkeiten_gesehen' => $z['neuigkeiten_gesehen'] ?? null,
+        'nummer_basis' => $z['nummer_basis'] ?? null,
         'benachrichtigungen' => (object) (json_decode($z['benachrichtigungen'] ?? '{}', true) ?: []),
     ];
 }
@@ -250,7 +251,7 @@ final class Honorare
     public const FUNKTIONEN = [
         'aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'erstesPasswortSetzen', 'passwortAendern',
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'nachweisHochladen', 'nachweisLoeschen', 'nachweisLaden', 'meineArtikel',
-        'naechsteNummer', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
+        'naechsteNummer', 'nummerFestlegen', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
         'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'ablaufZeiten', 'neuigkeitenGesehen', 'serverStatus', 'leistungstest', 'serverAktion', 'funktionstest', 'sicherungZurueckspielen', 'ansichtStarten', 'ansichtBeenden',
         'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
@@ -662,6 +663,21 @@ final class Honorare
     public function naechsteNummer(): array
     {
         return naechste_nummer($this->db(), brauche($this->ctx, 'autor'));
+    }
+
+    /** Nummer der zuletzt geschriebenen Prämienabrechnung dieses Jahres (z. B. vor der App) – ab da wird weitergezählt */
+    public function nummerFestlegen(mixed $letzte = null): array
+    {
+        $db = $this->db();
+        $n = brauche($this->ctx, 'autor');
+        $letzte = filter_var($letzte, FILTER_VALIDATE_INT);
+        pruefe($letzte !== false && $letzte >= 0 && $letzte <= 999, 'Bitte eine Zahl zwischen 0 und 999 eingeben.');
+        $jahr = (int) substr(heute_iso(), 0, 4);
+        $inApp = (int) wert($db, 'select coalesce(max(laufende_nummer), 0) from noten where autor_id = ? and jahr = ?', [$n['id'], $jahr]);
+        pruefe($letzte >= $inApp, "Du hast $jahr in der App schon die Nummer $inApp eingereicht – kleiner geht nicht, sonst gäbe es Nummern doppelt.");
+        q($db, 'update nutzer set nummer_basis = ? where id = ?', [$letzte ? "$jahr:$letzte" : null, $n['id']]);
+        protokoll($db, 'info', 'konto', "Nummerierung: letzte Prämienabrechnung $jahr ist Nr. $letzte", $n);
+        return naechste_nummer($db, nutzer_laden($db, $n['id']), $jahr);
     }
 
     public function notenDiesenMonat(): array
@@ -2013,8 +2029,12 @@ function naechste_nummer(PDO $db, array $n, ?int $jahr = null): array
 {
     $jahr ??= (int) substr(heute_iso(), 0, 4);
     $m = (int) wert($db, 'select coalesce(max(laufende_nummer), 0) from noten where autor_id = ? and jahr = ?', [$n['id'], $jahr]);
-    $laufend = $m + 1;
-    return ['jahr' => $jahr, 'laufendeNummer' => $laufend, 'nummer' => honorarnote_nummer($n['vorname'], $n['nachname'], $jahr, $laufend)];
+    // selbst gesetzte Nummer gilt nur im Jahr, für das sie eingetragen wurde
+    [$basisJahr, $basis] = array_map('intval', explode(':', ($n['nummer_basis'] ?? '') ?: '0:0') + [1 => 0]);
+    $bisher = max($m, $basisJahr === $jahr ? $basis : 0);
+    $laufend = $bisher + 1;
+    return ['jahr' => $jahr, 'laufendeNummer' => $laufend, 'bisher' => $bisher, 'in_app' => $m,
+        'nummer' => honorarnote_nummer($n['vorname'], $n['nachname'], $jahr, $laufend)];
 }
 
 function noch_ein_admin(PDO $db, string $ohne): bool

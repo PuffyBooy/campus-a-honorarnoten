@@ -2,6 +2,12 @@
 // Neue Einträge oben anfügen (id = Datum, bei mehreren am Tag mit Buchstaben).
 export const NEUIGKEITEN = [
   {
+    id: '2026-10-29e', datum: '2026-10-29', titel: 'Nummer der Prämienabrechnung selbst festlegen',
+    punkte: [
+      ['autor', 'Schon vor der App Prämienabrechnungen geschrieben? Unter „Mein Profil → Nummerierung“ (oder „ändern“ neben der Nummer) die letzte Nummer eintragen – die App zählt von dort weiter.'],
+    ],
+  },
+  {
     id: '2026-10-29d', datum: '2026-10-29', titel: 'Buchhaltung: Abrechnungen einzeln herunterladen',
     punkte: [
       ['buchhaltung', 'Bei jeder Abrechnung „⬇ PDF“ und „⬇ Word“ – einzeln herunterladen.'],

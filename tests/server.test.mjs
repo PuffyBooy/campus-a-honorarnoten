@@ -179,6 +179,13 @@ test('Autor:in: Profil, Leistungen, Monatsabrechnung', async () => {
   assert.equal(note.zahlung.iban, AT_IBAN);
   assert.equal((await a.ok('meineLeistungen')).length, 0);
   assert.equal((await a.ok('naechsteNummer')).nummer, `MUELLER-AN-${jahr}-02`);
+
+  // eigene Nummer festlegen (schon vor der App bis Nr. 6 geschrieben) → weiter mit 7; kleiner als in der App geht nicht
+  assert.equal((await a.ok('nummerFestlegen', 6)).nummer, `MUELLER-AN-${jahr}-07`);
+  assert.equal((await a.ok('naechsteNummer')).nummer, `MUELLER-AN-${jahr}-07`);
+  assert.equal((await a.aufruf('nummerFestlegen', 0)).status, 400);
+  assert.equal((await a.aufruf('nummerFestlegen', 'x')).status, 400);
+  assert.equal((await a.ok('nummerFestlegen', 1)).nummer, `MUELLER-AN-${jahr}-02`);
   k.note = note;
 });
 

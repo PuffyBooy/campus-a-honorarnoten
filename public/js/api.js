@@ -75,6 +75,7 @@ export const nachweisLoeschen = f('nachweisLoeschen');
 export const nachweisLaden = f('nachweisLaden');
 export const meineArtikel = f('meineArtikel');
 export const naechsteNummer = f('naechsteNummer');
+export const nummerFestlegen = f('nummerFestlegen');
 export const notenDiesenMonat = f('notenDiesenMonat');
 export const abrechnungAbschicken = f('abrechnungAbschicken');
 export const meineNoten = f('meineNoten');

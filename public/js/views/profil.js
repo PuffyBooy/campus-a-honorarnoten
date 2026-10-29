@@ -5,6 +5,7 @@ import { MEDIEN, MEDIUM_KEYS, PROFIL_FELD, profilIdAusLink, profilLink } from '.
 import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { bekommt, verfuegbareBenachrichtigungen } from '../lib/benachrichtigungen.js';
 import { downloadBlob } from '../lib/csv.js';
+import { nummerAendern } from '../lib/nummer-aendern.js';
 import qrcode from '../../vendor/qrcode-generator.mjs';
 
 function feld(name, label, wert, { typ = 'text', pflicht = true, attrs = '' } = {}) {
@@ -21,6 +22,7 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
   const istAutor = nutzer.rollen.includes('autor');
   const vollstaendig = store.profilVollstaendig(nutzer);
   const kontakt = (await store.einstellungen()).datenschutzKontakt;
+  const naechste = istAutor && vollstaendig ? await store.naechsteNummer() : null;
 
   el.innerHTML = `
     <h1>Mein Profil</h1>
@@ -67,6 +69,12 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
           <h2>Meine Rollen</h2>
           <p>${nutzer.rollen.map((r) => `<span class="badge badge-rolle">${esc(ROLLEN_LABEL[r])}</span>`).join(' ') || '–'}</p>
         </section>
+        ${naechste ? `<section class="karte">
+          <h2>Nummerierung</h2>
+          <p>Deine nächste Prämienabrechnung: <strong class="nummer">${esc(naechste.nummer)}</strong></p>
+          <p class="tipp">Schon vor der App Prämienabrechnungen geschrieben, z. B. bis Nummer 6? Dann hier 6 eintragen – die nächste bekommt die 7.</p>
+          <button type="button" class="btn" id="p-nummer">Nummer ändern</button>
+        </section>` : ''}
         ${verfuegbareBenachrichtigungen(nutzer).length ? `
         <form class="karte" id="mail-form">
           <h2>E-Mail-Benachrichtigungen</h2>
@@ -102,6 +110,8 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
         </section>
       </div>
     </div>`;
+
+  el.querySelector('#p-nummer')?.addEventListener('click', async () => { if (await nummerAendern(store, naechste)) neuLaden(); });
 
   const form = el.querySelector('#profil-form');
   const setFehler = (name, t) => {

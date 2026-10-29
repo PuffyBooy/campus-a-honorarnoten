@@ -11,6 +11,7 @@ import { satzFuer } from '../lib/honorarsaetze.js';
 import { darfRedigieren } from '../lib/konto.js';
 import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { noteKarte, notenAktionen } from './noten.js';
+import { nummerAendern } from '../lib/nummer-aendern.js';
 import {
   NACHWEISE_PRO_LEISTUNG, NACHWEIS_ACCEPT, NACHWEIS_MAX_MB, nachweisFehler, nachweiseHochladen, nachweiseHtml,
 } from '../lib/nachweise.js';
@@ -332,7 +333,8 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
           ${monatsHinweis(heute)}
           ${schon.length ? `<p class="hinweisbox">Diesen Monat schon eingereicht: ${schon.map((n) => `<strong>${esc(n.nummer)}</strong>`).join(', ')}</p>` : ''}
           <dl class="angaben kompakt">
-            <dt>Nummer</dt><dd class="nummer">${esc(naechste.nummer)}</dd>
+            <dt>Nummer</dt><dd><span class="nummer">${esc(naechste.nummer)}</span>
+              <button type="button" class="link-knopf klein" data-nummer title="Wenn du vor der App schon Prämienabrechnungen geschrieben hast">ändern</button></dd>
             <dt>An</dt><dd>${esc(einstellungen.empfaenger.name)}</dd>
             <dt>Überweisung an</dt><dd>${esc(nutzer.profil.kontoinhaber)}<br><span class="mono">${esc(formatIban(nutzer.profil.iban))}</span></dd>
           </dl>
@@ -572,7 +574,9 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     const l = ev.target.closest('[data-loeschen]');
     const a = ev.target.closest('[data-abschicken]');
     const beide = ev.target.closest('[data-beide]');
-    if (b) {
+    if (ev.target.closest('[data-nummer]')) {
+      if (await nummerAendern(store, naechste)) neuLaden();
+    } else if (b) {
       bearbeiteId = b.dataset.bearbeiten;
       neuLaden();
     } else if (l) {
