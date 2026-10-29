@@ -2,6 +2,13 @@
 // Neue Einträge oben anfügen (id = Datum, bei mehreren am Tag mit Buchstaben).
 export const NEUIGKEITEN = [
   {
+    id: '2026-10-29d', datum: '2026-10-29', titel: 'Redaktion: Abrechnungen herunterladen',
+    punkte: [
+      ['redaktion', 'In der Prüfansicht jede Abrechnung als PDF oder Word herunterladen.'],
+      ['redaktion', '„⬇ Alle“ über der Liste: alle Abrechnungen der Liste auf einmal, jede als eigene Datei – direkt in einen Ordner (Chrome, Edge) oder als ZIP, geordnet nach Monat und Person, auf Wunsch mit den Nachweisen.'],
+    ],
+  },
+  {
     id: '2026-10-29c', datum: '2026-10-29', titel: 'Redaktion: schneller von Abrechnung zu Abrechnung',
     punkte: [
       ['redaktion', 'Der Wechsel zwischen Abrechnungen geht jetzt ohne Neuladen: Liste und Filter bleiben stehen, die nächste Abrechnung ist schon vorgeladen.'],

@@ -4,6 +4,7 @@ import { esc, formatEuro, formatMonat, vollerName } from '../lib/format.js';
 import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { MEDIEN, mediumBadge, mediumOder } from '../lib/campus.js';
 import { pruefungRendern, vorladen } from './redaktion-detail.js';
+import { abrechnungDatei, kannOrdner, zielWaehlen } from '../lib/ablage.js';
 
 // Filter bleiben beim Wechseln zwischen Abrechnungen erhalten; das Medium merkt sich der Browser
 const MEDIUM_KEY = 'campus-a-honorare:redaktion-medium';
@@ -130,8 +131,9 @@ export async function render(el, ctx) {
     </section>
     <div class="arbeitsplatz${gewaehlt ? ' mit-auswahl' : ''}">
       <aside class="posteingang" aria-label="Prämienabrechnungen">
-        <p class="treffer" aria-live="polite"><strong>${daten.anzahl}</strong> ${daten.anzahl === 1 ? 'Abrechnung' : 'Abrechnungen'}
+        <div class="treffer-zeile"><p class="treffer" aria-live="polite"><strong>${daten.anzahl}</strong> ${daten.anzahl === 1 ? 'Abrechnung' : 'Abrechnungen'}
           · ${esc(formatEuro(daten.summe))}</p>
+          ${daten.anzahl ? `<button type="button" class="btn btn-klein" id="r-alle-laden" title="Alle Abrechnungen dieser Liste herunterladen – jede als eigene Datei">⬇ Alle</button>` : ''}</div>
         ${mitAuswahl ? `<div class="sammel">
           <label class="check"><input type="checkbox" id="r-alle"> alle</label>
           <button type="button" class="btn btn-klein btn-erfolg" id="r-sammel" disabled>Ausgewählte annehmen</button></div>` : ''}
@@ -190,6 +192,79 @@ export async function render(el, ctx) {
     if (rest > 0) ev.target.textContent = `Weitere laden (${rest} übrig)`;
     else ev.target.remove();
   }));
+
+  // ---- Alle Abrechnungen der Liste herunterladen: jede als eigene Datei, geordnet nach Monat und Person
+  el.querySelector('#r-alle-laden')?.addEventListener('click', async (ev) => {
+    const knopf = ev.currentTarget;
+    // Auswahl im Dialog mitlesen (der Dialog liefert nur ja/nein)
+    const wahl = { format: 'pdf', nachweise: true };
+    const mitlesen = (e) => {
+      if (e.target.name === 'format') wahl.format = e.target.value;
+      if (e.target.name === 'nachweise') wahl.nachweise = e.target.checked;
+    };
+    document.addEventListener('change', mitlesen);
+    const ok = await bestaetigen({
+      titel: `${daten.anzahl} ${daten.anzahl === 1 ? 'Abrechnung' : 'Abrechnungen'} herunterladen`,
+      html: `<p>Alle Abrechnungen dieser Liste (mit den gewählten Filtern), jede als eigene Datei –
+          geordnet nach <strong>Monat / Person</strong>.</p>
+        <fieldset class="kategorie"><legend class="klein">Format</legend>
+          <label class="radio"><input type="radio" name="format" value="pdf" checked> <span>PDF</span></label>
+          <label class="radio"><input type="radio" name="format" value="word"> <span>Word</span></label>
+          <label class="radio"><input type="radio" name="format" value="beide"> <span>PDF und Word</span></label></fieldset>
+        <label class="check bestaetigen"><input type="checkbox" name="nachweise" checked> Nachweise zum Redigieren mitnehmen</label>
+        <p class="klein">${kannOrdner() ? 'Als Nächstes wählst du den Ordner, in den die Dateien kommen.'
+          : 'Dein Browser kann nicht direkt in einen Ordner speichern – du bekommst eine ZIP-Datei mit denselben Ordnern.'}</p>`,
+      ja: kannOrdner() ? 'Ordner wählen …' : 'Herunterladen',
+    });
+    document.removeEventListener('change', mitlesen);
+    if (!ok) return;
+    const { format, nachweise: mitNachweisen } = wahl;
+    let ziel;
+    try {
+      ziel = await zielWaehlen(`Prämienabrechnungen ${new Date().toISOString().slice(0, 10)}`);
+    } catch (e) {
+      meldung(fehlerText(e), 'fehler');
+      return;
+    }
+    if (!ziel) return;
+    await mitSperre(knopf, async () => {
+      try {
+        // alle Abrechnungen mit den aktuellen Filtern holen (seitenweise)
+        const alle = [];
+        while (alle.length < daten.anzahl) {
+          const seite = await store.redaktionListe({ ...filter, limit: 200, offset: alle.length });
+          if (!seite.noten.length) break;
+          alle.push(...seite.noten);
+        }
+        let dateien = 0;
+        for (const [i, n] of alle.entries()) {
+          knopf.textContent = `${i + 1} / ${alle.length} …`;
+          const ordner = `${n.monat} ${formatMonat(n.monat)}/${n.autor.nachname} ${n.autor.vorname}`.trim();
+          for (const f of format === 'beide' ? ['pdf', 'word'] : [format]) {
+            const datei = await abrechnungDatei(n, f);
+            await ziel.schreiben(`${ordner}/${datei.name}`, datei.blob);
+            dateien++;
+          }
+          if (mitNachweisen) {
+            for (const p of n.positionen) {
+              for (const x of p.nachweise ?? []) {
+                const r = await store.nachweisLaden(x.id);
+                await ziel.schreiben(`${ordner}/${n.nummer} Nachweis - ${r.name}`,
+                  new Blob([Uint8Array.from(atob(r.inhalt), (c) => c.charCodeAt(0))], { type: r.typ }));
+                dateien++;
+              }
+            }
+          }
+        }
+        await ziel.fertig();
+        meldung(`${dateien} ${dateien === 1 ? 'Datei' : 'Dateien'} ${ziel.art === 'ordner' ? 'im gewählten Ordner gespeichert' : 'als ZIP heruntergeladen'}.`, 'erfolg');
+      } catch (e) {
+        meldung(fehlerText(e), 'fehler');
+      } finally {
+        knopf.textContent = '⬇ Alle';
+      }
+    });
+  });
 
   // ---- Mehrere auf einmal annehmen
   const sammel = el.querySelector('#r-sammel');

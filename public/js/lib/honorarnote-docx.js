@@ -126,10 +126,11 @@ function dokumentBefuellen(xml, note, dom = globalThis) {
   const e = note.empfaenger ?? {};
   const werte = {
     [BEISPIEL.name]: `${a.vorname} ${a.nachname}`,
-    [BEISPIEL.strasse]: a.strasse,
-    [BEISPIEL.plzOrt]: a.plz_ort,
-    [BEISPIEL.iban]: formatIban(note.zahlung.iban),
-    [BEISPIEL.ortDatum]: `${ortAusPlzOrt(a.plz_ort)}, ${formatDatum(note.eingereicht_am)}`,
+    // Redaktion sieht keine Adresse und keine Bankverbindung – dann bleiben die Felder leer
+    [BEISPIEL.strasse]: a.strasse ?? '',
+    [BEISPIEL.plzOrt]: a.plz_ort ?? '',
+    [BEISPIEL.iban]: note.zahlung?.iban ? formatIban(note.zahlung.iban) : '',
+    [BEISPIEL.ortDatum]: [ortAusPlzOrt(a.plz_ort ?? ''), formatDatum(note.eingereicht_am)].filter(Boolean).join(', '),
     [BEISPIEL.nummer]: note.nummer,
     [BEISPIEL.empfName]: e.name ?? BEISPIEL.empfName,
     [BEISPIEL.empfStrasse]: e.strasse ?? BEISPIEL.empfStrasse,

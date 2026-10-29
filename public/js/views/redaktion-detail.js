@@ -4,7 +4,9 @@
 import {
   AKTION_LABEL, KATEGORIE_LABEL, artText, esc, formatDatum, formatEuro, formatMonat, formatZeitpunkt, parseBetrag, vollerName,
 } from '../lib/format.js';
-import { bestaetigen, fehlerText, meldung, statusBadge } from '../lib/ui.js';
+import { bestaetigen, fehlerText, meldung, mitSperre, statusBadge } from '../lib/ui.js';
+import { abrechnungDatei } from '../lib/ablage.js';
+import { downloadBlob } from '../lib/csv.js';
 import { hatArtikel, mediumBadge, titelLink } from '../lib/campus.js';
 import { nachweiseHtml } from '../lib/nachweise.js';
 import { chatAnzeigen } from '../lib/rueckfrage.js';
@@ -120,7 +122,9 @@ export async function pruefungRendern(el, { store, nutzer, params, einstellungen
         <p class="klein">${esc(formatMonat(n.monat))} · eingereicht ${esc(formatZeitpunkt(n.eingereicht_am))}
           · <a href="mailto:${esc(n.autor.email)}">${esc(n.autor.email)}</a></p>
       </div>
-      <span>${mediumBadge(n.medium)} ${statusBadge(n.status)}</span>
+      <span class="pruef-kopf-rechts">${mediumBadge(n.medium)} ${statusBadge(n.status)}
+        <span class="aktionen eng"><button type="button" class="btn btn-klein" data-datei="pdf" title="Diese Abrechnung als PDF">⬇ PDF</button>
+          <button type="button" class="btn btn-klein" data-datei="word" title="Diese Abrechnung als Word-Datei">⬇ Word</button></span></span>
     </div>
     <div class="kennzahlen kennzahlen-klein">
       <div class="kennzahl"><span class="kennzahl-titel">Betrag</span><strong>${esc(formatEuro(n.betrag))}</strong></div>
@@ -223,6 +227,20 @@ export async function pruefungRendern(el, { store, nutzer, params, einstellungen
       knoepfe.forEach((k) => { k.disabled = false; });
     }
   };
+
+  // ---- Diese Abrechnung herunterladen (PDF oder Word)
+  el.querySelector('.pruef-kopf').addEventListener('click', (ev) => {
+    const k = ev.target.closest('[data-datei]');
+    if (!k) return;
+    mitSperre(k, async () => {
+      try {
+        const d = await abrechnungDatei(n, k.dataset.datei);
+        downloadBlob(d.name, d.blob);
+      } catch (e) {
+        meldung(fehlerText(e), 'fehler');
+      }
+    });
+  });
 
   // ---- Rückfrage (Chat mit der Autor:in)
   const rueckfrage = el.querySelector('#d-rueckfrage');
