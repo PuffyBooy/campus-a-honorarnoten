@@ -1,5 +1,6 @@
 // Buchhaltung: angenommene Prämienabrechnungen nach Kalenderwoche. Pro Woche alle als ein PDF
 // herunterladen oder an sich selbst mailen, SEPA-Datei für die Sammelüberweisung, Woche als bezahlt markieren.
+// Dazu jede Abrechnung einzeln (PDF/Word) oder alle als eigene Dateien in einen Ordner.
 import { esc, formatDatum, formatEuro, formatMonat, heuteIso, vollerName } from '../lib/format.js';
 import { kalenderwoche, nachWoche, wocheText } from '../lib/woche.js';
 import { base64, honorarnotenPdfBytes, honorarnotenPdfHerunterladen } from '../lib/beleg.js';
@@ -7,6 +8,8 @@ import { downloadText } from '../lib/csv.js';
 import { sepaXml } from '../lib/sepa.js';
 import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { mediumBadge, mediumName } from '../lib/campus.js';
+import { abrechnungDatei, einzelnSpeichern, ladenFragen, zielWaehlen } from '../lib/ablage.js';
+import { downloadBlob } from '../lib/csv.js';
 
 const WOCHEN_ZURUECK = 12; // so viele Wochen zeigt der Reiter „Bezahlt“
 
@@ -27,18 +30,22 @@ function wochenKarte({ woche, noten }, bezahlt) {
         <p class="woche-summe">${esc(anzahl(noten))} · <strong>${esc(formatEuro(summe(noten)))}</strong></p>
       </div>
       <table class="tabelle">
-        <thead><tr><th>Nummer</th><th>Name</th>${bezahlt ? '<th>Bezahlt am</th>' : ''}<th class="rechts">Betrag</th></tr></thead>
+        <thead><tr><th>Nummer</th><th>Name</th>${bezahlt ? '<th>Bezahlt am</th>' : ''}<th class="rechts">Betrag</th><th><span class="offscreen">Herunterladen</span></th></tr></thead>
         <tbody>${noten.map((n) => `
           <tr>
             <td data-label="Nummer" class="nummer">${esc(n.nummer)}</td>
             <td data-label="Name"><span>${esc(vollerName(n.autor))}<br>${mediumBadge(n.medium)}</span></td>
             ${bezahlt ? `<td data-label="Bezahlt am">${esc(formatDatum(n.bezahlt_am))}</td>` : ''}
             <td data-label="Betrag" class="rechts">${esc(formatEuro(n.betrag))}</td>
+            <td data-label="Datei" class="zeile-laden"><button type="button" class="btn btn-klein" data-datei="pdf" data-id="${esc(n.id)}"
+                title="${esc(n.nummer)} als PDF">⬇ PDF</button><button type="button" class="btn btn-klein" data-datei="word"
+                data-id="${esc(n.id)}" title="${esc(n.nummer)} als Word-Datei">⬇ Word</button></td>
           </tr>`).join('')}</tbody>
       </table>
       <div class="aktionen">
         <button type="button" class="btn" data-pdf>PDF herunterladen</button>
         <button type="button" class="btn" data-mailen>PDF an mich mailen</button>
+        <button type="button" class="btn" data-ordner title="Jede Abrechnung als eigene Datei">Einzeln in Ordner</button>
         ${bezahlt ? '' : `<button type="button" class="btn" data-sepa>SEPA-Datei</button>
         <button type="button" class="btn btn-erfolg" data-bezahlt>Woche als bezahlt markieren</button>`}
       </div>
@@ -117,7 +124,8 @@ async function anzeigen(inhalt, ctx, bezahlt) {
         <p class="tipp">${bezahlt
           ? `Bezahlte Prämienabrechnungen der letzten ${WOCHEN_ZURUECK} Wochen, nach der Woche, in der sie angenommen wurden.`
           : 'Nach der Woche, in der sie angenommen wurden: PDF und SEPA-Datei holen, im Online-Banking überweisen, Woche als bezahlt markieren.'}</p>
-        ${wochen.length > 1 ? `<button type="button" class="btn btn-klein" id="z-alle-pdf">Alle ${esc(anzahl(noten))} als ein PDF</button>` : ''}
+        <span class="aktionen eng">${wochen.length > 1 ? `<button type="button" class="btn btn-klein" id="z-alle-pdf">Alle ${esc(anzahl(noten))} als ein PDF</button>` : ''}
+          <button type="button" class="btn btn-klein" id="z-alle-ordner" title="Jede Abrechnung als eigene Datei, geordnet nach Woche und Person">Alle einzeln in Ordner</button></span>
       </div>
       ${wochen.map((g) => wochenKarte(g, bezahlt)).join('')}`
     : `<section class="karte"><p>${bezahlt ? `In den letzten ${WOCHEN_ZURUECK} Wochen wurde nichts bezahlt.` : 'Keine offenen Prämienabrechnungen. 🎉'}</p></section>`}`;
@@ -126,15 +134,59 @@ async function anzeigen(inhalt, ctx, bezahlt) {
   inhalt.querySelector('#z-alle-pdf')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget,
     () => honorarnotenPdfHerunterladen(noten, `Praemienabrechnungen_${bezahlt ? 'bezahlt' : 'offen'}_${heuteIso()}.pdf`).catch(pdfFehler)));
 
+  // Alle (oder eine Woche) als eigene Dateien: Ordner „KW/Person“
+  const inOrdner = async (knopf, liste, name) => {
+    const wahl = await ladenFragen(liste.length);
+    if (!wahl) return;
+    let ziel;
+    try {
+      ziel = await zielWaehlen(name);
+    } catch (e) {
+      meldung(fehlerText(e), 'fehler');
+      return;
+    }
+    if (!ziel) return;
+    const text = knopf.textContent;
+    await mitSperre(knopf, async () => {
+      try {
+        const dateien = await einzelnSpeichern(store, ziel, liste, wahl,
+          (n) => `${kw(kalenderwoche(angenommenAm(n)))}/${n.autor.nachname} ${n.autor.vorname}`,
+          (i, gesamt) => { knopf.textContent = `${i} / ${gesamt} …`; });
+        meldung(`${dateien} ${dateien === 1 ? 'Datei' : 'Dateien'} ${ziel.art === 'ordner' ? 'im gewählten Ordner gespeichert' : 'als ZIP heruntergeladen'}.`, 'erfolg');
+      } catch (e) {
+        meldung(fehlerText(e), 'fehler');
+      } finally {
+        knopf.textContent = text;
+      }
+    });
+  };
+  inhalt.querySelector('#z-alle-ordner')?.addEventListener('click', (ev) => inOrdner(ev.currentTarget, noten,
+    `Prämienabrechnungen ${bezahlt ? 'bezahlt' : 'offen'} ${heuteIso()}`));
+
+  const nachId = new Map(noten.map((n) => [n.id, n]));
   const nachSchluessel = new Map(wochen.map((g) => [g.woche.schluessel, g]));
   inhalt.addEventListener('click', (ev) => {
     const knopf = ev.target.closest('button');
+    const einzeln = knopf?.dataset.datei && nachId.get(knopf.dataset.id);
+    if (einzeln) {
+      mitSperre(knopf, async () => {
+        try {
+          const d = await abrechnungDatei(einzeln, knopf.dataset.datei);
+          downloadBlob(d.name, d.blob);
+        } catch (e) {
+          meldung(fehlerText(e), 'fehler');
+        }
+      });
+      return;
+    }
     const karte = knopf?.closest('.woche');
     const g = karte && nachSchluessel.get(karte.dataset.woche);
     if (!g) return;
 
     if ('pdf' in knopf.dataset) {
       mitSperre(knopf, () => honorarnotenPdfHerunterladen(g.noten, pdfName(g.woche)).catch(pdfFehler));
+    } else if ('ordner' in knopf.dataset) {
+      inOrdner(knopf, g.noten, `Prämienabrechnungen ${kw(g.woche)}`);
     } else if ('mailen' in knopf.dataset) {
       mitSperre(knopf, () => pdfMailen(store, g.noten, pdfName(g.woche), `Prämienabrechnungen ${wocheText(g.woche)}`)
         .catch((e) => meldung(fehlerText(e), 'fehler')));

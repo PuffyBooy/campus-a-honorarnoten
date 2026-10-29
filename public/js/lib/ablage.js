@@ -4,6 +4,7 @@ import JSZip from '../../vendor/jszip.mjs';
 import { honorarnoteDocx, docxDateiname } from './honorarnote-docx.js';
 import { honorarnotenPdfBytes } from './beleg.js';
 import { downloadBlob } from './csv.js';
+import { bestaetigen } from './ui.js';
 
 /** Kann der Browser direkt in einen Ordner schreiben? */
 export const kannOrdner = () => typeof window.showDirectoryPicker === 'function';
@@ -51,4 +52,57 @@ export async function zielWaehlen(name) {
     async schreiben(pfad, blob) { ordner.file(pfad.split('/').map(sauber).join('/'), blob); },
     async fertig() { downloadBlob(`${sauber(name)}.zip`, await zip.generateAsync({ type: 'blob' })); },
   };
+}
+
+/** Fragt Format und Nachweise ab. Liefert { format: 'pdf'|'word'|'beide', nachweise } oder null bei Abbruch. */
+export async function ladenFragen(anzahl) {
+  // Auswahl im Dialog mitlesen (der Dialog liefert nur ja/nein)
+  const wahl = { format: 'pdf', nachweise: true };
+  const mitlesen = (e) => {
+    if (e.target.name === 'format') wahl.format = e.target.value;
+    if (e.target.name === 'nachweise') wahl.nachweise = e.target.checked;
+  };
+  document.addEventListener('change', mitlesen);
+  const ok = await bestaetigen({
+    titel: `${anzahl} ${anzahl === 1 ? 'Abrechnung' : 'Abrechnungen'} herunterladen`,
+    html: `<p>Jede Abrechnung als eigene Datei – geordnet nach <strong>Woche / Person</strong>.</p>
+      <fieldset class="kategorie"><legend class="klein">Format</legend>
+        <label class="radio"><input type="radio" name="format" value="pdf" checked> <span>PDF</span></label>
+        <label class="radio"><input type="radio" name="format" value="word"> <span>Word</span></label>
+        <label class="radio"><input type="radio" name="format" value="beide"> <span>PDF und Word</span></label></fieldset>
+      <label class="check bestaetigen"><input type="checkbox" name="nachweise" checked> Nachweise mitnehmen (z. B. zum Redigieren)</label>
+      <p class="klein">${kannOrdner() ? 'Als Nächstes wählst du den Ordner, in den die Dateien kommen.'
+        : 'Dein Browser kann nicht direkt in einen Ordner speichern – du bekommst eine ZIP-Datei mit denselben Ordnern.'}</p>`,
+    ja: kannOrdner() ? 'Ordner wählen …' : 'Herunterladen',
+  });
+  document.removeEventListener('change', mitlesen);
+  return ok ? wahl : null;
+}
+
+/**
+ * Schreibt jede Abrechnung (und auf Wunsch ihre Nachweise) als eigene Datei ins Ziel.
+ * ordnerVon(note) gibt den Unterordner, fortschritt(i, gesamt) meldet den Stand. Liefert die Anzahl der Dateien.
+ */
+export async function einzelnSpeichern(store, ziel, noten, { format, nachweise }, ordnerVon, fortschritt = () => {}) {
+  let dateien = 0;
+  for (const [i, n] of noten.entries()) {
+    fortschritt(i + 1, noten.length);
+    const ordner = ordnerVon(n);
+    for (const f of format === 'beide' ? ['pdf', 'word'] : [format]) {
+      const d = await abrechnungDatei(n, f);
+      await ziel.schreiben(`${ordner}/${d.name}`, d.blob);
+      dateien++;
+    }
+    if (!nachweise) continue;
+    for (const p of n.positionen) {
+      for (const x of p.nachweise ?? []) {
+        const r = await store.nachweisLaden(x.id);
+        await ziel.schreiben(`${ordner}/${n.nummer} Nachweis - ${r.name}`,
+          new Blob([Uint8Array.from(atob(r.inhalt), (c) => c.charCodeAt(0))], { type: r.typ }));
+        dateien++;
+      }
+    }
+  }
+  await ziel.fertig();
+  return dateien;
 }
