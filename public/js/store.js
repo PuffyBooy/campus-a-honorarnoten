@@ -901,10 +901,30 @@ export async function meineArtikel() {
   return { verknuepft: true, medien, demo: true, warnung: '', artikel };
 }
 
+const nummerInApp = (n, jahr) => db.noten.filter((x) => x.autor_id === n.id && x.jahr === jahr)
+  .reduce((m, x) => Math.max(m, x.laufende_nummer), 0);
+
 export function naechsteNummer(n = ich(), jahr = Number(heuteIso().slice(0, 4))) {
-  const lfd = db.noten.filter((x) => x.autor_id === n.id && x.jahr === jahr)
-    .reduce((m, x) => Math.max(m, x.laufende_nummer), 0) + 1;
-  return { jahr, laufendeNummer: lfd, nummer: honorarnoteNummer({ vorname: n.vorname, nachname: n.nachname, jahr, laufendeNummer: lfd }) };
+  const inApp = nummerInApp(n, jahr);
+  // selbst gesetzte Nummer gilt nur im Jahr, für das sie eingetragen wurde
+  const [basisJahr, basis] = String(n.nummer_basis || '0:0').split(':').map(Number);
+  const bisher = Math.max(inApp, basisJahr === jahr ? basis : 0);
+  const lfd = bisher + 1;
+  return { jahr, laufendeNummer: lfd, bisher, in_app: inApp,
+    nummer: honorarnoteNummer({ vorname: n.vorname, nachname: n.nachname, jahr, laufendeNummer: lfd }) };
+}
+
+/** Nummer der zuletzt geschriebenen Prämienabrechnung dieses Jahres (z. B. vor der App) – ab da wird weitergezählt */
+export function nummerFestlegen(letzte) {
+  const n = brauche('autor');
+  const zahl = Number(letzte);
+  pruefe(Number.isInteger(zahl) && zahl >= 0 && zahl <= 999, 'Bitte eine Zahl zwischen 0 und 999 eingeben.');
+  const jahr = Number(heuteIso().slice(0, 4));
+  const inApp = nummerInApp(n, jahr);
+  pruefe(zahl >= inApp, `Du hast ${jahr} in der App schon die Nummer ${inApp} eingereicht – kleiner geht nicht, sonst gäbe es Nummern doppelt.`);
+  n.nummer_basis = zahl ? `${jahr}:${zahl}` : null;
+  speichern();
+  return naechsteNummer(n, jahr);
 }
 
 /** Honorarnote(n) des aktuellen Monats (für den Hinweis "einmal pro Monat") */

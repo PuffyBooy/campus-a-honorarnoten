@@ -221,9 +221,32 @@ async function wartungSeite(pfad, text) {
   }));
 }
 
+// zuletzt vollständig gezeichnete Seite (für den schnellen Wechsel innerhalb einer Seite, z. B. Redaktion)
+let zuletzt = null;
+
+/** Kontext für eine Seite (Ansicht) */
+function kontext(treffer, nutzer, lauf, f = null) {
+  return {
+    store,
+    nutzer,
+    params: treffer.params,
+    navigate,
+    flash: f,
+    setFlash: (x) => { flash = x; },
+    neuLaden: render,
+    demoDaten,
+    istDemo: IST_DEMO,
+    istAktuell: () => lauf === renderZaehler,
+  };
+}
+
 async function render() {
   const lauf = ++renderZaehler;
   const pfad = aktuellerPfad();
+  // Innerhalb derselben Seite wechseln (z. B. zur nächsten Abrechnung in der Redaktion): nur den Teil austauschen
+  const t = zuletzt && pfad ? finde(pfad) : null;
+  if (t && t.route.view === zuletzt.route.view && t.route.view.wechseln?.(main, kontext(t, zuletzt.nutzer, lauf))) return;
+  zuletzt = null;
   // Breite der Seite (die Redaktion ist breiter) erst umstellen, wenn der neue Inhalt kommt –
   // sonst springt der alte Inhalt kurz in die neue Breite
   const seite = pfad.split('/')[0];
@@ -336,19 +359,9 @@ async function render() {
   flash = null;
   const ladenFertig = ladenSpaeter();
   try {
-    await treffer.route.view.render(main, {
-      store,
-      nutzer,
-      params: treffer.params,
-      navigate,
-      flash: f,
-      setFlash: (x) => { flash = x; },
-      neuLaden: render,
-      demoDaten,
-      istDemo: IST_DEMO,
-      istAktuell: () => lauf === renderZaehler,
-    });
+    await treffer.route.view.render(main, kontext(treffer, nutzer, lauf, f));
     ladenFertig();
+    if (lauf === renderZaehler) zuletzt = { route: treffer.route, nutzer };
   } catch (e) {
     console.error(e);
     if (lauf !== renderZaehler) return;

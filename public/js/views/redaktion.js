@@ -3,7 +3,7 @@
 import { esc, formatEuro, formatMonat, vollerName } from '../lib/format.js';
 import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { MEDIEN, mediumBadge, mediumOder } from '../lib/campus.js';
-import { pruefungRendern } from './redaktion-detail.js';
+import { pruefungRendern, vorladen } from './redaktion-detail.js';
 
 // Filter bleiben beim Wechseln zwischen Abrechnungen erhalten; das Medium merkt sich der Browser
 const MEDIUM_KEY = 'campus-a-honorare:redaktion-medium';
@@ -56,6 +56,42 @@ function eintragHtml(n, aktiv, mitAuswahl) {
     </li>`;
 }
 
+// Stand der zuletzt gezeichneten Seite: Liste und gewählte Abrechnung – damit der Wechsel zwischen
+// Abrechnungen nur die rechte Seite austauscht (wechseln), statt alles neu zu laden
+let stand = null;
+
+/** Prüfansicht der gewählten Abrechnung zeichnen (Nachbarn aus der Liste für „Vorige“, „Nächste“, „danach“) */
+function detailZeigen(ctx) {
+  const { liste, einstellungen, el } = stand;
+  const i = liste.findIndex((n) => n.id === stand.id);
+  return pruefungRendern(el.querySelector('#pruefung'), {
+    ...ctx, params: { id: stand.id }, einstellungen,
+    vorige: i > 0 ? liste[i - 1] : null,
+    naechste: i >= 0 && i < liste.length - 1 ? liste[i + 1] : null,
+    // nach Annehmen/Zurückgeben: weiter zur nächsten in der Liste (die bearbeitete fällt aus „Zu prüfen“ heraus)
+    danach: (i >= 0 ? liste[i + 1] ?? liste[i - 1] : null) ?? null,
+    listeVeraltet: () => { if (stand) stand.veraltet = true; },
+  });
+}
+
+/**
+ * Wechsel zu einer anderen Abrechnung ohne Neuaufbau: Liste, Filter und Menü bleiben stehen,
+ * nur die Prüfansicht wird ausgetauscht. false, wenn die Seite neu gezeichnet werden muss.
+ */
+export function wechseln(el, ctx) {
+  const id = ctx.params.id ?? null;
+  if (!id || !stand || stand.veraltet || stand.el !== el || !el.querySelector('.arbeitsplatz')) return false;
+  stand.id = id;
+  el.querySelectorAll('.eingang').forEach((li) => {
+    const an = li.dataset.id === id;
+    li.classList.toggle('aktiv', an);
+    li.querySelector('a')?.toggleAttribute('aria-current', an);
+  });
+  el.querySelector('.arbeitsplatz').classList.add('mit-auswahl');
+  detailZeigen(ctx).catch((e) => ctx.neuLaden?.(e));
+  return true;
+}
+
 export async function render(el, ctx) {
   const { store, params, neuLaden, istAktuell } = ctx;
   const [daten, einstellungen] = await Promise.all([store.redaktionListe({ ...filter, limit: SEITE }), store.einstellungen()]);
@@ -64,6 +100,7 @@ export async function render(el, ctx) {
   const { monate } = daten;
   const liste = daten.noten; // wird mit „Weitere laden“ länger
   const gewaehlt = params.id ? { id: params.id } : null;
+  stand = { el, liste, einstellungen, id: params.id ?? null, veraltet: false };
   const mitAuswahl = filter.status === 'eingereicht' && liste.length > 1;
 
   const offenGesamt = Object.values(daten.zu_pruefen_medium ?? {}).reduce((a, b) => a + b, 0);
@@ -198,7 +235,7 @@ export async function render(el, ctx) {
     if (!location.hash.startsWith('#/redaktion')) { tastenAbbrechen.abort(); return; }
     if (ev.ctrlKey || ev.metaKey || ev.altKey || ev.target.closest?.('input, textarea, select, [contenteditable]')
       || document.querySelector('dialog[open]')) return;
-    const i = gewaehlt ? liste.findIndex((n) => n.id === gewaehlt.id) : -1;
+    const i = stand.id ? liste.findIndex((n) => n.id === stand.id) : -1;
     const ziel = (n) => { if (n) location.hash = `#/redaktion/${n.id}`; };
     const taste = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
     if (taste === 'j') ziel(i < 0 ? liste[0] : liste[i + 1]);
@@ -210,21 +247,13 @@ export async function render(el, ctx) {
       if (knopf) knopf.click();
       else el.querySelector('#d-rueckfrage textarea')?.focus();
     }
-    else if (taste === ' ' && gewaehlt) el.querySelector('[data-pruefen]:not(:checked):not(:disabled)')?.click();
+    else if (taste === ' ' && stand.id) el.querySelector('[data-pruefen]:not(:checked):not(:disabled)')?.click();
     else if (taste === '?') kuerzelHilfe();
     else return;
     ev.preventDefault();
   }, { signal: tastenAbbrechen.signal });
 
-  // ---- Prüfansicht
-  if (gewaehlt) {
-    const i = liste.findIndex((n) => n.id === gewaehlt.id);
-    await pruefungRendern(el.querySelector('#pruefung'), {
-      ...ctx, einstellungen,
-      vorige: i > 0 ? liste[i - 1] : null,
-      naechste: i >= 0 && i < liste.length - 1 ? liste[i + 1] : null,
-      // nach Annehmen/Zurückgeben: weiter zur nächsten in der Liste (die bearbeitete fällt aus „Zu prüfen“ heraus)
-      danach: (i >= 0 ? liste[i + 1] ?? liste[i - 1] : null) ?? null,
-    });
-  }
+  // ---- Prüfansicht; ohne Auswahl schon die erste Abrechnung vorab holen
+  if (gewaehlt) await detailZeigen(ctx);
+  else vorladen(store, liste[0]?.id);
 }

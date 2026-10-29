@@ -319,6 +319,10 @@ const MIGRATIONEN = [
     <<<'SQL'
     alter table nutzer add column neuigkeiten_gesehen text;
     SQL,
+    // Version 21: selbst gesetzte Nummer der letzten Prämienabrechnung („JJJJ:N“), ab der weitergezählt wird
+    <<<'SQL'
+    alter table nutzer add column nummer_basis text;
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -605,6 +609,10 @@ const MYSQL_MIGRATIONEN = [
     // Version 13 = SQLite-Version 20
     <<<'SQL'
     alter table nutzer add column neuigkeiten_gesehen varchar(20) null;
+    SQL,
+    // Version 14 = SQLite-Version 21
+    <<<'SQL'
+    alter table nutzer add column nummer_basis varchar(12) null;
     SQL,
 ];
 

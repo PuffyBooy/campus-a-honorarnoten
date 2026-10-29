@@ -71,17 +71,41 @@ function positionenHtml(n, info, saetze, aenderbar) {
     </table>`;
 }
 
-export async function pruefungRendern(el, { store, nutzer, params, einstellungen, vorige, naechste, danach, neuLaden, istAktuell }) {
+// Vorab geladene Abrechnungen (die nächste in der Liste), damit der Wechsel ohne Warten geht.
+// Jeder Eintrag wird nur einmal verwendet und gilt höchstens eine Minute.
+const vorrat = new Map();
+const laden = (store, id) => Promise.all([store.note(id), store.kommentare(id), store.verlaufVon(id), store.pruefInfo(id)]);
+
+export function vorladen(store, id) {
+  if (!id || vorrat.has(id)) return;
+  const p = laden(store, id);
+  p.catch(() => vorrat.delete(id));
+  vorrat.set(id, { zeit: Date.now(), p });
+}
+
+export const vorratLeeren = () => vorrat.clear();
+
+function holen(store, id) {
+  const v = vorrat.get(id);
+  vorrat.delete(id);
+  return v && Date.now() - v.zeit < 60000 ? v.p : laden(store, id);
+}
+
+export async function pruefungRendern(el, { store, nutzer, params, einstellungen, vorige, naechste, danach, neuLaden, istAktuell, listeVeraltet }) {
   let n;
+  let kommentare;
+  let verlauf;
+  let info;
   try {
-    n = await store.note(params.id);
+    // Jahressumme der Person und doppelt abgerechnete Artikel rechnet der Server aus
+    [n, kommentare, verlauf, info] = await holen(store, params.id);
   } catch {
+    if (!istAktuell()) return;
     el.innerHTML = '<div class="pruefung-leer"><p><strong>Diese Prämienabrechnung gibt es nicht (mehr).</strong></p></div>';
     return;
   }
-  // Jahressumme der Person und doppelt abgerechnete Artikel rechnet der Server aus
-  const [kommentare, verlauf, info] = await Promise.all([store.kommentare(n.id), store.verlaufVon(n.id), store.pruefInfo(n.id)]);
   if (!istAktuell()) return;
+  vorladen(store, naechste?.id); // die nächste schon holen
   const kannAnnehmen = ['eingereicht', 'abgelehnt'].includes(n.status) && !n.zurueckgeholt_am;
   const kannAblehnen = ['eingereicht', 'angenommen'].includes(n.status);
   const kannRueckfrage = kannAblehnen;
@@ -188,6 +212,8 @@ export async function pruefungRendern(el, { store, nutzer, params, einstellungen
     knoepfe.forEach((k) => { k.disabled = true; });
     try {
       await fn();
+      vorratLeeren(); // Liste und Abrechnungen haben sich geändert
+      listeVeraltet?.();
       meldung(erfolg, 'erfolg');
       // nach der Entscheidung gleich zur nächsten Abrechnung
       if (weiter && danach) location.hash = `#/redaktion/${danach.id}`;

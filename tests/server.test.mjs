@@ -52,6 +52,9 @@ const k = {};
 
 test('erstes Admin-Konto und Startpasswort', async () => {
   const passwort = php.cli('admin', 'Admin@Example.org', 'Alex', 'Admin').match(/Startpasswort:\s+(\S+)/)[1];
+  // Erinnerung zum Monatsende in den Tests aus – schon vor der ersten Anfrage, sonst geht sie in den letzten Tagen
+  // des Monats gleich beim Anmelden hinaus und ist für den Monat vermerkt; eigener Test unten
+  php.sql("insert into einstellungen (schluessel, wert) values ('erinnerung_tage', '0')");
   k.admin = client();
   const ich = await k.admin.ok('anmelden', 'admin@example.org', passwort);
   assert.equal(ich.muss_passwort_aendern, true);
@@ -60,8 +63,6 @@ test('erstes Admin-Konto und Startpasswort', async () => {
   assert.match((await k.admin.aufruf('erstesPasswortSetzen', passwort)).fehler, /Startpasswort/);
   await k.admin.ok('erstesPasswortSetzen', 'admin-passwort-1');
   assert.equal((await k.admin.ok('aktuellerNutzer')).muss_passwort_aendern, false);
-  // Erinnerung zum Monatsende in den Tests aus (sonst kommen in den letzten Tagen des Monats zusätzliche E-Mails); eigener Test unten
-  php.sql("insert into einstellungen (schluessel, wert) values ('erinnerung_tage', '0')");
 });
 
 test('E-Mail-Versand einrichten (Admin): Passwort bleibt geheim, Test-E-Mail', async () => {
@@ -178,6 +179,13 @@ test('Autor:in: Profil, Leistungen, Monatsabrechnung', async () => {
   assert.equal(note.zahlung.iban, AT_IBAN);
   assert.equal((await a.ok('meineLeistungen')).length, 0);
   assert.equal((await a.ok('naechsteNummer')).nummer, `MUELLER-AN-${jahr}-02`);
+
+  // eigene Nummer festlegen (schon vor der App bis Nr. 6 geschrieben) → weiter mit 7; kleiner als in der App geht nicht
+  assert.equal((await a.ok('nummerFestlegen', 6)).nummer, `MUELLER-AN-${jahr}-07`);
+  assert.equal((await a.ok('naechsteNummer')).nummer, `MUELLER-AN-${jahr}-07`);
+  assert.equal((await a.aufruf('nummerFestlegen', 0)).status, 400);
+  assert.equal((await a.aufruf('nummerFestlegen', 'x')).status, 400);
+  assert.equal((await a.ok('nummerFestlegen', 1)).nummer, `MUELLER-AN-${jahr}-02`);
   k.note = note;
 });
 
