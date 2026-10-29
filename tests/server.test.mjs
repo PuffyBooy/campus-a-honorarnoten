@@ -494,6 +494,8 @@ test('Zugangs-Mail: Mailserver nicht erreichbar -> der Admin sieht den Fehler, s
   const otto = (await k.admin.ok('nutzerListe')).find((n) => n.email === 'otto@example.org');
   await k.admin.ok('nutzerLoeschen', otto.id);
   // die erwartete Meldung im PHP-Fehlerprotokoll ist kein Fehler der App
+  // (stderr kommt verzögert und ggf. in Stücken – auf die vollständige Zeile warten)
+  for (let i = 0; i < 40 && !php.fehler.some((f) => /otto@example\.org nicht verschickt/.test(f)); i++) await new Promise((ok) => setTimeout(ok, 50));
   const erwartet = php.fehler.filter((f) => /otto@example\.org nicht verschickt/.test(f));
   assert.equal(erwartet.length, 1);
   php.fehler.splice(php.fehler.indexOf(erwartet[0]), 1);
