@@ -922,6 +922,9 @@ test('Rückfrage: Redaktion fragt nach, Autor:in antwortet im Chat, E-Mails, Zä
   await k.bert.ok('rueckfrageBeantworten', note.id, 'Ja, stimmt.');
   assert.equal((await k.rita.ok('note', note.id)).rueckfrage, 'beantwortet');
   await k.kasse.ok('alsBezahltMarkieren', note.id, new Date().toISOString().slice(0, 10));
+  // mit der Zahlung ist die Rückfrage erledigt – kein Zähler bleibt hängen
+  assert.equal((await k.rita.ok('note', note.id)).rueckfrage, null);
+  assert.equal((await k.rita.ok('navZaehler')).antworten, 0);
   assert.match((await k.bert.aufruf('rueckfrageBeantworten', note.id, 'Noch was')).fehler, /schon erledigt/);
   assert.match((await k.rita.aufruf('nachfragen', note.id, 'Noch was')).fehler, /nicht bezahlt/);
   await k.admin.ok('noteLoeschen', note.id);

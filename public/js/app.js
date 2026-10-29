@@ -21,6 +21,7 @@ import { hinweisOffen, zustimmungHtml } from './lib/rechtliches.js';
 import { cookieBanner, gewaehlt } from './lib/cookies.js';
 import { nachweisHerunterladen } from './lib/nachweise.js';
 import { nurAnsehen } from './lib/ansicht.js';
+import { vorratLeeren } from './views/redaktion-detail.js';
 
 // Demo: Daten im Browser (store.js). Server: Daten über die API (api.js).
 const IST_DEMO = MODUS !== 'server';
@@ -105,28 +106,45 @@ document.addEventListener('click', (e) => {
   }
 });
 
-async function renderNav(nutzer, pfad) {
-  menueSchliessen();
-  const mitMenue = Boolean(nutzer && !kontoEinrichten(nutzer));
-  document.body.classList.toggle('mit-menue', mitMenue);
-  if (!mitMenue) {
-    nav.innerHTML = '';
-    return;
-  }
-  // Zähler: offene Zugangsanfragen (Admin), Rückfragen an mich (Autor:in), Antworten auf Rückfragen (Redaktion)
-  const z = await Promise.resolve(store.navZaehler()).catch(() => ({}));
+// zuletzt bekannte Zähler im Menü (werden bei jedem Seitenwechsel im Hintergrund aufgefrischt)
+let navZaehlerStand = {};
+let navLauf = 0;
+
+/** Links im Menü; Zähler: offene Zugangsanfragen (Admin), Rückfragen an mich (Autor:in), Antworten auf Rückfragen (Redaktion) */
+function navLinks(nutzer, pfad) {
+  const z = navZaehlerStand;
   const ZAEHLER = {
     admin: [z.anfragen, 'offene Zugangsanfragen'],
     noten: [z.rueckfragen, 'Rückfragen der Redaktion – bitte antworten'],
     redaktion: [z.antworten, 'Antworten auf Rückfragen'],
   };
-  const links = ROUTEN.filter((r) => r.titel && darf(nutzer, r)).map((r) => {
+  return ROUTEN.filter((r) => r.titel && darf(nutzer, r)).map((r) => {
     const aktiv = pfad === r.pfad || pfad.startsWith(r.pfad + '/');
     const [anzahl, titel] = ZAEHLER[r.pfad] ?? [];
     const zusatz = anzahl ? ` <span class="zaehler" title="${esc(titel)}">${anzahl}</span>` : '';
     return `<a href="#/${r.pfad}"${aktiv ? ' aria-current="page"' : ''}>${esc(r.titel)}${zusatz}</a>`;
   }).join('');
-  nav.innerHTML = `<div class="nav-links">${links}</div>
+}
+
+async function renderNav(nutzer, pfad) {
+  menueSchliessen();
+  const mitMenue = Boolean(nutzer && !kontoEinrichten(nutzer));
+  document.body.classList.toggle('mit-menue', mitMenue);
+  if (!mitMenue) {
+    navZaehlerStand = {};
+    nav.innerHTML = '';
+    return;
+  }
+  // Zähler (offene Zugangsanfragen, Rückfragen …) kommen im Hintergrund – das Menü wartet nicht darauf
+  const nr = ++navLauf;
+  Promise.resolve(store.navZaehler()).then((z) => {
+    const neu = JSON.stringify(z ?? {});
+    if (nr !== navLauf || neu === JSON.stringify(navZaehlerStand)) return;
+    navZaehlerStand = z ?? {};
+    const box = nav.querySelector('.nav-links');
+    if (box) box.innerHTML = navLinks(nutzer, pfad);
+  }).catch(() => {});
+  nav.innerHTML = `<div class="nav-links">${navLinks(nutzer, pfad)}</div>
     <div class="nav-konto">
       <button type="button" class="nav-suche" id="suche-oeffnen" title="Suchen (Strg + K)" aria-label="Suchen">🔍<span class="nav-suche-text"> Suchen</span></button>
       <a href="#/profil" class="nav-user"${pfad === 'profil' ? ' aria-current="page"' : ''}
@@ -143,6 +161,16 @@ async function renderNav(nutzer, pfad) {
 }
 
 let renderZaehler = 0;
+
+// Impressum/Datenschutz-Angaben ändern sich selten: einmal holen und 5 Minuten behalten (nicht bei jedem Seitenwechsel)
+let rechtVorrat = null;
+function rechtlichesHolen() {
+  if (!rechtVorrat || Date.now() - rechtVorrat.zeit > 5 * 60000) {
+    const p = Promise.resolve(store.rechtliches()).catch(() => { rechtVorrat = null; return null; });
+    rechtVorrat = { zeit: Date.now(), p };
+  }
+  return rechtVorrat.p;
+}
 
 /**
  * Datenschutzerklärung und Hinweis „Betreiber nicht bei campus a angestellt“: nach dem Anmelden oben, bis sie
@@ -234,18 +262,19 @@ function kontext(treffer, nutzer, lauf, f = null) {
     flash: f,
     setFlash: (x) => { flash = x; },
     // neu laden heißt: ganze Seite neu zeichnen (nicht den schnellen Wechsel nehmen – sonst ändern Filter nichts)
-    neuLaden: () => { zuletzt = null; return render(); },
+    neuLaden: () => { zuletzt = null; rechtVorrat = null; return render(); },
     demoDaten,
     istDemo: IST_DEMO,
     istAktuell: () => lauf === renderZaehler,
   };
 }
 
-async function render() {
+/** schnell: nur beim Wechsel der Adresse (hashchange) – alles andere zeichnet die Seite vollständig neu */
+async function render({ schnell = false } = {}) {
   const lauf = ++renderZaehler;
   const pfad = aktuellerPfad();
   // Innerhalb derselben Seite wechseln (z. B. zur nächsten Abrechnung in der Redaktion): nur den Teil austauschen
-  const t = zuletzt && pfad ? finde(pfad) : null;
+  const t = schnell === true && zuletzt && pfad ? finde(pfad) : null;
   if (t && t.route.view === zuletzt.route.view && t.route.view.wechseln?.(main, kontext(t, zuletzt.nutzer, lauf))) return;
   zuletzt = null;
   // Breite der Seite (die Redaktion ist breiter) erst umstellen, wenn der neue Inhalt kommt –
@@ -273,7 +302,7 @@ async function render() {
   if (lauf !== renderZaehler) return; // inzwischen wurde neu navigiert
   await renderNav(nutzer, pfad);
   // Impressum und Datenschutz: für alle lesbar, auch ohne Anmeldung
-  const recht = await Promise.resolve(store.rechtliches()).catch(() => null);
+  const recht = await rechtlichesHolen();
   if (lauf !== renderZaehler) return;
   hinweisBanner(nutzer, recht);
   if (pfad === 'impressum' || pfad === 'datenschutz') {
@@ -382,11 +411,12 @@ async function start() {
   }
   document.body.classList.toggle('modus-demo', IST_DEMO);
   await store.initialisieren({ demoDaten, demoAktualisieren: demoModul?.demoKontenAktualisieren });
-  window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render(); });
+  window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render({ schnell: true }); });
   // Demo: Änderung in einem anderen Tab -> neu zeichnen, außer man tippt gerade etwas
   // oder ist nicht angemeldet (Login-Seite zeigt keine Daten an)
   window.addEventListener('honorare:extern', async () => {
     const fokus = document.activeElement;
+    vorratLeeren(); // vorgeladene Abrechnungen der Redaktion sind jetzt vielleicht veraltet
     if ((await store.aktuellerNutzer()) && !fokus?.closest('form')) render();
   });
   // Server: Sitzung abgelaufen -> zurück zur Anmeldung

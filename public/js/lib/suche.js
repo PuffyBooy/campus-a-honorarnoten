@@ -98,7 +98,13 @@ export async function sucheOeffnen({ store, nutzer }) {
       zeichnen();
     }
   };
-  const oeffnen = (t) => { if (!t) return; d.close(); location.hash = t.ziel; };
+  const oeffnen = (t) => {
+    if (!t) return;
+    d.close();
+    // schon auf dieser Seite: kein hashchange von selbst – dann trotzdem neu zeichnen
+    if (location.hash === t.ziel) window.dispatchEvent(new HashChangeEvent('hashchange'));
+    else location.hash = t.ziel;
+  };
   let warten;
   feld.addEventListener('input', () => { clearTimeout(warten); warten = setTimeout(suchen, 150); });
   feld.addEventListener('keydown', (ev) => {

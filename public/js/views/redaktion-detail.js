@@ -74,21 +74,28 @@ function positionenHtml(n, info, saetze, aenderbar) {
 // Vorab geladene Abrechnungen (die nächste in der Liste), damit der Wechsel ohne Warten geht.
 // Jeder Eintrag wird nur einmal verwendet und gilt höchstens eine Minute.
 const vorrat = new Map();
-const laden = (store, id) => Promise.all([store.note(id), store.kommentare(id), store.verlaufVon(id), store.pruefInfo(id)]);
+const laden = async (store, id) => Promise.all([store.note(id), store.kommentare(id), store.verlaufVon(id), store.pruefInfo(id)]);
 
 export function vorladen(store, id) {
-  if (!id || vorrat.has(id)) return;
+  if (!id || vorrat.has(id) || (aktuell?.id === id && Date.now() - aktuell.zeit < 60000)) return;
   const p = laden(store, id);
   p.catch(() => vorrat.delete(id));
   vorrat.set(id, { zeit: Date.now(), p });
 }
 
-export const vorratLeeren = () => vorrat.clear();
+// die gerade angezeigte Abrechnung: wird die Seite nur wegen eines Filters neu gezeichnet, nicht nochmal holen
+let aktuell = null;
+
+export const vorratLeeren = () => { vorrat.clear(); aktuell = null; };
 
 function holen(store, id) {
+  if (aktuell?.id === id && Date.now() - aktuell.zeit < 60000) return aktuell.p;
   const v = vorrat.get(id);
   vorrat.delete(id);
-  return v && Date.now() - v.zeit < 60000 ? v.p : laden(store, id);
+  const p = v && Date.now() - v.zeit < 60000 ? v.p : laden(store, id);
+  aktuell = { id, zeit: Date.now(), p };
+  p.catch(() => { if (aktuell?.p === p) aktuell = null; });
+  return p;
 }
 
 export async function pruefungRendern(el, { store, nutzer, params, einstellungen, vorige, naechste, danach, neuLaden, istAktuell, listeVeraltet }) {
@@ -105,6 +112,7 @@ export async function pruefungRendern(el, { store, nutzer, params, einstellungen
     return;
   }
   if (!istAktuell()) return;
+  el.dataset.note = n.id; // für die Tastenkürzel: welche Abrechnung hier wirklich steht
   vorladen(store, naechste?.id); // die nächste schon holen
   const kannAnnehmen = ['eingereicht', 'abgelehnt'].includes(n.status) && !n.zurueckgeholt_am;
   const kannAblehnen = ['eingereicht', 'angenommen'].includes(n.status);
@@ -216,7 +224,8 @@ export async function pruefungRendern(el, { store, nutzer, params, einstellungen
       listeVeraltet?.();
       meldung(erfolg, 'erfolg');
       // nach der Entscheidung gleich zur nächsten Abrechnung
-      if (weiter && danach) location.hash = `#/redaktion/${danach.id}`;
+      // (steht die Adresse schon auf dem Ziel, gibt es keinen hashchange – dann direkt neu zeichnen)
+      if (weiter && danach && location.hash !== `#/redaktion/${danach.id}`) location.hash = `#/redaktion/${danach.id}`;
       else neuLaden();
     } catch (e) {
       meldung(fehlerText(e), 'fehler');

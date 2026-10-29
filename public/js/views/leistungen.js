@@ -349,7 +349,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
       <div class="kopfzeile"><h2>Eingereicht und unterwegs</h2><a href="#/noten" class="klein">Alle Abrechnungen</a></div>
       <ul class="liste" id="unterwegs">${unterwegs.map((n) => noteKarte(n, { kompakt: true, zeiten })).join('')}</ul>
     </section>` : ''}`;
-  notenAktionen(el.querySelector('#unterwegs'), unterwegs, { store, neuLaden });
+  notenAktionen(el.querySelector('#unterwegs'), unterwegs, { store, neuLaden, navigate });
 
   // ---- Formular
   const form = el.querySelector('#l-form');

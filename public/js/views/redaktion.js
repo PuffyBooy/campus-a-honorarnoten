@@ -3,7 +3,7 @@
 import { esc, formatEuro, formatMonat, vollerName } from '../lib/format.js';
 import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { MEDIEN, mediumBadge, mediumOder } from '../lib/campus.js';
-import { pruefungRendern, vorladen } from './redaktion-detail.js';
+import { pruefungRendern, vorladen, vorratLeeren } from './redaktion-detail.js';
 
 // Filter bleiben beim Wechseln zwischen Abrechnungen erhalten; das Medium merkt sich der Browser
 const MEDIUM_KEY = 'campus-a-honorare:redaktion-medium';
@@ -19,6 +19,8 @@ const SORTIERUNGEN = {
   eingereicht_asc: 'Älteste zuerst', eingereicht_desc: 'Neueste zuerst', betrag_desc: 'Höchster Betrag', name: 'Name A–Z',
 };
 const SEITE = 100;
+// so viele Einträge waren zuletzt geladen („Weitere laden“) – beim Neuzeichnen wieder so viele holen
+let geladen = SEITE;
 
 // Tastenkürzel (gelten nur auf der Redaktionsseite und nicht beim Tippen)
 let tastenAbbrechen = null;
@@ -64,14 +66,19 @@ let stand = null;
 function detailZeigen(ctx) {
   const { liste, einstellungen, el } = stand;
   const i = liste.findIndex((n) => n.id === stand.id);
-  return pruefungRendern(el.querySelector('#pruefung'), {
-    ...ctx, params: { id: stand.id }, einstellungen,
+  const id = stand.id;
+  const box = el.querySelector('#pruefung');
+  // bis die neue Abrechnung da ist, ist die alte Ansicht nicht mehr bedienbar (sonst trifft „Annehmen“ die falsche)
+  if (box.dataset.note && box.dataset.note !== id) { box.inert = true; box.setAttribute('aria-busy', 'true'); }
+  const fertig = () => { if (stand?.id === id) { box.inert = false; box.removeAttribute('aria-busy'); } };
+  return pruefungRendern(box, {
+    ...ctx, params: { id: stand.id }, einstellungen, neuLaden: listeNeu,
     vorige: i > 0 ? liste[i - 1] : null,
     naechste: i >= 0 && i < liste.length - 1 ? liste[i + 1] : null,
     // nach Annehmen/Zurückgeben: weiter zur nächsten in der Liste (die bearbeitete fällt aus „Zu prüfen“ heraus)
     danach: (i >= 0 ? liste[i + 1] ?? liste[i - 1] : null) ?? null,
     listeVeraltet: () => { if (stand) stand.veraltet = true; },
-  });
+  }).finally(fertig);
 }
 
 /**
@@ -80,7 +87,13 @@ function detailZeigen(ctx) {
  */
 export function wechseln(el, ctx) {
   const id = ctx.params.id ?? null;
-  if (!id || !stand || stand.veraltet || stand.el !== el || !el.querySelector('.arbeitsplatz')) return false;
+  if (!id || !stand || stand.el !== el || !el.querySelector('.arbeitsplatz')) return false;
+  stand.ctx = ctx;
+  // nach Annehmen/Zurückgeben: Liste neu holen, aber nur die Redaktion (nicht die ganze App)
+  if (stand.veraltet) {
+    listeNeu(id);
+    return true;
+  }
   stand.id = id;
   el.querySelectorAll('.eingang').forEach((li) => {
     const an = li.dataset.id === id;
@@ -92,15 +105,39 @@ export function wechseln(el, ctx) {
   return true;
 }
 
+/**
+ * Nur die Redaktion neu zeichnen (Filter, Reiter, nach einer Entscheidung) – ohne den Umweg über die ganze App
+ * (Anmeldung prüfen, Menü, …). Die offene Abrechnung bleibt gewählt und wird nicht nochmal geholt.
+ */
+let listenLauf = 0;
+function listeNeu(id = stand?.id) {
+  if (!stand?.ctx) return Promise.resolve();
+  const lauf = ++listenLauf;
+  const ctx = stand.ctx;
+  return render(stand.el, {
+    ...ctx, params: { ...ctx.params, id: id ?? undefined }, istAktuell: () => ctx.istAktuell() && lauf === listenLauf,
+    einstellungenVorher: stand.einstellungen, basis: ctx,
+  }).catch((e) => meldung(fehlerText(e), 'fehler'));
+}
+
 export async function render(el, ctx) {
-  const { store, params, neuLaden, istAktuell } = ctx;
-  const [daten, einstellungen] = await Promise.all([store.redaktionListe({ ...filter, limit: SEITE }), store.einstellungen()]);
+  const { store, params, istAktuell } = ctx;
+  const neuLaden = listeNeu;
+  if (params.id) vorladen(store, params.id); // die gewählte Abrechnung gleichzeitig mit der Liste holen
+  const [daten, einstellungen] = await Promise.all([
+    store.redaktionListe({ ...filter, limit: SEITE }), ctx.einstellungenVorher ?? store.einstellungen(),
+  ]);
+  while (daten.noten.length < Math.min(geladen, daten.anzahl)) {
+    const mehr = await store.redaktionListe({ ...filter, limit: SEITE, offset: daten.noten.length });
+    if (!mehr.noten.length) break;
+    daten.noten.push(...mehr.noten);
+  }
   if (!istAktuell()) return;
   const zaehler = { ...daten.zaehler, '': Object.values(daten.zaehler).reduce((a, b) => a + b, 0) };
   const { monate } = daten;
   const liste = daten.noten; // wird mit „Weitere laden“ länger
   const gewaehlt = params.id ? { id: params.id } : null;
-  stand = { el, liste, einstellungen, id: params.id ?? null, veraltet: false };
+  stand = { el, ctx: ctx.basis ?? ctx, liste, einstellungen, id: params.id ?? null, veraltet: false };
   const mitAuswahl = filter.status === 'eingereicht' && liste.length > 1;
 
   const offenGesamt = Object.values(daten.zu_pruefen_medium ?? {}).reduce((a, b) => a + b, 0);
@@ -148,7 +185,7 @@ export async function render(el, ctx) {
     ${kuerzelHinweis()}`;
 
   // ---- Filter
-  const setzen = (feld, wert) => { filter[feld] = wert; neuLaden(); };
+  const setzen = (feld, wert) => { filter[feld] = wert; geladen = SEITE; neuLaden(); };
   el.querySelector('.reiter').addEventListener('click', (ev) => {
     const k = ev.target.closest('[data-status]');
     if (k) setzen('status', k.dataset.status);
@@ -174,6 +211,7 @@ export async function render(el, ctx) {
     clearTimeout(warten);
     warten = setTimeout(async () => {
       filter.suche = suche.value;
+      geladen = SEITE;
       await neuLaden();
       const neu = document.getElementById('r-suche');
       neu?.focus();
@@ -185,6 +223,7 @@ export async function render(el, ctx) {
   el.querySelector('#r-mehr')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
     const mehr = await store.redaktionListe({ ...filter, limit: SEITE, offset: liste.length });
     liste.push(...mehr.noten);
+    geladen = liste.length;
     el.querySelector('.eingang-liste').insertAdjacentHTML('beforeend', mehr.noten.map((n) => eintragHtml(n, false, mitAuswahl)).join(''));
     const rest = daten.anzahl - liste.length;
     if (rest > 0) ev.target.textContent = `Weitere laden (${rest} übrig)`;
@@ -225,6 +264,7 @@ export async function render(el, ctx) {
       }
       if (fertig) meldung(`${fertig} ${fertig === 1 ? 'Abrechnung' : 'Abrechnungen'} angenommen.`, 'erfolg');
     });
+    vorratLeeren(); // vorgeladene Abrechnungen sind jetzt veraltet
     neuLaden();
   });
 
@@ -240,6 +280,8 @@ export async function render(el, ctx) {
     const taste = ev.key.length === 1 ? ev.key.toLowerCase() : ev.key;
     if (taste === 'j') ziel(i < 0 ? liste[0] : liste[i + 1]);
     else if (taste === 'k') ziel(i > 0 ? liste[i - 1] : null);
+    // Aktionen nur, wenn rechts schon die gewählte Abrechnung steht (nicht noch die vorige, während geladen wird)
+    else if (stand.id && 'arf '.includes(taste) && el.querySelector('#pruefung')?.dataset.note !== stand.id) { ev.preventDefault(); return; }
     else if (taste === 'a') el.querySelector('#d-annehmen')?.click();
     else if (taste === 'r') el.querySelector('#d-ablehnen-oeffnen')?.click();
     else if (taste === 'f') {

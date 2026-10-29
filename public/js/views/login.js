@@ -96,7 +96,7 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
         reiter[k].setAttribute('aria-selected', String(k === name));
         panels[k].hidden = k !== name;
       }
-      panels[name].querySelector('input').focus();
+      panels[name].querySelector('input')?.focus(); // nach der Anfrage steht dort nur noch die Bestätigung
     });
   }
 
@@ -145,8 +145,10 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
 
   // Passwort vergessen: eigene Ansicht statt der Reiter
   const vergessen = el.querySelector('#p-vergessen');
+  const vergessenHtml = vergessen.innerHTML; // nach dem Absenden steht dort nur die Bestätigung – beim nächsten Öffnen wieder das Formular
   const reiterLeiste = el.querySelector('.reiter');
   const vergessenZeigen = (an) => {
+    if (an && !vergessen.email) vergessen.innerHTML = vergessenHtml;
     vergessen.hidden = !an;
     reiterLeiste.hidden = an;
     panels.anmelden.hidden = an;
@@ -208,7 +210,13 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
       try {
         // „Erstes Anmelden“: Konto jedes Mal neu anlegen, damit die Einrichtung immer zu sehen ist
         if ('frisch' in knopf.dataset) await store.demoKontoFrisch(knopf.dataset.email);
-        await store.anmelden(knopf.dataset.email, DEMO_PASSWORT);
+        const r = await store.anmelden(knopf.dataset.email, DEMO_PASSWORT);
+        if (r?.code_noetig) { // Konto mit Zwei-Faktor: weiter mit dem Code wie bei der normalen Anmeldung
+          panels.anmelden.email.value = knopf.dataset.email;
+          panels.anmelden.passwort.value = DEMO_PASSWORT;
+          codeZeigen(true);
+          return;
+        }
         nachAnmeldung();
       } catch (e) {
         panels.anmelden.querySelector('.feldfehler').textContent = fehlerText(e);
