@@ -84,6 +84,17 @@ function aufraeumen(PDO $db): void
     messwerte_aufraeumen($db);
 }
 
+/** Nur nachsehen, ob noch Versuche frei sind (ohne zu zählen) */
+function versuch_frei(PDO $db, string $schluessel, int $max, int $fensterSekunden): bool
+{
+    return (int) wert($db, 'select count(*) from versuche where schluessel = ? and zeit >= ?', [$schluessel, time() - $fensterSekunden]) < $max;
+}
+
+function versuch_zaehlen(PDO $db, string $schluessel): void
+{
+    q($db, 'insert into versuche (schluessel, zeit) values (?, ?)', [$schluessel, time()]);
+}
+
 /** Begrenzung von Versuchen: true, wenn noch erlaubt (und zählt den Versuch) */
 function versuch_erlaubt(PDO $db, string $schluessel, int $max, int $fensterSekunden): bool
 {

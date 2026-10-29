@@ -126,7 +126,8 @@ function api(): array
     // Begrenzung von Versuchen (gegen Erraten von Passwörtern und Massenanfragen)
     if ($name === 'anmelden') {
         $email = strtolower(tr($args[0] ?? ''));
-        if (!versuch_erlaubt($db, "login-ip:$ip", 30, 900) || !versuch_erlaubt($db, "login:$email", 10, 900)) {
+        // gezählt werden nur Fehlversuche (unten) – sonst sperren sich viele Anmeldungen hinter einer IP gegenseitig aus
+        if (!versuch_frei($db, "login-ip:$ip", 30, 900) || !versuch_frei($db, "login:$email", 10, 900)) {
             protokoll($db, 'warnung', 'anmeldung', 'Zu viele Anmeldeversuche, vorübergehend gesperrt: ' . kuerze($email, 200));
             return [429, ['fehler' => 'Zu viele Anmeldeversuche. Bitte in 15 Minuten erneut versuchen.']];
         }
@@ -163,7 +164,17 @@ function api(): array
     $ctx->ansichtVon = $ansichtVon;
     // Beim Aufruf genau so viele Argumente übergeben, wie die Funktion annimmt
     $methode = new ReflectionMethod(Honorare::class, $name);
-    $daten = $methode->invokeArgs(new Honorare($ctx), array_slice($args, 0, $methode->getNumberOfParameters()));
+    try {
+        $daten = $methode->invokeArgs(new Honorare($ctx), array_slice($args, 0, $methode->getNumberOfParameters()));
+    } catch (Fehler $e) {
+        if ($name === 'anmelden' && $e->status === 401) { // falsches Passwort oder falscher Code
+            versuch_zaehlen($db, "login-ip:$ip");
+            versuch_zaehlen($db, 'login:' . strtolower(tr($args[0] ?? '')));
+        }
+        throw $e;
+    }
+    // angemeldet: die Fehlversuche dieser Adresse sind erledigt
+    if ($name === 'anmelden' && $ctx->neueSitzung) q($db, 'delete from versuche where schluessel = ?', ['login:' . strtolower(tr($args[0] ?? ''))]);
     if ($ctx->neueSitzung) cookie_setzen($ctx->neueSitzung);
     if ($ctx->sitzungLoeschen) cookie_setzen(null);
     return [200, ['daten' => $daten]];

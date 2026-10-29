@@ -21,8 +21,10 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
   const p = nutzer.profil;
   const istAutor = nutzer.rollen.includes('autor');
   const vollstaendig = store.profilVollstaendig(nutzer);
-  const kontakt = (await store.einstellungen()).datenschutzKontakt;
-  const naechste = istAutor && vollstaendig ? await store.naechsteNummer() : null;
+  const [e, naechste] = await Promise.all([
+    store.einstellungen(), istAutor && vollstaendig ? store.naechsteNummer() : null,
+  ]);
+  const kontakt = e.datenschutzKontakt;
 
   el.innerHTML = `
     <h1>Mein Profil</h1>
@@ -182,7 +184,7 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
       try {
         await store.benachrichtigungenSpeichern(wahl);
         meldung('Auswahl gespeichert.', 'erfolg');
-        neuLaden();
+        await neuLaden();
       } catch (e) {
         meldung(fehlerText(e), 'fehler');
       }
@@ -272,7 +274,7 @@ function zweiFaktor(el, { store, neuLaden }) {
       try {
         await store.zweiFaktorAusschalten(aus.passwort.value);
         meldung('Zwei-Faktor-Anmeldung ausgeschaltet.', 'erfolg');
-        neuLaden();
+        await neuLaden();
       } catch (e) {
         fehler.textContent = fehlerText(e);
       }

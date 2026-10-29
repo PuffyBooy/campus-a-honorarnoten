@@ -112,7 +112,7 @@ async function protokoll(inhalt, { store, neuLaden }) {
     }, 300);
   });
   inhalt.querySelector('#p-mehr')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
-    const mehr = await store.protokollLesen({ ...protokollFilter, vor: eintraege.at(-1).zeit });
+    const mehr = await store.protokollLesen({ ...protokollFilter, vor: eintraege.at(-1).zeit, vor_id: eintraege.at(-1).id });
     eintraege = [...eintraege, ...mehr.eintraege];
     inhalt.querySelector('.protokoll-tabelle tbody').insertAdjacentHTML('beforeend', zeilen(mehr.eintraege));
     if (!mehr.mehr) ev.target.remove();
@@ -254,7 +254,7 @@ async function einladen(inhalt, { store, neuLaden, istDemo }) {
           tage: Number(form.tage.value), max: form.max.value === '' ? null : Number(form.max.value),
           rollen: gewaehlteRollen(form), email: form.email.value, notiz: form.notiz.value,
         });
-        neuLaden();
+        await neuLaden();
       } catch (e) {
         fehler.textContent = fehlerText(e);
       }
@@ -264,7 +264,7 @@ async function einladen(inhalt, { store, neuLaden, istDemo }) {
     if (!ev.target.closest('[data-widerrufen]')) return;
     const id = ev.target.closest('tr').dataset.id;
     if (!confirm('Diesen Link zurückziehen? Danach kann sich niemand mehr damit registrieren.')) return;
-    versuche(() => store.registrierungslinkWiderrufen(id), 'Link zurückgezogen.', neuLaden);
+    mitSperre(ev.target.closest('button'), () => versuche(() => store.registrierungslinkWiderrufen(id), 'Link zurückgezogen.', neuLaden));
   });
 }
 
@@ -307,14 +307,14 @@ async function anfragen(inhalt, { store, neuLaden }) {
         try {
           zugangsdaten = await store.anfrageFreischalten(a.id, gewaehlteRollen(karte));
           meldung(`${a.vorname} ${a.nachname} ist freigeschaltet.`, 'erfolg');
-          neuLaden();
+          await neuLaden();
         } catch (e) {
           meldung(fehlerText(e), 'fehler');
         }
       });
     } else if ('ablehnen' in knopf.dataset) {
       if (!confirm(`Anfrage von ${a.vorname} ${a.nachname} ablehnen?`)) return;
-      versuche(() => store.anfrageAblehnen(a.id), 'Anfrage abgelehnt.', neuLaden);
+      mitSperre(knopf, () => versuche(() => store.anfrageAblehnen(a.id), 'Anfrage abgelehnt.', neuLaden));
     }
   });
 }
@@ -324,7 +324,7 @@ async function versuche(fn, erfolg, neuLaden, { immerNeuLaden = false } = {}) {
   try {
     const r = await fn();
     if (erfolg) meldung(erfolg, 'erfolg');
-    neuLaden();
+    await neuLaden();
     return r;
   } catch (e) {
     meldung(fehlerText(e), 'fehler');
@@ -390,7 +390,7 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
           email: anlegen.email.value, rollen: gewaehlteRollen(anlegen),
         });
         meldung('Konto angelegt.', 'erfolg');
-        neuLaden();
+        await neuLaden();
       } catch (e) {
         fehler.textContent = fehlerText(e);
       }
@@ -410,18 +410,18 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
     if (!knopf) return;
     const n = liste.find((x) => x.id === knopf.closest('tr').dataset.id);
     if (knopf.dataset.aktion === 'aktiv') {
-      versuche(() => store.nutzerAktivSetzen(n.id, !n.aktiv), n.aktiv ? 'Konto deaktiviert.' : 'Konto aktiviert.', neuLaden);
+      mitSperre(knopf, () => versuche(() => store.nutzerAktivSetzen(n.id, !n.aktiv), n.aktiv ? 'Konto deaktiviert.' : 'Konto aktiviert.', neuLaden));
     } else if (knopf.dataset.aktion === 'loeschen') {
       if (!confirm(`Konto von ${vollerName(n)} löschen?\n\nGespeicherte, nicht abgeschickte Leistungen werden mitgelöscht. `
         + 'Abgeschickte Prämienabrechnungen bleiben für die Buchhaltung erhalten.')) return;
-      versuche(() => store.nutzerLoeschen(n.id), 'Konto gelöscht.', neuLaden);
+      mitSperre(knopf, () => versuche(() => store.nutzerLoeschen(n.id), 'Konto gelöscht.', neuLaden));
     } else if (knopf.dataset.aktion === 'email') {
       const neu = await emailAbfragen(n);
       if (!neu) return;
       try {
         const r = await store.emailAendern(n.id, neu);
         meldung(`E-Mail von ${vollerName(n)} geändert${r.mail ? '. Alte und neue Adresse bekommen eine Info-Mail' : ''}.`, 'erfolg');
-        neuLaden();
+        await neuLaden();
       } catch (e) {
         meldung(fehlerText(e), 'fehler');
       }
@@ -435,12 +435,12 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
     } else if (knopf.dataset.aktion === 'zf') {
       if (!confirm(`Zwei-Faktor-Anmeldung von ${vollerName(n)} ausschalten?\n\nNur, wenn die Person Handy und Ersatz-Codes verloren hat. `
         + 'Sie meldet sich danach nur mit dem Passwort an und kann Zwei-Faktor im Profil neu einrichten.')) return;
-      versuche(() => store.zweiFaktorZuruecksetzen(n.id), 'Zwei-Faktor zurückgesetzt.', neuLaden);
+      mitSperre(knopf, () => versuche(() => store.zweiFaktorZuruecksetzen(n.id), 'Zwei-Faktor zurückgesetzt.', neuLaden));
     } else if (knopf.dataset.aktion === 'pw') {
       if (!confirm(`Passwort von ${vollerName(n)} zurücksetzen? Es wird ein neues Startpasswort erzeugt.`)) return;
       try {
         zugangsdaten = await store.passwortZuruecksetzen(n.id);
-        neuLaden();
+        await neuLaden();
       } catch (e) {
         meldung(fehlerText(e), 'fehler');
       }
@@ -515,7 +515,7 @@ async function noten(inhalt, { store, neuLaden }) {
     const n = liste.find((x) => x.id === ev.target.closest('tr').dataset.id);
     const eingabe = prompt(`Zum endgültigen Löschen bitte die Nummer ${n.nummer} eingeben:`);
     if (eingabe?.trim() !== n.nummer) return;
-    versuche(() => store.noteLoeschen(n.id), `${n.nummer} wurde gelöscht.`, neuLaden);
+    mitSperre(ev.target.closest('button'), () => versuche(() => store.noteLoeschen(n.id), `${n.nummer} wurde gelöscht.`, neuLaden));
   });
 }
 
@@ -611,12 +611,24 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       <p class="feldfehler" role="alert"></p>
       <button type="submit" class="btn btn-primaer">Speichern</button>
     </form>`;
+  // Mehrere Karten auf einer Seite: Neu zeichnen nach dem Speichern nur, wenn in den anderen nichts Ungespeichertes steht
+  const karten = Array.from(inhalt.querySelectorAll('form'));
+  const geaendert = (f) => Array.from(f.elements).some((x) => (x.type === 'checkbox' ? x.checked !== x.defaultChecked
+    : 'defaultValue' in x && x.type !== 'submit' && x.value !== x.defaultValue));
+  const alsGespeichert = (f) => Array.from(f.elements).forEach((x) => {
+    if (x.type === 'checkbox') x.defaultChecked = x.checked;
+    else if ('defaultValue' in x && x.type !== 'submit') x.defaultValue = x.value;
+  });
+  const nachSpeichern = (f) => (karten.some((x) => x !== f && geaendert(x)) ? alsGespeichert(f) : neuLaden());
+
   const wForm = inhalt.querySelector('#w-form');
   wForm.addEventListener('submit', (ev) => {
     ev.preventDefault();
     if (!w.an && !confirm('Wartungsmodus einschalten? Alle außer Admins kommen dann nicht mehr in die App.')) return;
-    versuche(() => store.wartungSetzen(!w.an, wForm.text.value), w.an ? 'Wartungsmodus ausgeschaltet.' : 'Wartungsmodus eingeschaltet.',
-      neuLaden);
+    if (karten.some((x) => x !== wForm && geaendert(x))
+      && !confirm('In den anderen Karten gibt es ungespeicherte Änderungen. Trotzdem fortfahren? Sie gehen dabei verloren.')) return;
+    mitSperre(wForm.querySelector('[type=submit]'), () => versuche(() => store.wartungSetzen(!w.an, wForm.text.value),
+      w.an ? 'Wartungsmodus ausgeschaltet.' : 'Wartungsmodus eingeschaltet.', neuLaden));
   });
 
   const kForm = inhalt.querySelector('#k-form');
@@ -628,7 +640,7 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       try {
         await store.zahlungskontoSpeichern({ name: kForm.name.value, iban: kForm.iban.value, bic: kForm.bic.value });
         meldung('Zahlungskonto gespeichert.', 'erfolg');
-        neuLaden();
+        await nachSpeichern(kForm);
       } catch (err) {
         fehler.textContent = fehlerText(err);
       }
@@ -660,18 +672,19 @@ async function einstellungen(inhalt, { store, neuLaden }) {
       fehler.textContent = e.message;
       return;
     }
-    versuche(() => store.einstellungenSpeichern({
+    mitSperre(form.querySelector('[type=submit]'), () => versuche(() => store.einstellungenSpeichern({
       empfaenger: { name: form.name.value, strasse: form.strasse.value, plz_ort: form.plz_ort.value, uid: form.uid.value },
       datenschutzKontakt: form.kontakt.value,
       honorarsaetze,
       rueckgabe_vorlagen: form.vorlagen.value.split('\n'),
-      erinnerung_tage: Number(form.erinnerung.value || 0),
+      // leeres Feld = bisheriger Wert (nicht stillschweigend „keine Erinnerung“)
+      erinnerung_tage: form.erinnerung.value.trim() === '' ? (e.erinnerung_tage ?? 3) : Number(form.erinnerung.value),
       betreiber: {
         name: form.b_name.value, anschrift: form.b_anschrift.value, email: form.b_email.value, telefon: form.b_telefon.value,
         extern: form.b_extern.checked, hoster: form.b_hoster.value,
         zusatz_impressum: form.b_zusatz_impressum.value, zusatz_datenschutz: form.b_zusatz_datenschutz.value,
       },
-    }), 'Einstellungen gespeichert.', neuLaden);
+    }), 'Einstellungen gespeichert.', () => nachSpeichern(form)));
   });
 }
 
@@ -790,7 +803,7 @@ async function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
     try {
       const b = await store.jetztSichern();
       meldung(`Sicherung erstellt: ${b.name}`, 'erfolg');
-      neuLaden();
+      await neuLaden();
     } catch (e) {
       meldung(fehlerText(e), 'fehler');
     }
@@ -852,20 +865,26 @@ async function daten(inhalt, { store, demoDaten, neuLaden, istDemo }) {
     } catch (e) {
       meldung(fehlerText(e), 'fehler');
     }
-    neuLaden();
+    await neuLaden();
   });
   inhalt.querySelector('#d-reset').addEventListener('click', async () => {
     if (!confirm('Wirklich ALLE Daten in diesem Browser löschen und die Demo neu laden?')) return;
     await store.zuruecksetzen({ demoDaten });
     location.hash = '';
-    neuLaden();
+    await neuLaden();
   });
 }
 
 export async function render(el, ctx) {
-  const s = await ctx.store.statistik();
-  if (!ctx.istAktuell()) return;
   const tab = REITER[ctx.params.tab] || ctx.params.tab === 'server' ? ctx.params.tab : 'uebersicht';
+  // Reiter-Inhalt und Zähler gleichzeitig holen, in einem Stück austauschen (kein leerer Zwischenstand)
+  const inhalt = document.createElement('div');
+  inhalt.id = 'a-inhalt';
+  const [s] = await Promise.all([
+    Promise.resolve(ctx.store.navZaehler()).catch(() => ({})),
+    ({ uebersicht, anfragen, einladen, benutzer, noten, protokoll, einstellungen, mail, daten, server: kommandozentrale.render })[tab](inhalt, ctx),
+  ]);
+  if (!ctx.istAktuell()) return;
   el.innerHTML = `
     <div class="kopfzeile"><h1>Admin${tab === 'server' ? ' <span class="h1-zusatz">Server</span>' : ''}</h1>
       ${tab === 'server' ? '<a href="#/admin/uebersicht" class="btn btn-klein">← Zurück zum Admin</a>'
@@ -877,6 +896,5 @@ export async function render(el, ctx) {
     <div id="a-zugang">${zugangsdaten ? zugangsdatenHtml(zugangsdaten) : ''}</div>
     <div id="a-inhalt"></div>`;
   zugangsdatenBinden(el.querySelector('#a-zugang'), ctx.neuLaden);
-  const inhalt = el.querySelector('#a-inhalt');
-  await ({ uebersicht, anfragen, einladen, benutzer, noten, protokoll, einstellungen, mail, daten, server: kommandozentrale.render })[tab](inhalt, ctx);
+  el.querySelector('#a-inhalt').replaceWith(inhalt);
 }

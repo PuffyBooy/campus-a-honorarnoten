@@ -547,6 +547,13 @@ test('Admin: Protokoll schreibt im Hintergrund mit (Info, Warnung, Fehler), mit 
   // weiterblättern
   const seite2 = await k.admin.ok('protokoll', { vor: alle.eintraege.at(-1).zeit });
   assert.ok(seite2.eintraege.every((e) => e.zeit < alle.eintraege.at(-1).zeit));
+  // mehrere Einträge mit derselben Zeit: beim Weiterblättern geht keiner verloren
+  const zeit = '2000-01-01T00:00:00.000Z';
+  for (let i = 0; i < 3; i++) php.sql("insert into protokoll (zeit, stufe, bereich, text, wer, ip) values (?, 'info', 'system', ?, '', '')", [zeit, `gleich ${i}`]);
+  const [erster] = (await k.admin.ok('protokoll', { suche: 'gleich ' })).eintraege;
+  const rest = await k.admin.ok('protokoll', { suche: 'gleich ', vor: erster.zeit, vor_id: erster.id });
+  assert.deepEqual(rest.eintraege.map((e) => e.text), ['gleich 1', 'gleich 0']);
+  php.sql("delete from protokoll where text like 'gleich %'");
 });
 
 test('Admin: Übersicht und Sicherungen (jetzt sichern, herunterladen)', async () => {
@@ -1206,6 +1213,9 @@ test('Schutz: CSRF-Header, fremde Origin, unbekannte Funktionen', async () => {
 });
 
 test('Schutz: zu viele Anmeldeversuche werden gebremst', async () => {
+  // erfolgreiche Anmeldungen zählen nicht (z. B. viele Leute hinter einer IP)
+  php.sql('delete from versuche');
+  for (let i = 0; i < 12; i++) assert.equal((await client().aufruf('anmelden', 'kasse@example.org', 'geheim12345')).status, 200);
   const c = client();
   let letzte;
   for (let i = 0; i < 11; i++) letzte = await c.aufruf('anmelden', 'rita@example.org', `falsch${i}`);

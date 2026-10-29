@@ -1508,7 +1508,11 @@ final class Honorare
         }
         $filterWo = $wo;
         $filterP = $p;
-        if (is_string($f['vor'] ?? null) && $f['vor'] !== '') { $wo[] = 'zeit < ?'; $p[] = $f['vor']; }
+        // weiterblättern nach Zeit und ID – mehrere Einträge können dieselbe Zeit haben
+        if (is_string($f['vor'] ?? null) && $f['vor'] !== '') {
+            if (is_int($f['vor_id'] ?? null)) { $wo[] = '(zeit < ? or (zeit = ? and id < ?))'; array_push($p, $f['vor'], $f['vor'], $f['vor_id']); }
+            else { $wo[] = 'zeit < ?'; $p[] = $f['vor']; }
+        }
         $where = $wo ? 'where ' . implode(' and ', $wo) : '';
         $zeilen = zeilen($db, "select * from protokoll $where order by zeit desc, id desc limit 101", $p);
         // Anzahl je Stufe (mit Bereich und Suche, ohne Stufe)

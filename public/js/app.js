@@ -185,8 +185,9 @@ function hinweisBanner(nutzer, recht) {
     banner.querySelector('#ansicht-ende').addEventListener('click', async (ev) => {
       ev.currentTarget.disabled = true;
       await Promise.resolve(store.ansichtBeenden()).catch(() => {});
-      location.hash = '#/admin/benutzer';
-      render();
+      // neue Adresse zeichnet über hashchange neu – nur wenn sie gleich bleibt, selbst (sonst doppelt)
+      if (location.hash === '#/admin/benutzer') render();
+      else location.hash = '#/admin/benutzer';
     });
     return;
   }
@@ -249,6 +250,8 @@ async function wartungSeite(pfad, text) {
   }));
 }
 
+let breitenBeobachter = null;
+
 // zuletzt vollständig gezeichnete Seite (für den schnellen Wechsel innerhalb einer Seite, z. B. Redaktion)
 let zuletzt = null;
 
@@ -280,9 +283,12 @@ async function render({ schnell = false } = {}) {
   // Breite der Seite (die Redaktion ist breiter) erst umstellen, wenn der neue Inhalt kommt –
   // sonst springt der alte Inhalt kurz in die neue Breite
   const seite = pfad.split('/')[0];
+  breitenBeobachter?.disconnect(); // der eines abgebrochenen Seitenwechsels darf die Breite nicht mehr umstellen
+  breitenBeobachter = null;
   if (main.dataset.seite !== seite) {
     const beobachter = new MutationObserver(() => { main.dataset.seite = seite; beobachter.disconnect(); });
     beobachter.observe(main, { childList: true });
+    breitenBeobachter = beobachter;
   }
   let nutzer;
   try {

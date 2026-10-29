@@ -97,8 +97,8 @@ async function anzeigen(inhalt, ctx, bezahlt) {
   try {
     [noten, imJahr, konto] = await Promise.all([
       bezahlt ? store.bezahlteNotenSeit(kalenderwoche(Date.now() - WOCHEN_ZURUECK * 7 * 86400000).montag) : store.offeneZahlungen(),
-      store.ausgezahltImJahr(), // nur Summe und Anzahl, nicht alle Abrechnungen des Jahres
-      store.zahlungskonto(),
+      bezahlt ? null : store.ausgezahltImJahr(), // nur Summe und Anzahl, nicht alle Abrechnungen des Jahres
+      bezahlt ? {} : store.zahlungskonto(), // Bezahlt-Reiter zeigt beides nicht
     ]);
   } catch (e) {
     inhalt.innerHTML = `<p class="fehlerbox">${esc(fehlerText(e))}</p>`;
@@ -199,7 +199,7 @@ async function anzeigen(inhalt, ctx, bezahlt) {
         try {
           await store.alleAlsBezahltMarkieren(g.noten.map((n) => n.id), heuteIso());
           meldung(`KW ${g.woche.kw}: ${anzahl(g.noten)} als bezahlt markiert.`, 'erfolg');
-          neuLaden();
+          await neuLaden();
         } catch (e) {
           meldung(fehlerText(e), 'fehler');
         }
@@ -210,6 +210,11 @@ async function anzeigen(inhalt, ctx, bezahlt) {
 
 export async function render(el, ctx) {
   const tab = ctx.params.tab === 'bezahlt' ? 'bezahlt' : 'offen';
+  // erst laden, dann in einem Stück austauschen (kein leerer Zwischenstand beim Reiterwechsel)
+  const inhalt = document.createElement('div');
+  inhalt.id = 'z-inhalt';
+  await anzeigen(inhalt, ctx, tab === 'bezahlt');
+  if (!ctx.istAktuell()) return;
   el.innerHTML = `
     <h1>Buchhaltung</h1>
     <nav class="reiter" aria-label="Ansicht">
@@ -217,5 +222,5 @@ export async function render(el, ctx) {
       <a href="#/zahlung/bezahlt"${tab === 'bezahlt' ? ' aria-current="page"' : ''}>Bezahlt</a>
     </nav>
     <div id="z-inhalt"></div>`;
-  await anzeigen(el.querySelector('#z-inhalt'), ctx, tab === 'bezahlt');
+  el.querySelector('#z-inhalt').replaceWith(inhalt);
 }
