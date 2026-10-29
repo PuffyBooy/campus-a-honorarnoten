@@ -179,10 +179,14 @@ let renderZaehler = 0;
 
 // Impressum/Datenschutz-Angaben ändern sich selten: einmal holen und 5 Minuten behalten (nicht bei jedem Seitenwechsel)
 let rechtVorrat = null;
-function rechtlichesHolen() {
-  if (!rechtVorrat || Date.now() - rechtVorrat.zeit > 5 * 60000) {
+// Nur für angemeldete Seitenwechsel derselben Person – Login, Registrieren usw. holen immer den aktuellen Stand
+// (sonst stünde dort nach dem Abmelden noch der alte Betreiber-Hinweis)
+function rechtlichesHolen(nutzer) {
+  const wer = nutzer?.id ?? null;
+  if (!wer || !rechtVorrat || rechtVorrat.wer !== wer || Date.now() - rechtVorrat.zeit > 5 * 60000) {
     const p = Promise.resolve(store.rechtliches()).catch(() => { rechtVorrat = null; return null; });
-    rechtVorrat = { zeit: Date.now(), p };
+    rechtVorrat = wer ? { wer, zeit: Date.now(), p } : null;
+    return p;
   }
   return rechtVorrat.p;
 }
@@ -326,7 +330,7 @@ async function render({ schnell = false } = {}) {
   if (lauf !== renderZaehler) return; // inzwischen wurde neu navigiert
   await renderNav(nutzer, pfad);
   // Impressum und Datenschutz: für alle lesbar, auch ohne Anmeldung
-  const recht = await rechtlichesHolen();
+  const recht = await rechtlichesHolen(nutzer);
   if (lauf !== renderZaehler) return;
   hinweisBanner(nutzer, recht);
   if (pfad === 'impressum' || pfad === 'datenschutz') {
@@ -436,12 +440,13 @@ async function start() {
   document.body.classList.toggle('modus-demo', IST_DEMO);
   await store.initialisieren({ demoDaten, demoAktualisieren: demoModul?.demoKontenAktualisieren });
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render({ schnell: true }); });
-  // Demo: Änderung in einem anderen Tab -> neu zeichnen, außer man tippt gerade etwas
-  // oder ist nicht angemeldet (Login-Seite zeigt keine Daten an)
-  window.addEventListener('honorare:extern', async () => {
+  // Demo: Änderung in einem anderen Tab -> neu zeichnen, außer man tippt gerade etwas.
+  // Auch die Login-Seite: sie zeigt den Betreiber-Hinweis, der im anderen Tab geändert worden sein kann
+  window.addEventListener('honorare:extern', () => {
     const fokus = document.activeElement;
     vorratLeeren(); // vorgeladene Abrechnungen der Redaktion sind jetzt vielleicht veraltet
-    if ((await store.aktuellerNutzer()) && !fokus?.closest('form')) render();
+    rechtVorrat = null; // Betreiber-Angaben vielleicht geändert
+    if (!fokus?.closest('form')) render();
   });
   // Server: Sitzung abgelaufen -> zurück zur Anmeldung
   window.addEventListener('honorare:abgemeldet', () => render());
