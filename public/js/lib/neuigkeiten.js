@@ -2,6 +2,12 @@
 // Neue Einträge oben anfügen (id = Datum, bei mehreren am Tag mit Buchstaben).
 export const NEUIGKEITEN = [
   {
+    id: '2026-10-29c', datum: '2026-10-29', titel: 'Redaktion: schneller von Abrechnung zu Abrechnung',
+    punkte: [
+      ['redaktion', 'Der Wechsel zwischen Abrechnungen geht jetzt ohne Neuladen: Liste und Filter bleiben stehen, die nächste Abrechnung ist schon vorgeladen.'],
+    ],
+  },
+  {
     id: '2026-10-29b', datum: '2026-10-29', titel: 'campus a und campus a college auf einmal einreichen',
     punkte: [
       ['autor', 'Wer für beide schreibt: in „Mein Monat“ mit „Beide einreichen …“ beide Prämienabrechnungen mit einem Klick abschicken.'],
