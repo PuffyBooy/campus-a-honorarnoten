@@ -3,7 +3,8 @@
 import { esc } from './format.js';
 import { bestaetigen, fehlerText, meldung } from './ui.js';
 
-const mitNummer = (nummer, lfd) => nummer.replace(/\d+$/, String(lfd).padStart(2, '0'));
+/** dieselbe Nummer mit anderer laufender Nummer: „…-2026-05“ → „…-2026-06“ */
+export const mitNummer = (nummer, lfd) => nummer.replace(/\d+$/, String(lfd).padStart(2, '0'));
 
 /** Dialog „Nummer ändern“. Liefert die neue nächste Nummer ({ nummer, … }) oder null bei Abbruch. */
 export async function nummerAendern(store, naechste) {

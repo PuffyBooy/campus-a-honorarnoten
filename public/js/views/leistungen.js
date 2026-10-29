@@ -11,7 +11,7 @@ import { satzFuer } from '../lib/honorarsaetze.js';
 import { darfRedigieren } from '../lib/konto.js';
 import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { noteKarte, notenAktionen } from './noten.js';
-import { nummerAendern } from '../lib/nummer-aendern.js';
+import { mitNummer, nummerAendern } from '../lib/nummer-aendern.js';
 import {
   NACHWEISE_PRO_LEISTUNG, NACHWEIS_ACCEPT, NACHWEIS_MAX_MB, nachweisFehler, nachweiseHochladen, nachweiseHtml,
 } from '../lib/nachweise.js';
@@ -301,7 +301,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
             <span class="klein">Es werden zwei getrennte Prämienabrechnungen – eine für ${gruppen.map((g) => esc(mediumName(g.medium))).join(', eine für ')}.</span></p>
           <button type="button" class="btn btn-primaer btn-breit" data-beide>Beide einreichen …</button>
         </section>` : ''}
-        ${gruppen.length ? gruppen.map(({ medium, positionen }) => {
+        ${gruppen.length ? gruppen.map(({ medium, positionen }, i) => {
           const schon = diesenMonat.filter((n) => mediumOder(n.medium) === medium);
           return `
         <section class="karte abschicken" data-medium="${esc(medium)}">
@@ -333,7 +333,8 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
           ${monatsHinweis(heute)}
           ${schon.length ? `<p class="hinweisbox">Diesen Monat schon eingereicht: ${schon.map((n) => `<strong>${esc(n.nummer)}</strong>`).join(', ')}</p>` : ''}
           <dl class="angaben kompakt">
-            <dt>Nummer</dt><dd><span class="nummer">${esc(naechste.nummer)}</span>
+            <dt>Nummer</dt><dd><span class="nummer">${esc(mitNummer(naechste.nummer, naechste.laufendeNummer + i))}</span>
+              ${i ? `<br><span class="klein">nach ${esc(gruppen.slice(0, i).map((g) => mediumName(g.medium)).join(', '))}</span>` : ''}
               <button type="button" class="link-knopf klein" data-nummer title="Wenn du vor der App schon Prämienabrechnungen geschrieben hast">ändern</button></dd>
             <dt>An</dt><dd>${esc(einstellungen.empfaenger.name)}</dd>
             <dt>Überweisung an</dt><dd>${esc(nutzer.profil.kontoinhaber)}<br><span class="mono">${esc(formatIban(nutzer.profil.iban))}</span></dd>
@@ -603,8 +604,9 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
       const tage = tageBisMonatsende(heute);
       const ok = await bestaetigen({
         titel: 'Beide Prämienabrechnungen einreichen?',
-        html: `${teile.map((t) => `
-          <h3>${mediumBadge(t.medium)} ${esc(anzahlText(t.auswahl.length, 'Leistung', 'Leistungen'))}</h3>
+        html: `${teile.map((t, i) => `
+          <h3>${mediumBadge(t.medium)} <span class="nummer">${esc(mitNummer(naechste.nummer, naechste.laufendeNummer + i))}</span>
+            · ${esc(anzahlText(t.auswahl.length, 'Leistung', 'Leistungen'))}</h3>
           <ul class="dialog-liste">${t.auswahl.map((p) => `<li><span>${esc(p.titel)}<br><span class="klein">${
             esc([KATEGORIE_LABEL[p.kategorie], formatDatum(p.veroeffentlichung)].join(' · '))}</span></span>
             <span class="mono">${esc(formatEuro(p.betrag))}</span></li>`).join('')}</ul>
