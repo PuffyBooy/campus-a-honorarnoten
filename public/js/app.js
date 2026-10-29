@@ -233,7 +233,8 @@ function kontext(treffer, nutzer, lauf, f = null) {
     navigate,
     flash: f,
     setFlash: (x) => { flash = x; },
-    neuLaden: render,
+    // neu laden heißt: ganze Seite neu zeichnen (nicht den schnellen Wechsel nehmen – sonst ändern Filter nichts)
+    neuLaden: () => { zuletzt = null; return render(); },
     demoDaten,
     istDemo: IST_DEMO,
     istAktuell: () => lauf === renderZaehler,
