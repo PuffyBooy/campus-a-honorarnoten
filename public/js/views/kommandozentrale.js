@@ -12,6 +12,8 @@ const ms = (n) => (n == null ? '–' : `${zahl(Math.round(n))} ms`);
 const stundeText = (s) => `${s.slice(8, 10)}.${s.slice(5, 7)}., ${s.slice(11, 13)} Uhr`;
 
 let automatisch = null; // Intervall für „automatisch aktualisieren“
+// Ergebnisse von Funktions- und Leistungstest bleiben beim Aktualisieren der Seite stehen
+const ergebnisse = {};
 
 const ampel = (stufe) => `<span class="ampel ampel-${esc(stufe)}" aria-hidden="true">${STUFE_ZEICHEN[stufe] ?? ''}</span>
   <span class="sr-only">${esc(STUFE_TEXT[stufe] ?? stufe)}:</span>`;
@@ -177,6 +179,18 @@ export async function render(inhalt, { store, istDemo, neuLaden, istAktuell }) {
       </section>
     </div>`;
 
+  for (const id of ['k-funktion-ergebnis', 'k-test-ergebnis']) {
+    const box = inhalt.querySelector(`#${id}`);
+    if (ergebnisse[id]) box.innerHTML = ergebnisse[id];
+    // Ergebnis merken (nicht den Zwischenstand „Test läuft …“). Wurde die Seite während des Tests
+    // aktualisiert, landet das Ergebnis im alten Feld – dann auch ins aktuelle schreiben
+    new MutationObserver(() => {
+      if (box.querySelector('.laden')) return;
+      ergebnisse[id] = box.innerHTML;
+      const jetzt = document.getElementById(id);
+      if (!box.isConnected && jetzt && jetzt !== box) jetzt.innerHTML = box.innerHTML;
+    }).observe(box, { childList: true, subtree: true });
+  }
   tippBinden(inhalt);
   inhalt.querySelector('#k-neu').addEventListener('click', neuLaden);
   inhalt.querySelector('#k-auto').addEventListener('change', (ev) => {
@@ -223,7 +237,7 @@ export async function render(inhalt, { store, istDemo, neuLaden, istAktuell }) {
     await mitSperre(knopf, async () => {
       try {
         meldung(await store.serverAktion(knopf.dataset.aktion), 'erfolg');
-        neuLaden();
+        await neuLaden();
       } catch (e) {
         meldung(fehlerText(e), 'fehler');
       }

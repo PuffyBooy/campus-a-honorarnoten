@@ -12,6 +12,9 @@ export const kannOrdner = () => typeof window.showDirectoryPicker === 'function'
 /** Datei- und Ordnernamen ohne Zeichen, die Windows oder macOS nicht mögen */
 export const sauber = (s) => String(s ?? '').replace(/[\\/:*?"<>|\u0000-\u001f]+/g, '-').replace(/\s+/g, ' ').trim().slice(0, 120) || 'ohne Namen';
 
+const ascii = (s) => s.replace(/[äöüÄÖÜß]/g, (c) => ({ ä: 'ae', ö: 'oe', ü: 'ue', Ä: 'Ae', Ö: 'Oe', Ü: 'Ue', ß: 'ss' })[c])
+  .normalize('NFD').replace(/[^\x20-\x7e]/g, '');
+
 /** Eine Abrechnung als Datei: PDF (wie die Buchhaltung sie bekommt) oder Word (aus der Vorlage) */
 export async function abrechnungDatei(note, format) {
   if (format === 'word') return { name: docxDateiname(note), blob: await honorarnoteDocx(note, { JSZip }) };
@@ -50,7 +53,8 @@ export async function zielWaehlen(name) {
   return {
     art: 'zip',
     async schreiben(pfad, blob) { ordner.file(pfad.split('/').map(sauber).join('/'), blob); },
-    async fertig() { downloadBlob(`${sauber(name)}.zip`, await zip.generateAsync({ type: 'blob' })); },
+    // Dateiname der ZIP ohne Umlaute – manche Browser nennen den Download sonst nur „download“
+    async fertig() { downloadBlob(`${ascii(sauber(name))}.zip`, await zip.generateAsync({ type: 'blob' })); },
   };
 }
 

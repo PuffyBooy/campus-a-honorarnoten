@@ -494,6 +494,8 @@ test('Zugangs-Mail: Mailserver nicht erreichbar -> der Admin sieht den Fehler, s
   const otto = (await k.admin.ok('nutzerListe')).find((n) => n.email === 'otto@example.org');
   await k.admin.ok('nutzerLoeschen', otto.id);
   // die erwartete Meldung im PHP-Fehlerprotokoll ist kein Fehler der App
+  // (stderr kommt verzögert und ggf. in Stücken – auf die vollständige Zeile warten)
+  for (let i = 0; i < 40 && !php.fehler.some((f) => /otto@example\.org nicht verschickt/.test(f)); i++) await new Promise((ok) => setTimeout(ok, 50));
   const erwartet = php.fehler.filter((f) => /otto@example\.org nicht verschickt/.test(f));
   assert.equal(erwartet.length, 1);
   php.fehler.splice(php.fehler.indexOf(erwartet[0]), 1);
@@ -545,6 +547,13 @@ test('Admin: Protokoll schreibt im Hintergrund mit (Info, Warnung, Fehler), mit 
   // weiterblättern
   const seite2 = await k.admin.ok('protokoll', { vor: alle.eintraege.at(-1).zeit });
   assert.ok(seite2.eintraege.every((e) => e.zeit < alle.eintraege.at(-1).zeit));
+  // mehrere Einträge mit derselben Zeit: beim Weiterblättern geht keiner verloren
+  const zeit = '2000-01-01T00:00:00.000Z';
+  for (let i = 0; i < 3; i++) php.sql("insert into protokoll (zeit, stufe, bereich, text, wer, ip) values (?, 'info', 'system', ?, '', '')", [zeit, `gleich ${i}`]);
+  const [erster] = (await k.admin.ok('protokoll', { suche: 'gleich ' })).eintraege;
+  const rest = await k.admin.ok('protokoll', { suche: 'gleich ', vor: erster.zeit, vor_id: erster.id });
+  assert.deepEqual(rest.eintraege.map((e) => e.text), ['gleich 1', 'gleich 0']);
+  php.sql("delete from protokoll where text like 'gleich %'");
 });
 
 test('Admin: Übersicht und Sicherungen (jetzt sichern, herunterladen)', async () => {
@@ -920,6 +929,9 @@ test('Rückfrage: Redaktion fragt nach, Autor:in antwortet im Chat, E-Mails, Zä
   await k.bert.ok('rueckfrageBeantworten', note.id, 'Ja, stimmt.');
   assert.equal((await k.rita.ok('note', note.id)).rueckfrage, 'beantwortet');
   await k.kasse.ok('alsBezahltMarkieren', note.id, new Date().toISOString().slice(0, 10));
+  // mit der Zahlung ist die Rückfrage erledigt – kein Zähler bleibt hängen
+  assert.equal((await k.rita.ok('note', note.id)).rueckfrage, null);
+  assert.equal((await k.rita.ok('navZaehler')).antworten, 0);
   assert.match((await k.bert.aufruf('rueckfrageBeantworten', note.id, 'Noch was')).fehler, /schon erledigt/);
   assert.match((await k.rita.aufruf('nachfragen', note.id, 'Noch was')).fehler, /nicht bezahlt/);
   await k.admin.ok('noteLoeschen', note.id);
@@ -1201,6 +1213,9 @@ test('Schutz: CSRF-Header, fremde Origin, unbekannte Funktionen', async () => {
 });
 
 test('Schutz: zu viele Anmeldeversuche werden gebremst', async () => {
+  // erfolgreiche Anmeldungen zählen nicht (z. B. viele Leute hinter einer IP)
+  php.sql('delete from versuche');
+  for (let i = 0; i < 12; i++) assert.equal((await client().aufruf('anmelden', 'kasse@example.org', 'geheim12345')).status, 200);
   const c = client();
   let letzte;
   for (let i = 0; i < 11; i++) letzte = await c.aufruf('anmelden', 'rita@example.org', `falsch${i}`);

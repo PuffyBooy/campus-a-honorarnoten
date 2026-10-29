@@ -1309,12 +1309,14 @@ export function ablaufZeiten() {
   };
 }
 
+const OFFEN = ['eingereicht', 'angenommen']; // nur bei diesen Abrechnungen zählt eine Rückfrage noch
+
 export function navZaehler() {
   const n = ich();
   return {
     anfragen: hat(n, 'admin') ? db.anfragen.filter((a) => a.status === 'offen').length : 0,
-    rueckfragen: db.noten.filter((x) => x.autor_id === n.id && x.rueckfrage === 'offen').length,
-    antworten: hat(n, 'redaktion') ? db.noten.filter((x) => x.rueckfrage === 'beantwortet').length : 0,
+    rueckfragen: db.noten.filter((x) => x.autor_id === n.id && x.rueckfrage === 'offen' && OFFEN.includes(x.status)).length,
+    antworten: hat(n, 'redaktion') ? db.noten.filter((x) => x.rueckfrage === 'beantwortet' && OFFEN.includes(x.status)).length : 0,
   };
 }
 
@@ -1356,7 +1358,7 @@ export function alleAlsBezahltMarkieren(noteIds, datum) {
   const noten = noteIds.map(noteHolen);
   for (const x of noten) pruefe(x.status === 'angenommen', `${x.nummer}: Nur angenommene Prämienabrechnungen können als bezahlt markiert werden.`);
   for (const x of noten) {
-    Object.assign(x, { status: 'bezahlt', bezahlt_am: datum });
+    Object.assign(x, { status: 'bezahlt', bezahlt_am: datum, rueckfrage: null }); // offene Rückfrage ist damit erledigt
     verlauf(x.id, n, 'bezahlt', { datum });
     protokoll('info', 'zahlung', `Als bezahlt markiert: ${x.nummer} (${datum})`);
   }
@@ -1540,13 +1542,15 @@ function protokoll(stufe, bereich, text, wer = sitzungsNutzer()) {
   if (db.protokoll.length > 2000) db.protokoll.splice(0, db.protokoll.length - 2000);
 }
 
-export function protokollLesen({ stufe = '', bereich = '', suche = '', vor = '' } = {}) {
+export function protokollLesen({ stufe = '', bereich = '', suche = '', vor = '', vor_id: vorId = null } = {}) {
   brauche('admin');
   const q = trim(suche).toLowerCase();
   const passt = (e) => (!bereich || e.bereich === bereich) && (!q || e.text.toLowerCase().includes(q) || e.wer.toLowerCase().includes(q));
   const alle = (db.protokoll ?? []).filter(passt).sort((a, b) => b.zeit.localeCompare(a.zeit) || b.id - a.id);
   const zaehler = { alle: alle.length, ...Object.fromEntries(PROTOKOLL_STUFEN.map((s) => [s, alle.filter((e) => e.stufe === s).length])) };
-  const liste = alle.filter((e) => (!stufe || e.stufe === stufe) && (!vor || e.zeit < vor));
+  // weiterblättern nach Zeit und ID – mehrere Einträge können dieselbe Zeit haben
+  const davor = (e) => !vor || e.zeit < vor || (vorId != null && e.zeit === vor && e.id < vorId);
+  const liste = alle.filter((e) => (!stufe || e.stufe === stufe) && davor(e));
   return { eintraege: kopie(liste.slice(0, 100)), mehr: liste.length > 100, zaehler, bereiche: PROTOKOLL_BEREICHE };
 }
 

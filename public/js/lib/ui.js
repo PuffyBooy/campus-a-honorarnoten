@@ -99,6 +99,10 @@ export function bestaetigen({ titel, html = '', ja = 'Bestätigen', nein = 'Abbr
       </div>
     </form>`;
   document.body.append(d);
+  // Enter im Eingabefeld = bestätigen (sonst nimmt der Browser den ersten Knopf, und das ist „Abbrechen“)
+  d.querySelector('[name=eingabe]')?.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter') { ev.preventDefault(); d.close('ja'); }
+  });
   return new Promise((ok) => {
     d.addEventListener('close', () => {
       const bestaetigt = d.returnValue === 'ja';

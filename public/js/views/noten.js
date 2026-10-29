@@ -77,7 +77,7 @@ export async function zurueckziehen(store, n) {
 /** Rückfrage der Redaktion: offen als Chat zum Antworten, sonst die Nachrichten zum Aufklappen */
 function rueckfrageHtml(n, kompakt) {
   if (!n.nachrichten && !n.rueckfrage) return '';
-  const offen = n.rueckfrage === 'offen';
+  const offen = n.rueckfrage === 'offen' && ['eingereicht', 'angenommen'].includes(n.status);
   if (kompakt) {
     return offen ? `<p class="rueckfrage-hinweis"><strong>❓ Die Redaktion hat eine Rückfrage.</strong>
       <a href="#/noten" class="btn btn-klein">Antworten</a></p>` : '';
@@ -142,7 +142,7 @@ export function noteKarte(n, { neu = false, kompakt = false, zeiten = null } = {
 }
 
 /** Klicks in einer Liste von noteKarte(): Word, Zurückholen, Zurückziehen */
-export function notenAktionen(liste, noten, { store, neuLaden }) {
+export function notenAktionen(liste, noten, { store, neuLaden, navigate }) {
   // Chats der Rückfragen: offene gleich laden, die anderen beim Aufklappen
   liste?.querySelectorAll('[data-rueckfrage]').forEach((box) => {
     const n = noten.find((x) => x.id === box.closest('[data-id]').dataset.id);
@@ -173,12 +173,13 @@ export function notenAktionen(liste, noten, { store, neuLaden }) {
         }
       });
     } else if ('zurueckziehen' in knopf.dataset) {
-      if (await zurueckziehen(store, n)) location.hash = '#/leistungen';
+      // navigate zeichnet auch neu, wenn man schon in „Mein Monat“ ist (dort gibt es keinen hashchange)
+      if (await zurueckziehen(store, n)) navigate('leistungen');
     } else if ('zurueck' in knopf.dataset) {
       try {
         await store.leistungenZurueckholen(n.id);
         meldung('Leistungen zurückgeholt.', 'erfolg');
-        location.hash = '#/leistungen';
+        navigate('leistungen');
       } catch (e) {
         meldung(fehlerText(e), 'fehler');
         neuLaden();
@@ -189,7 +190,7 @@ export function notenAktionen(liste, noten, { store, neuLaden }) {
 
 let gewaehltesJahr = null; // bleibt beim Neuladen der Seite erhalten
 
-export async function render(el, { store, flash, neuLaden, istAktuell }) {
+export async function render(el, { store, flash, neuLaden, navigate, istAktuell }) {
   const neu = [].concat(flash?.neu ?? []); // eine Nummer oder mehrere (beide Medien auf einmal eingereicht)
   const [alle, zeiten] = await Promise.all([store.meineNoten(), Promise.resolve(store.ablaufZeiten()).catch(() => null)]);
   if (!istAktuell()) return;
@@ -220,5 +221,5 @@ export async function render(el, { store, flash, neuLaden, istAktuell }) {
     : `<section class="karte"><p>${gewaehltesJahr} noch keine Prämienabrechnungen.</p></section>`}`;
 
   el.querySelector('#n-jahr').addEventListener('change', (ev) => { gewaehltesJahr = Number(ev.target.value); neuLaden(); });
-  notenAktionen(el.querySelector('.liste'), noten, { store, neuLaden });
+  notenAktionen(el.querySelector('.liste'), noten, { store, neuLaden, navigate });
 }

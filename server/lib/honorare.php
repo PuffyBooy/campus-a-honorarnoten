@@ -1110,8 +1110,9 @@ final class Honorare
         $n = ich($this->ctx);
         return [
             'anfragen' => hat($n, 'admin') ? (int) wert($db, "select count(*) from anfragen where status = 'offen'") : 0,
-            'rueckfragen' => (int) wert($db, "select count(*) from noten where autor_id = ? and rueckfrage = 'offen'", [$n['id']]),
-            'antworten' => hat($n, 'redaktion') ? (int) wert($db, "select count(*) from noten where rueckfrage = 'beantwortet'") : 0,
+            // nur noch offene Abrechnungen zählen (ältere bezahlte können die Rückfrage noch tragen)
+            'rueckfragen' => (int) wert($db, "select count(*) from noten where autor_id = ? and rueckfrage = 'offen' and status in ('eingereicht', 'angenommen')", [$n['id']]),
+            'antworten' => hat($n, 'redaktion') ? (int) wert($db, "select count(*) from noten where rueckfrage = 'beantwortet' and status in ('eingereicht', 'angenommen')") : 0,
         ];
     }
 
@@ -1178,7 +1179,8 @@ final class Honorare
         return transaktion($db, fn () => array_map(function ($noteId) use ($db, $n, $d) {
             $x = note_holen($db, $noteId);
             pruefe($x['status'] === 'angenommen', $x['nummer'] . ': Nur angenommene Prämienabrechnungen können als bezahlt markiert werden.');
-            q($db, "update noten set status = 'bezahlt', bezahlt_am = ? where id = ?", [$d, $x['id']]);
+            // eine offene Rückfrage ist mit der Zahlung erledigt (wie bei Annehmen/Zurückgeben)
+            q($db, "update noten set status = 'bezahlt', bezahlt_am = ?, rueckfrage = null where id = ?", [$d, $x['id']]);
             verlauf_eintragen($db, $x['id'], $n, 'bezahlt', ['datum' => $d]);
             $this->log('info', 'zahlung', "Als bezahlt markiert: {$x['nummer']} ($d)");
             $note = note_holen($db, $x['id']);
@@ -1506,7 +1508,11 @@ final class Honorare
         }
         $filterWo = $wo;
         $filterP = $p;
-        if (is_string($f['vor'] ?? null) && $f['vor'] !== '') { $wo[] = 'zeit < ?'; $p[] = $f['vor']; }
+        // weiterblättern nach Zeit und ID – mehrere Einträge können dieselbe Zeit haben
+        if (is_string($f['vor'] ?? null) && $f['vor'] !== '') {
+            if (is_int($f['vor_id'] ?? null)) { $wo[] = '(zeit < ? or (zeit = ? and id < ?))'; array_push($p, $f['vor'], $f['vor'], $f['vor_id']); }
+            else { $wo[] = 'zeit < ?'; $p[] = $f['vor']; }
+        }
         $where = $wo ? 'where ' . implode(' and ', $wo) : '';
         $zeilen = zeilen($db, "select * from protokoll $where order by zeit desc, id desc limit 101", $p);
         // Anzahl je Stufe (mit Bereich und Suche, ohne Stufe)

@@ -118,9 +118,15 @@ export async function phpServerStarten({ campusHolen, envZusatz = {} } = {}) {
   const php = spawn(PHP, ['-d', 'display_errors=stderr', '-d', 'log_errors=0', '-S', `127.0.0.1:${port}`, join(WURZEL, 'server/router.php')],
     { env, stdio: ['ignore', 'ignore', 'pipe'] });
   const fehler = [];
+  const zeile = (z) => { if (z.trim() && !/Accepted|Closing|Development Server|\[200\]|\[\d{3}\]:/.test(z)) fehler.push(z); };
+  // stderr kommt in beliebigen Stücken – eine Zeile kann auf zwei Stücke verteilt sein, also erst ganze Zeilen werten
+  let rest = '';
   php.stderr.on('data', (d) => {
-    for (const z of d.toString().split('\n')) if (z.trim() && !/Accepted|Closing|Development Server|\[200\]|\[\d{3}\]:/.test(z)) fehler.push(z);
+    const teile = (rest + d.toString()).split('\n');
+    rest = teile.pop();
+    teile.forEach(zeile);
   });
+  php.stderr.on('end', () => { zeile(rest); rest = ''; });
   const basis = `http://127.0.0.1:${port}`;
   for (let i = 0; i < 100; i++) {
     try { await fetch(`${basis}/js/modus.js`); break; } catch { await new Promise((ok) => setTimeout(ok, 50)); }
