@@ -519,7 +519,7 @@ async function noten(inhalt, { store, neuLaden }) {
   });
 }
 
-async function einstellungen(inhalt, { store, neuLaden }) {
+async function einstellungen(inhalt, { store, neuLaden, rechtVergessen }) {
   const [e, konto, w] = await Promise.all([store.einstellungen(), store.zahlungskonto(), store.wartung()]);
   const b = betreiberOder(e.betreiber);
   inhalt.innerHTML = `
@@ -619,7 +619,10 @@ async function einstellungen(inhalt, { store, neuLaden }) {
     if (x.type === 'checkbox') x.defaultChecked = x.checked;
     else if ('defaultValue' in x && x.type !== 'submit') x.defaultValue = x.value;
   });
-  const nachSpeichern = (f) => (karten.some((x) => x !== f && geaendert(x)) ? alsGespeichert(f) : neuLaden());
+  const nachSpeichern = (f) => {
+    rechtVergessen?.(); // Betreiber-Angaben → Impressum/Hinweis neu holen
+    return karten.some((x) => x !== f && geaendert(x)) ? alsGespeichert(f) : neuLaden();
+  };
 
   const wForm = inhalt.querySelector('#w-form');
   wForm.addEventListener('submit', (ev) => {
@@ -881,7 +884,7 @@ export async function render(el, ctx) {
   const inhalt = document.createElement('div');
   inhalt.id = 'a-inhalt';
   const [s] = await Promise.all([
-    Promise.resolve(ctx.store.navZaehler()).catch(() => ({})),
+    Promise.resolve(ctx.navZaehler?.() ?? ctx.store.navZaehler()).then((z) => z ?? {}).catch(() => ({})),
     ({ uebersicht, anfragen, einladen, benutzer, noten, protokoll, einstellungen, mail, daten, server: kommandozentrale.render })[tab](inhalt, ctx),
   ]);
   if (!ctx.istAktuell()) return;

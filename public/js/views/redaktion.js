@@ -89,8 +89,9 @@ export function wechseln(el, ctx) {
   const id = ctx.params.id ?? null;
   if (!id || !stand || stand.el !== el || !el.querySelector('.arbeitsplatz')) return false;
   stand.ctx = ctx;
-  // nach Annehmen/Zurückgeben: Liste neu holen, aber nur die Redaktion (nicht die ganze App)
-  if (stand.veraltet) {
+  // nach Annehmen/Zurückgeben, oder während die Liste gerade neu lädt (Filter geklickt): Liste neu holen,
+  // aber nur die Redaktion (nicht die ganze App) – sonst bliebe der neue Filter ohne Anzeige
+  if (stand.veraltet || listeLaeuft) {
     listeNeu(id);
     return true;
   }
@@ -110,19 +111,24 @@ export function wechseln(el, ctx) {
  * (Anmeldung prüfen, Menü, …). Die offene Abrechnung bleibt gewählt und wird nicht nochmal geholt.
  */
 let listenLauf = 0;
+let listeLaeuft = false;
 function listeNeu(id = stand?.id) {
   if (!stand?.ctx) return Promise.resolve();
   const lauf = ++listenLauf;
   const ctx = stand.ctx;
+  listeLaeuft = true;
+  ctx.zaehlerNeu?.(); // Menü-Zähler (Antworten auf Rückfragen) können sich geändert haben
   return render(stand.el, {
     ...ctx, params: { ...ctx.params, id: id ?? undefined }, istAktuell: () => ctx.istAktuell() && lauf === listenLauf,
     einstellungenVorher: stand.einstellungen, basis: ctx,
-  }).catch((e) => meldung(fehlerText(e), 'fehler'));
+  }).catch((e) => meldung(fehlerText(e), 'fehler')).finally(() => { if (lauf === listenLauf) listeLaeuft = false; });
 }
 
 export async function render(el, ctx) {
   const { store, params, istAktuell } = ctx;
   const neuLaden = listeNeu;
+  // Seite ganz neu (Menü, Zurück, anderes Konto): nichts Zwischengespeichertes verwenden
+  if (!ctx.basis) vorratLeeren();
   if (params.id) vorladen(store, params.id); // die gewählte Abrechnung gleichzeitig mit der Liste holen
   const [daten, einstellungen] = await Promise.all([
     store.redaktionListe({ ...filter, limit: SEITE }), ctx.einstellungenVorher ?? store.einstellungen(),

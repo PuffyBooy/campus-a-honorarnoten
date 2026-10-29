@@ -239,7 +239,7 @@ export async function pruefungRendern(el, { store, nutzer, params, einstellungen
   const chatLaden = async () => {
     if (chatGeladen) return;
     chatGeladen = true;
-    await chatAnzeigen(el.querySelector('#d-chat'), { store, note: n, rolle: 'redaktion', nachAenderung: neuLaden })
+    await chatAnzeigen(el.querySelector('#d-chat'), { store, note: n, rolle: 'redaktion', nachAenderung: () => { vorratLeeren(); neuLaden(); } })
       .catch((e) => { el.querySelector('#d-chat').innerHTML = `<p class="fehlerbox">${esc(fehlerText(e))}</p>`; });
   };
   if (!rueckfrage.hidden) chatLaden();

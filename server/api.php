@@ -126,8 +126,10 @@ function api(): array
     // Begrenzung von Versuchen (gegen Erraten von Passwörtern und Massenanfragen)
     if ($name === 'anmelden') {
         $email = strtolower(tr($args[0] ?? ''));
-        // gezählt werden nur Fehlversuche (unten) – sonst sperren sich viele Anmeldungen hinter einer IP gegenseitig aus
-        if (!versuch_frei($db, "login-ip:$ip", 30, 900) || !versuch_frei($db, "login:$email", 10, 900)) {
+        // pro Adresse wird vorab gezählt (auch parallele Anfragen kommen nicht über die Grenze) und nach
+        // erfolgreicher Anmeldung zurückgesetzt; pro IP zählen nur Fehlversuche (unten) – sonst sperren sich
+        // viele Leute hinter einer IP gegenseitig aus
+        if (!versuch_frei($db, "login-ip:$ip", 30, 900) || !versuch_erlaubt($db, "login:$email", 10, 900)) {
             protokoll($db, 'warnung', 'anmeldung', 'Zu viele Anmeldeversuche, vorübergehend gesperrt: ' . kuerze($email, 200));
             return [429, ['fehler' => 'Zu viele Anmeldeversuche. Bitte in 15 Minuten erneut versuchen.']];
         }
@@ -167,10 +169,7 @@ function api(): array
     try {
         $daten = $methode->invokeArgs(new Honorare($ctx), array_slice($args, 0, $methode->getNumberOfParameters()));
     } catch (Fehler $e) {
-        if ($name === 'anmelden' && $e->status === 401) { // falsches Passwort oder falscher Code
-            versuch_zaehlen($db, "login-ip:$ip");
-            versuch_zaehlen($db, 'login:' . strtolower(tr($args[0] ?? '')));
-        }
+        if ($name === 'anmelden' && $e->status === 401) versuch_zaehlen($db, "login-ip:$ip"); // falsches Passwort oder Code
         throw $e;
     }
     // angemeldet: die Fehlversuche dieser Adresse sind erledigt

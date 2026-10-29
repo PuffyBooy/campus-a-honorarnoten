@@ -126,24 +126,39 @@ function navLinks(nutzer, pfad) {
   }).join('');
 }
 
+let navAktuell = null; // Nutzer:in und Pfad des zuletzt gezeichneten Menüs
+let navZaehlerAbruf = null; // letzter Abruf der Zähler (die Admin-Seite nimmt denselben, statt nochmal zu fragen)
+
+/** Zähler im Menü neu holen und bei Änderung eintragen – auch nach Aktionen, die nur einen Teil der Seite neu zeichnen */
+function zaehlerAuffrischen() {
+  if (!navAktuell) return Promise.resolve(null);
+  const { nutzer, pfad } = navAktuell;
+  const nr = ++navLauf;
+  const p = Promise.resolve(store.navZaehler()).catch(() => null);
+  navZaehlerAbruf = p;
+  p.then((z) => {
+    if (!z || nr !== navLauf || JSON.stringify(z) === JSON.stringify(navZaehlerStand)) return;
+    navZaehlerStand = z;
+    const box = nav.querySelector('.nav-links');
+    if (box) box.innerHTML = navLinks(nutzer, pfad);
+  });
+  return p;
+}
+
 async function renderNav(nutzer, pfad) {
   menueSchliessen();
   const mitMenue = Boolean(nutzer && !kontoEinrichten(nutzer));
   document.body.classList.toggle('mit-menue', mitMenue);
   if (!mitMenue) {
     navZaehlerStand = {};
+    navAktuell = null;
+    navZaehlerAbruf = null;
     nav.innerHTML = '';
     return;
   }
   // Zähler (offene Zugangsanfragen, Rückfragen …) kommen im Hintergrund – das Menü wartet nicht darauf
-  const nr = ++navLauf;
-  Promise.resolve(store.navZaehler()).then((z) => {
-    const neu = JSON.stringify(z ?? {});
-    if (nr !== navLauf || neu === JSON.stringify(navZaehlerStand)) return;
-    navZaehlerStand = z ?? {};
-    const box = nav.querySelector('.nav-links');
-    if (box) box.innerHTML = navLinks(nutzer, pfad);
-  }).catch(() => {});
+  navAktuell = { nutzer, pfad };
+  zaehlerAuffrischen();
   nav.innerHTML = `<div class="nav-links">${navLinks(nutzer, pfad)}</div>
     <div class="nav-konto">
       <button type="button" class="nav-suche" id="suche-oeffnen" title="Suchen (Strg + K)" aria-label="Suchen">🔍<span class="nav-suche-text"> Suchen</span></button>
@@ -266,6 +281,9 @@ function kontext(treffer, nutzer, lauf, f = null) {
     setFlash: (x) => { flash = x; },
     // neu laden heißt: ganze Seite neu zeichnen (nicht den schnellen Wechsel nehmen – sonst ändern Filter nichts)
     neuLaden: () => { zuletzt = null; rechtVorrat = null; return render(); },
+    zaehlerNeu: zaehlerAuffrischen,
+    navZaehler: () => navZaehlerAbruf ?? Promise.resolve(store.navZaehler()).catch(() => ({})),
+    rechtVergessen: () => { rechtVorrat = null; },
     demoDaten,
     istDemo: IST_DEMO,
     istAktuell: () => lauf === renderZaehler,

@@ -182,8 +182,14 @@ export async function render(inhalt, { store, istDemo, neuLaden, istAktuell }) {
   for (const id of ['k-funktion-ergebnis', 'k-test-ergebnis']) {
     const box = inhalt.querySelector(`#${id}`);
     if (ergebnisse[id]) box.innerHTML = ergebnisse[id];
-    // was dort erscheint, merken (auch „Test läuft …“ wird beim nächsten Ergebnis überschrieben)
-    new MutationObserver(() => { ergebnisse[id] = box.innerHTML; }).observe(box, { childList: true, subtree: true });
+    // Ergebnis merken (nicht den Zwischenstand „Test läuft …“). Wurde die Seite während des Tests
+    // aktualisiert, landet das Ergebnis im alten Feld – dann auch ins aktuelle schreiben
+    new MutationObserver(() => {
+      if (box.querySelector('.laden')) return;
+      ergebnisse[id] = box.innerHTML;
+      const jetzt = document.getElementById(id);
+      if (!box.isConnected && jetzt && jetzt !== box) jetzt.innerHTML = box.innerHTML;
+    }).observe(box, { childList: true, subtree: true });
   }
   tippBinden(inhalt);
   inhalt.querySelector('#k-neu').addEventListener('click', neuLaden);

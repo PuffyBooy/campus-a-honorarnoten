@@ -158,6 +158,7 @@ export function render(el, { store, istDemo, recht, nachAnmeldung }) {
     (an ? vergessen.email : panels.anmelden.email).focus();
   };
   el.querySelector('#a-vergessen').addEventListener('click', () => {
+    if (!vergessen.email) vergessen.innerHTML = vergessenHtml; // erst das Formular zurückholen, dann befüllen
     vergessen.email.value = panels.anmelden.email.value;
     vergessenZeigen(true);
   });
