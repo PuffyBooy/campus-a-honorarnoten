@@ -292,6 +292,7 @@ function kontext(treffer, nutzer, lauf, f = null) {
     // neu laden heißt: ganze Seite neu zeichnen (nicht den schnellen Wechsel nehmen – sonst ändern Filter nichts)
     neuLaden: () => { zuletzt = null; rechtVorrat = null; return render(); },
     zaehlerNeu: zaehlerAuffrischen,
+    zaehlerStand: () => navZaehlerStand,
     navZaehler: () => navZaehlerAbruf ?? Promise.resolve(store.navZaehler()).catch(() => ({})),
     rechtVergessen: () => { rechtVorrat = null; },
     demoDaten,
@@ -475,6 +476,23 @@ async function start() {
     vorratLeeren(); // vorgeladene Abrechnungen der Redaktion sind jetzt vielleicht veraltet
     rechtVorrat = null; // Betreiber-Angaben vielleicht geändert
     if (!fokus?.closest('form')) render();
+  });
+  // Seite kam aus dem Daten-Vorrat und im Hintergrund hat sich etwas geändert: still neu zeichnen –
+  // aber nicht, solange jemand tippt oder ein Dialog offen ist (dann beim nächsten Seitenwechsel)
+  let neuTimer;
+  window.addEventListener('honorare:daten-neu', () => {
+    clearTimeout(neuTimer);
+    neuTimer = setTimeout(() => {
+      const fokus = document.activeElement;
+      if (fokus?.closest('form, [contenteditable]') || document.querySelector('dialog[open]')) return;
+      // ungespeicherte Eingaben auf der Seite nicht wegwerfen
+      const ungespeichert = Array.from(main.querySelectorAll('input, textarea')).some((x) => (x.type === 'checkbox' || x.type === 'radio'
+        ? x.checked !== x.defaultChecked : !['hidden', 'file', 'submit', 'button'].includes(x.type) && x.value !== x.defaultValue));
+      if (ungespeichert) return;
+      const y = window.scrollY;
+      zuletzt = null;
+      render({ schnell: true }).then(() => window.scrollTo(0, y)); // Anmeldung aus dem Vorrat, Stelle auf der Seite bleibt
+    }, 200);
   });
   // Anmeldung hat sich geändert (z. B. „Ansehen als“): beim nächsten Seitenwechsel frisch holen
   window.addEventListener('honorare:anmeldung-geaendert', () => { nutzerVorrat = null; });

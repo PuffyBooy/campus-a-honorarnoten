@@ -1339,4 +1339,8 @@ test('Statische Dateien: Modus, Pfad-Tricks, Sicherheits-Header', async () => {
   assert.equal((await fetch(`${basis}/../server/lib/db.php`)).status, 404);
   assert.equal((await fetch(`${basis}/..%2fpackage.json`)).status, 404);
   assert.equal((await fetch(`${basis}/.nojekyll`)).status, 404);
+  // Programmdateien mit Versionsnummer behält der Browser ein Jahr, ohne Nummer (index.html) fragt er jedes Mal nach
+  assert.match((await fetch(`${basis}/js/lib/ui.js?v=abc123`)).headers.get('cache-control'), /max-age=31536000, immutable/);
+  assert.equal(start.headers.get('cache-control'), 'no-cache');
+  assert.equal((await fetch(`${basis}/js/lib/ui.js`)).headers.get('cache-control'), 'no-cache');
 });

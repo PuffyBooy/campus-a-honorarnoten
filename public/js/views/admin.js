@@ -924,11 +924,16 @@ export async function render(el, ctx) {
   // Reiter-Inhalt und Zähler gleichzeitig holen, in einem Stück austauschen (kein leerer Zwischenstand)
   const inhalt = document.createElement('div');
   inhalt.id = 'a-inhalt';
-  const [s] = await Promise.all([
-    Promise.resolve(ctx.navZaehler?.() ?? ctx.store.navZaehler()).then((z) => z ?? {}).catch(() => ({})),
-    ({ uebersicht, anfragen, einladen, benutzer, noten, protokoll, einstellungen, mail, daten, server: kommandozentrale.render })[tab](inhalt, ctx),
-  ]);
+  await ({ uebersicht, anfragen, einladen, benutzer, noten, protokoll, einstellungen, mail, daten, server: kommandozentrale.render })[tab](inhalt, ctx);
   if (!ctx.istAktuell()) return;
+  // Zähler „offene Anfragen“: der zuletzt bekannte sofort, der frische wird nachgetragen (die Seite wartet nicht darauf)
+  const s = ctx.zaehlerStand?.() ?? {};
+  Promise.resolve(ctx.navZaehler?.()).then((z) => {
+    const a = el.querySelector('.reiter a[href="#/admin/anfragen"]');
+    if (!z || !a) return;
+    a.querySelector('.zaehler')?.remove();
+    if (z.anfragen) a.insertAdjacentHTML('beforeend', ` <span class="zaehler zaehler-wichtig">${Number(z.anfragen)}</span>`);
+  }).catch(() => {});
   el.innerHTML = `
     <div class="kopfzeile"><h1>Admin${tab === 'server' ? ' <span class="h1-zusatz">Server</span>' : ''}</h1>
       ${tab === 'server' ? '<a href="#/admin/uebersicht" class="btn btn-klein">← Zurück zum Admin</a>'
