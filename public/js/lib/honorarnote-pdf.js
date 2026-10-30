@@ -1,7 +1,7 @@
 // Prämienabrechnungen als PDF – gleicher Inhalt und Aufbau wie die offizielle Word-Vorlage
 // (public/vorlage/honorarnote-vorlage.docx). Mehrere Noten landen in einer Datei,
 // jede Note beginnt auf einer neuen Seite.
-import { ausserordentlichePositionen, formatBetragDokument, formatDatum, summe } from './format.js';
+import { STATUS_LABEL, ausserordentlichePositionen, formatBetragDokument, formatDatum, summe } from './format.js';
 import { formatIban } from './iban.js';
 import { ortAusPlzOrt } from './honorarnote-docx.js';
 import { mediumName } from './campus.js';
@@ -225,5 +225,71 @@ export async function honorarnotenPdf(noten, PDFLib) {
     await pdf.embedFont(PDFLib.StandardFonts.HelveticaBold),
   );
   for (const note of noten) noteSchreiben(d, note);
+  return pdf.save();
+}
+
+const cent = (noten) => noten.reduce((s, n) => s + Math.round(n.betrag * 100), 0) / 100;
+
+/**
+ * Jahresübersicht für Autor:innen (z. B. für Steuer oder Beihilfe): alle Prämienabrechnungen eines
+ * Abrechnungsjahres mit Status und Summen, dazu was im Kalenderjahr tatsächlich ausgezahlt wurde.
+ * alle: alle eigenen Noten (fürs Zahlungsjahr), jahr: Abrechnungsjahr, person: { vorname, nachname, profil }
+ */
+export async function jahresuebersichtPdf(alle, jahr, person, PDFLib, heute = new Date()) {
+  const pdf = await PDFLib.PDFDocument.create();
+  const name = `${person.vorname} ${person.nachname}`.trim();
+  pdf.setTitle(`Jahresübersicht ${jahr} – ${name}`);
+  pdf.setCreator('campus a college – Anerkennungsprämien');
+  pdf.setProducer('campus a college – Anerkennungsprämien');
+  const d = new Dokument(
+    pdf, PDFLib,
+    await pdf.embedFont(PDFLib.StandardFonts.Helvetica),
+    await pdf.embedFont(PDFLib.StandardFonts.HelveticaBold),
+  );
+  const imJahr = alle.filter((n) => String(n.monat).startsWith(`${jahr}-`))
+    .sort((a, b) => String(a.monat).localeCompare(String(b.monat)) || String(a.nummer).localeCompare(String(b.nummer)));
+  // zurückgegebene zählen nicht (die Leistungen kommen in einer neuen Abrechnung wieder)
+  const gueltig = imJahr.filter((n) => n.status !== 'abgelehnt');
+  const nach = (status) => gueltig.filter((n) => n.status === status);
+  const ausgezahlt = alle.filter((n) => n.status === 'bezahlt' && String(n.bezahlt_am ?? '').startsWith(`${jahr}-`));
+  const p = person.profil ?? {};
+
+  d.seitenDerNote = [];
+  d.neueSeite();
+  d.absatz(`Jahresübersicht ${jahr}`, { fett: true, groesse: 18, nach: 2 });
+  d.absatz('Anerkennungsprämien campus a und campus a college', { groesse: 11, nach: 10 });
+  d.angaben(
+    [['Name', name], ['Straße und Hausnummer', p.strasse ?? ''], ['PLZ und Ort', p.plz_ort ?? ''], ['Erstellt am', formatDatum(heute.toISOString())]],
+    [], 'Person', '',
+  );
+  d.absatz('Überblick', { fett: true, groesse: 12, vor: 4, nach: 4 });
+  d.tabelle(
+    [{ titel: '', anteil: 0.6 }, { titel: 'Anzahl', anteil: 0.15, rechts: true }, { titel: 'Betrag in Euro', anteil: 0.25, rechts: true }],
+    [
+      ['Bezahlt', String(nach('bezahlt').length), formatBetragDokument(cent(nach('bezahlt')))],
+      ['Angenommen, noch nicht bezahlt', String(nach('angenommen').length), formatBetragDokument(cent(nach('angenommen')))],
+      ['Eingereicht, noch nicht geprüft', String(nach('eingereicht').length), formatBetragDokument(cent(nach('eingereicht')))],
+    ],
+    [`Summe Abrechnungsjahr ${jahr}`, String(gueltig.length), formatBetragDokument(cent(gueltig))],
+  );
+  d.y -= 8;
+  d.tabelle(
+    [{ titel: `Im Kalenderjahr ${jahr} ausgezahlt (nach Zahlungsdatum)`, anteil: 0.6 }, { titel: String(ausgezahlt.length), anteil: 0.15, rechts: true },
+      { titel: formatBetragDokument(cent(ausgezahlt)), anteil: 0.25, rechts: true }],
+    [],
+  );
+  d.absatz('Alle Prämienabrechnungen', { fett: true, groesse: 12, vor: 14, nach: 4 });
+  d.tabelle(
+    [{ titel: 'Nummer', anteil: 0.31 }, { titel: 'Monat', anteil: 0.1 }, { titel: 'Medium', anteil: 0.18 },
+      { titel: 'Status', anteil: 0.16 }, { titel: 'Bezahlt am', anteil: 0.13 }, { titel: 'Betrag', anteil: 0.12, rechts: true }],
+    imJahr.map((n) => [n.nummer, `${String(n.monat).slice(5, 7)}/${String(n.monat).slice(0, 4)}`, mediumName(n.medium),
+      n.status === 'abgelehnt' ? 'Zurückgegeben' : STATUS_LABEL[n.status] ?? n.status,
+      n.bezahlt_am ? formatDatum(n.bezahlt_am) : '', formatBetragDokument(n.betrag)]),
+  );
+  if (!imJahr.length) d.absatz(`Für ${jahr} gibt es keine Prämienabrechnungen.`, { vor: 6 });
+  d.absatz('Zurückgegebene Abrechnungen zählen in keiner Summe – ihre Leistungen werden neu abgerechnet. '
+    + 'Maßgeblich für die Auszahlung ist der Zahlungseingang auf deinem Konto. '
+    + 'Diese Übersicht wurde automatisch aus der App erstellt und ist keine Rechnung.', { groesse: 8, vor: 14 });
+  d.fusszeilen(`Jahresübersicht ${jahr} · ${name}`);
   return pdf.save();
 }

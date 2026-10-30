@@ -6,7 +6,7 @@ import { honorarnoteNummer, namensteil, initialen } from '../public/js/lib/numme
 import { summe, formatMonat, formatBetragDokument, artText, artNormalisieren } from '../public/js/lib/format.js';
 import { ortAusPlzOrt } from '../public/js/lib/honorarnote-docx.js';
 import { kalenderwoche, nachWoche, wienerDatum, wocheText } from '../public/js/lib/woche.js';
-import { honorarnotenPdf } from '../public/js/lib/honorarnote-pdf.js';
+import { honorarnotenPdf, jahresuebersichtPdf } from '../public/js/lib/honorarnote-pdf.js';
 import * as PDFLib from '../public/vendor/pdf-lib.mjs';
 
 test('IBAN-Prüfung', () => {
@@ -118,4 +118,20 @@ test('Prämienabrechnungen als PDF: eine Datei, jede Note ab neuer Seite', async
     ...note('E-5', 1).positionen, { kategorie: 'redigieren', titel: 'Redigieren (7 Texte)', anzahl: 7, veroeffentlichung: '2026-09-30', betrag: 14 },
   ] }], PDFLib);
   assert.equal((await PDFLib.PDFDocument.load(mitRedigieren)).getPageCount(), 1);
+});
+
+test('Jahresübersicht als PDF: Summen je Status, zurückgegebene zählen nicht', async () => {
+  const n = (nummer, monat, status, betrag, bezahlt_am = null) => ({ nummer, monat, status, betrag, bezahlt_am, medium: 'college' });
+  const alle = [
+    n('A-01', '2026-01', 'bezahlt', 30, '2026-02-03'), n('A-02', '2026-02', 'abgelehnt', 99),
+    n('A-03', '2026-03', 'angenommen', 15), n('A-04', '2026-04', 'eingereicht', 45.5),
+    n('A-05', '2025-12', 'bezahlt', 20, '2026-01-10'), // im Vorjahr abgerechnet, 2026 ausgezahlt
+  ];
+  const bytes = await jahresuebersichtPdf(alle, 2026, { vorname: 'Anna', nachname: 'Müller', profil: { strasse: 'Weg 1', plz_ort: '1010 Wien' } }, PDFLib);
+  const pdf = await PDFLib.PDFDocument.load(bytes);
+  assert.equal(pdf.getTitle(), 'Jahresübersicht 2026 – Anna Müller');
+  assert.equal(pdf.getPageCount(), 1);
+  // viele Abrechnungen: mehrere Seiten, Kopfzeile wird wiederholt
+  const viele = Array.from({ length: 80 }, (_, i) => n(`B-${i}`, '2026-05', 'bezahlt', 15, '2026-06-01'));
+  assert.ok((await PDFLib.PDFDocument.load(await jahresuebersichtPdf(viele, 2026, { vorname: 'B', nachname: 'C' }, PDFLib))).getPageCount() >= 2);
 });

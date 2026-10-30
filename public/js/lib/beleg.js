@@ -21,6 +21,15 @@ export async function honorarnotenPdfHerunterladen(noten, dateiname) {
   downloadBlob(dateiname, new Blob([await honorarnotenPdfBytes(noten)], { type: 'application/pdf' }));
 }
 
+/** Jahresübersicht (alle Abrechnungen eines Jahres mit Summen) als PDF herunterladen */
+export async function jahresuebersichtHerunterladen(alle, jahr, person) {
+  const [PDFLib, { jahresuebersichtPdf }] = await Promise.all([
+    import('../../vendor/pdf-lib.mjs'), import('./honorarnote-pdf.js'),
+  ]);
+  const bytes = await jahresuebersichtPdf(alle, jahr, person, PDFLib);
+  downloadBlob(`Jahresuebersicht_${jahr}.pdf`, new Blob([bytes], { type: 'application/pdf' }));
+}
+
 /** Bytes als base64 (in Stücken, damit große PDFs den Stapel nicht sprengen) */
 export function base64(bytes) {
   let s = '';

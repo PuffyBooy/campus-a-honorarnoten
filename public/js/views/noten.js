@@ -2,7 +2,7 @@
 import {
   KATEGORIE_LABEL, artText, esc, formatDatum, formatEuro, formatMonat, formatZeitpunkt,
 } from '../lib/format.js';
-import { honorarnoteHerunterladen } from '../lib/beleg.js';
+import { honorarnoteHerunterladen, jahresuebersichtHerunterladen } from '../lib/beleg.js';
 import { downloadBlob } from '../lib/csv.js';
 import { standardBetrag, weichtAb } from '../lib/honorarsaetze.js';
 import { hatArtikel, mediumBadge, mediumName, titelLink } from '../lib/campus.js';
@@ -190,7 +190,7 @@ export function notenAktionen(liste, noten, { store, neuLaden, navigate }) {
 
 let gewaehltesJahr = null; // bleibt beim Neuladen der Seite erhalten
 
-export async function render(el, { store, flash, neuLaden, navigate, istAktuell }) {
+export async function render(el, { store, nutzer, flash, neuLaden, navigate, istAktuell }) {
   const neu = [].concat(flash?.neu ?? []); // eine Nummer oder mehrere (beide Medien auf einmal eingereicht)
   const [alle, zeiten] = await Promise.all([store.meineNoten(), Promise.resolve(store.ablaufZeiten()).catch(() => null)]);
   if (!istAktuell()) return;
@@ -204,7 +204,9 @@ export async function render(el, { store, flash, neuLaden, navigate, istAktuell 
   el.innerHTML = `
     <div class="kopfzeile">
       <h1>Meine Abrechnungen</h1>
-      <a class="btn" href="#/leistungen">Zu Mein Monat</a>
+      <span class="aktionen eng">
+        <button type="button" class="btn" id="n-jahresuebersicht" title="Alle Abrechnungen ${gewaehltesJahr} mit Summen – z. B. für Steuer oder Beihilfe">📄 Jahresübersicht ${gewaehltesJahr}</button>
+        <a class="btn" href="#/leistungen">Zu Mein Monat</a></span>
     </div>
     ${neu.length ? `<p class="erfolgbox" role="status">Danke! ${neu.length === 1 ? 'Deine Prämienabrechnung' : 'Deine Prämienabrechnungen'}
       ${neu.map((x) => `<strong>${esc(x)}</strong>`).join(' und ')} ${neu.length === 1 ? 'wurde' : 'wurden'} eingereicht.
@@ -220,6 +222,8 @@ export async function render(el, { store, flash, neuLaden, navigate, istAktuell 
     ${noten.length ? `<ul class="liste">${noten.map((n) => noteKarte(n, { neu: neu.includes(n.nummer), zeiten })).join('')}</ul>`
     : `<section class="karte"><p>${gewaehltesJahr} noch keine Prämienabrechnungen.</p></section>`}`;
 
+  el.querySelector('#n-jahresuebersicht').addEventListener('click', (ev) => mitSperre(ev.currentTarget, () =>
+    jahresuebersichtHerunterladen(alle, gewaehltesJahr, nutzer).catch((e) => meldung(`PDF: ${fehlerText(e)}`, 'fehler'))));
   el.querySelector('#n-jahr').addEventListener('change', (ev) => { gewaehltesJahr = Number(ev.target.value); neuLaden(); });
   notenAktionen(el.querySelector('.liste'), noten, { store, neuLaden, navigate });
 }
