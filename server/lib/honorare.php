@@ -105,7 +105,8 @@ function einstellungen_laden(PDO $db): array
     foreach (zeilen($db, 'select * from einstellungen') as $z) {
         // „auftraggeber“: früheres SEPA-Konto, „mail“: eigene Einstellungen (mit Passwort, nie an den Browser),
         // „zahlungskonto“: nur für Buchhaltung und Admin (eigene Funktion)
-        if (in_array($z['schluessel'], ['auftraggeber', 'mail', 'zahlungskonto', 'wartung', 'warnmail', 'erinnerung_monat'], true)) continue;
+        // „vapid“: privater Schlüssel für Push-Mitteilungen
+        if (in_array($z['schluessel'], ['auftraggeber', 'mail', 'zahlungskonto', 'wartung', 'warnmail', 'erinnerung_monat', 'vapid'], true)) continue;
         $e[$z['schluessel']] = json_decode($z['wert'], true);
     }
     $e['honorarsaetze'] = saetze_normalisieren($e['honorarsaetze']); // ältere Sätze ohne Medium gelten für beide
@@ -229,7 +230,10 @@ function benachrichtigen(PDO $db, string $typ, array $mail, ?string $ohne = null
     foreach (zeilen($db, 'select * from nutzer where aktiv = 1') as $z) {
         $n = nutzer_aus_zeile($z);
         $n['benachrichtigungen'] = (array) $n['benachrichtigungen'];
-        if ($n['id'] !== $ohne && bekommt($n, $typ)) mail_einreihen($db, $n['email'], $mail);
+        if ($n['id'] !== $ohne && bekommt($n, $typ)) {
+            mail_einreihen($db, $n['email'], $mail);
+            push_einreihen($db, $n['id'], $mail['betreff'], PUSH_ZIELE[$typ] ?? '');
+        }
     }
 }
 
@@ -239,7 +243,10 @@ function autor_benachrichtigen(PDO $db, array $note, string $typ, array $mail): 
     $n = $note['autor_id'] ? nutzer_laden($db, $note['autor_id']) : null;
     if (!$n) return; // Konto gelöscht
     $n['benachrichtigungen'] = (array) $n['benachrichtigungen'];
-    if ($n['aktiv'] && bekommt($n, $typ)) mail_einreihen($db, $n['email'], $mail);
+    if ($n['aktiv'] && bekommt($n, $typ)) {
+        mail_einreihen($db, $n['email'], $mail);
+        push_einreihen($db, $n['id'], $mail['betreff'], PUSH_ZIELE[$typ] ?? '');
+    }
 }
 
 // ================================================================== API-Funktionen
@@ -251,7 +258,7 @@ final class Honorare
     public const FUNKTIONEN = [
         'aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'erstesPasswortSetzen', 'passwortAendern',
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'nachweisHochladen', 'nachweisLoeschen', 'nachweisLaden', 'meineArtikel',
-        'naechsteNummer', 'nummerFestlegen', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
+        'naechsteNummer', 'nummerFestlegen', 'pushSchluessel', 'pushAbonnieren', 'pushAbmelden', 'pushAbholen', 'pushTest', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
         'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'ablaufZeiten', 'neuigkeitenGesehen', 'serverStatus', 'leistungstest', 'serverAktion', 'funktionstest', 'sicherungZurueckspielen', 'ansichtStarten', 'ansichtBeenden',
         'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
@@ -989,7 +996,10 @@ final class Honorare
             $mail = mail_rueckfrage_antwort($db, $x, $t);
             foreach (zeilen($db, 'select distinct von_id from nachrichten where note_id = ? and von_redaktion = 1', [$x['id']]) as $z) {
                 $r = $z['von_id'] ? nutzer_laden($db, $z['von_id']) : null;
-                if ($r && $r['aktiv']) mail_einreihen($db, $r['email'], $mail);
+                if ($r && $r['aktiv']) {
+                    mail_einreihen($db, $r['email'], $mail);
+                    push_einreihen($db, $r['id'], $mail['betreff'], '#/redaktion/' . $x['id']);
+                }
             }
             return true;
         });
@@ -1100,6 +1110,66 @@ final class Honorare
         $n = ich($this->ctx);
         pruefe(preg_match('/^\d{4}-\d{2}-\d{2}[a-z]?$/', s($id)) === 1, 'Ungültiger Eintrag.');
         q($this->db(), 'update nutzer set neuigkeiten_gesehen = ? where id = ?', [s($id), $n['id']]);
+        return true;
+    }
+
+    // ---------------------------------------------------------------- Push-Mitteilungen (Handy-App)
+    /** Öffentlicher VAPID-Schlüssel – damit meldet der Browser das Gerät beim Push-Dienst an */
+    public function pushSchluessel(): string
+    {
+        ich($this->ctx);
+        return vapid_schluessel($this->db())['oeffentlich'];
+    }
+
+    /** Dieses Gerät bekommt Push-Mitteilungen (Abo aus PushManager.subscribe(), als JSON) */
+    public function pushAbonnieren(mixed $abo = null, mixed $geraet = ''): bool
+    {
+        $db = $this->db();
+        $n = ich($this->ctx);
+        $a = is_array($abo) ? $abo : [];
+        $endpoint = s($a['endpoint'] ?? '');
+        $p256dh = s($a['keys']['p256dh'] ?? '');
+        $auth = s($a['keys']['auth'] ?? '');
+        pruefe(push_endpoint_ok($endpoint) && preg_match('/^[A-Za-z0-9_-]{40,200}$/', $p256dh) && preg_match('/^[A-Za-z0-9_-]{8,100}$/', $auth),
+            'Dieses Gerät kann keine Push-Mitteilungen empfangen.');
+        $hash = hash('sha256', $endpoint);
+        // dasselbe Gerät gehört immer der Person, die dort zuletzt angemeldet war
+        q($db, 'delete from push_abos where endpoint_hash = ?', [$hash]);
+        q($db, 'insert into push_abos (id, nutzer_id, endpoint, endpoint_hash, p256dh, auth, geraet, erstellt_am, abgeholt_bis) values (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            [neue_id(), $n['id'], $endpoint, $hash, $p256dh, $auth, kuerze(tr($geraet), 200), jetzt(), jetzt()]);
+        // höchstens 10 Geräte pro Person – die ältesten fallen weg
+        $alle = zeilen($db, 'select id from push_abos where nutzer_id = ? order by erstellt_am desc', [$n['id']]);
+        foreach (array_slice($alle, 10) as $z) q($db, 'delete from push_abos where id = ?', [$z['id']]);
+        return true;
+    }
+
+    public function pushAbmelden(mixed $endpoint = ''): bool
+    {
+        $n = ich($this->ctx);
+        q($this->db(), 'delete from push_abos where endpoint_hash = ? and nutzer_id = ?', [hash('sha256', s($endpoint)), $n['id']]);
+        return true;
+    }
+
+    /** Vom Service Worker nach einem Push: die neuen Mitteilungen für dieses Gerät (jede nur einmal) */
+    public function pushAbholen(mixed $endpoint = ''): array
+    {
+        $db = $this->db();
+        $n = ich($this->ctx);
+        $abo = zeile($db, 'select * from push_abos where endpoint_hash = ? and nutzer_id = ?', [hash('sha256', s($endpoint)), $n['id']]);
+        if (!$abo) return [];
+        $neu = zeilen($db, 'select id, titel, ziel, erstellt_am from push_nachrichten where nutzer_id = ? and erstellt_am > ? order by erstellt_am desc limit 5',
+            [$n['id'], $abo['abgeholt_bis']]);
+        if ($neu) q($db, 'update push_abos set abgeholt_bis = ? where id = ?', [$neu[0]['erstellt_am'], $abo['id']]);
+        return array_map(fn ($z) => ['id' => $z['id'], 'titel' => $z['titel'], 'ziel' => $z['ziel']], $neu);
+    }
+
+    /** Probe-Mitteilung an alle eigenen Geräte */
+    public function pushTest(): bool
+    {
+        $db = $this->db();
+        $n = ich($this->ctx);
+        pruefe((int) wert($db, 'select count(*) from push_abos where nutzer_id = ?', [$n['id']]) > 0, 'Auf keinem Gerät sind Push-Mitteilungen eingeschaltet.');
+        push_einreihen($db, $n['id'], 'Push-Mitteilungen funktionieren ✓', '#/profil');
         return true;
     }
 
@@ -1423,7 +1493,7 @@ final class Honorare
             'kommentare' => $alle('kommentare'),
             'verlauf' => $alle('verlauf'),
             'loeschprotokoll' => $alle('loeschprotokoll'),
-            'einstellungen' => zeilen($db, "select * from einstellungen where schluessel <> 'mail'"),
+            'einstellungen' => zeilen($db, "select * from einstellungen where schluessel not in ('mail', 'vapid')"),
         ], JSON_PRETTY_PRINT);
     }
 

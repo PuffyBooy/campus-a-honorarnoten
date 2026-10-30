@@ -82,6 +82,7 @@ function aufraeumen(PDO $db): void
     protokoll_aufraeumen($db);
     nachweise_aufraeumen($db);
     messwerte_aufraeumen($db);
+    push_aufraeumen($db);
 }
 
 /** Nur nachsehen, ob noch Versuche frei sind (ohne zu zählen) */

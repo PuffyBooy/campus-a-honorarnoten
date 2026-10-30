@@ -6,6 +6,9 @@ import { fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { bekommt, verfuegbareBenachrichtigungen } from '../lib/benachrichtigungen.js';
 import { downloadBlob } from '../lib/csv.js';
 import { nummerAendern } from '../lib/nummer-aendern.js';
+import {
+  installierenStarten, istInstalliert, istIos, kannInstallieren, pushAbo, pushAusschalten, pushEinschalten, pushMoeglich,
+} from '../lib/push.js';
 import qrcode from '../../vendor/qrcode-generator.mjs';
 
 function feld(name, label, wert, { typ = 'text', pflicht = true, attrs = '' } = {}) {
@@ -86,6 +89,7 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
             <label class="check bestaetigen"><input type="checkbox" name="${esc(b.typ)}" ${bekommt(nutzer, b.typ) ? 'checked' : ''}> ${esc(b.text)}</label>`).join('')}
           <p><button class="btn abstand-oben" type="submit">Auswahl speichern</button></p>
         </form>` : ''}
+        <section class="karte" id="app-karte" aria-live="polite"><h2>Handy-App und Push-Mitteilungen</h2><p class="laden">…</p></section>
         <form class="karte" id="pw-form" novalidate>
           <h2>Passwort ändern</h2>
           <input type="text" name="username" value="${esc(nutzer.email)}" autocomplete="username" hidden>
@@ -114,6 +118,8 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
     </div>`;
 
   el.querySelector('#p-nummer')?.addEventListener('click', async () => { if (await nummerAendern(store, naechste)) neuLaden(); });
+
+  appKarte(el.querySelector('#app-karte'), { store, istDemo });
 
   const form = el.querySelector('#profil-form');
   const setFehler = (name, t) => {
@@ -280,4 +286,56 @@ function zweiFaktor(el, { store, neuLaden }) {
       }
     });
   });
+}
+
+/** Karte „Handy-App“: als App installieren und Push-Mitteilungen auf diesem Gerät */
+async function appKarte(box, { store, istDemo }) {
+  const abo = await pushAbo().catch(() => null);
+  if (!box.isConnected) return;
+  const installiert = istInstalliert();
+  const install = installiert ? '<p>✓ Läuft als installierte App.</p>'
+    : kannInstallieren() ? `<p>Die App aufs Handy oder den Computer holen – mit eigenem Symbol, ohne Browserleiste.</p>
+        <p><button type="button" class="btn" id="app-installieren">📲 Als App installieren</button></p>`
+      : istIos() ? `<p><strong>iPhone/iPad:</strong> In Safari unten auf <strong>Teilen</strong> (□↑) tippen, dann
+        <strong>„Zum Home-Bildschirm“</strong>. Danach die App vom Home-Bildschirm öffnen.</p>`
+        : `<p>Im Browser-Menü <strong>„App installieren“</strong> bzw. <strong>„Zum Startbildschirm hinzufügen“</strong> wählen
+          (Chrome, Edge, Samsung Internet; Android und Computer).</p>`;
+  let push;
+  if (istDemo) push = '<p class="klein">Push-Mitteilungen gibt es nur in der echten App, nicht in der Demo.</p>';
+  else if (!pushMoeglich()) {
+    push = istIos() && !installiert
+      ? '<p class="klein">Auf dem iPhone kommen Push-Mitteilungen erst, wenn die App installiert ist (siehe oben, ab iOS 16.4).</p>'
+      : '<p class="klein">Dieser Browser kann keine Push-Mitteilungen empfangen.</p>';
+  } else if (abo) {
+    push = `<p><span class="badge badge-bezahlt">Eingeschaltet</span> Dieses Gerät bekommt Mitteilungen.</p>
+      <p class="aktionen"><button type="button" class="btn" id="push-test">Probe schicken</button>
+        <button type="button" class="btn" id="push-aus">Ausschalten</button></p>`;
+  } else {
+    push = `<p>Rückfragen, Annahme, Zahlung … sofort als Mitteilung auf diesem Gerät – wie die E-Mails oben ausgewählt.</p>
+      <p><button type="button" class="btn btn-primaer" id="push-an">🔔 Push-Mitteilungen einschalten</button></p>`;
+  }
+  box.innerHTML = `<h2>Handy-App und Push-Mitteilungen</h2>${install}<h3>Push-Mitteilungen auf diesem Gerät</h3>${push}
+    <p class="tipp">Inhalte gehen nicht über den Push-Dienst von Google/Apple – das Gerät holt sie sich mit deiner Anmeldung
+      direkt bei der App. Beim Abmelden wird das Gerät ausgetragen.</p>`;
+  const neu = () => appKarte(box, { store, istDemo });
+  // Chrome meldet erst etwas später, dass die App installiert werden kann
+  if (!installiert && !kannInstallieren()) window.addEventListener('honorare:installierbar', () => { if (box.isConnected) neu(); }, { once: true });
+  const fehler = (e) => meldung(fehlerText(e), 'fehler');
+  box.querySelector('#app-installieren')?.addEventListener('click', async () => { if (await installierenStarten()) meldung('App installiert.', 'erfolg'); neu(); });
+  box.querySelector('#push-an')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    try { await pushEinschalten(store); meldung('Push-Mitteilungen sind eingeschaltet.', 'erfolg'); neu(); } catch (e) { fehler(e); }
+  }));
+  box.querySelector('#push-aus')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    await pushAusschalten(store);
+    meldung('Push-Mitteilungen auf diesem Gerät ausgeschaltet.', 'erfolg');
+    neu();
+  }));
+  box.querySelector('#push-test')?.addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    try {
+      // das Gerät könnte beim Server fehlen (z. B. nach dem Zurückspielen einer Sicherung) – vorsorglich neu eintragen
+      await pushEinschalten(store);
+      await store.pushTest();
+      meldung('Probe ist unterwegs – gleich sollte eine Mitteilung erscheinen.', 'erfolg');
+    } catch (e) { fehler(e); }
+  }));
 }

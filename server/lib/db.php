@@ -323,6 +323,31 @@ const MIGRATIONEN = [
     <<<'SQL'
     alter table nutzer add column nummer_basis text;
     SQL,
+    // Version 22: Push-Mitteilungen aufs Handy (Web Push) – Abos je Gerät und die Mitteilungen dazu
+    <<<'SQL'
+    create table if not exists push_abos (
+      id            text primary key,
+      nutzer_id     text not null references nutzer(id) on delete cascade,
+      endpoint      text not null,
+      endpoint_hash text not null unique,
+      p256dh        text not null,
+      auth          text not null,
+      geraet        text not null default '',
+      erstellt_am   text not null,
+      abgeholt_bis  text not null,
+      fehler        integer not null default 0
+    );
+    create index if not exists push_abos_nutzer on push_abos (nutzer_id);
+    create table if not exists push_nachrichten (
+      id          text primary key,
+      nutzer_id   text not null references nutzer(id) on delete cascade,
+      titel       text not null,
+      ziel        text not null default '',
+      erstellt_am text not null,
+      gesendet    integer not null default 0
+    );
+    create index if not exists push_nachrichten_nutzer on push_nachrichten (nutzer_id, erstellt_am);
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -614,11 +639,40 @@ const MYSQL_MIGRATIONEN = [
     <<<'SQL'
     alter table nutzer add column nummer_basis varchar(12) null;
     SQL,
+    // Version 15 = SQLite-Version 22
+    <<<'SQL'
+    create table if not exists push_abos (
+      id            varchar(36) not null primary key,
+      nutzer_id     varchar(36) not null,
+      endpoint      text not null,
+      endpoint_hash varchar(64) not null,
+      p256dh        varchar(200) not null,
+      auth          varchar(100) not null,
+      geraet        varchar(200) not null default '',
+      erstellt_am   varchar(30) not null,
+      abgeholt_bis  varchar(30) not null,
+      fehler        int not null default 0,
+      unique key push_abos_endpoint (endpoint_hash),
+      index push_abos_nutzer (nutzer_id),
+      foreign key (nutzer_id) references nutzer(id) on delete cascade
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists push_nachrichten (
+      id          varchar(36) not null primary key,
+      nutzer_id   varchar(36) not null,
+      titel       varchar(300) not null,
+      ziel        varchar(200) not null default '',
+      erstellt_am varchar(30) not null,
+      gesendet    tinyint not null default 0,
+      index push_nachrichten_nutzer (nutzer_id, erstellt_am),
+      foreign key (nutzer_id) references nutzer(id) on delete cascade
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    SQL,
 ];
 
 /** Tabellen in der Reihenfolge, in der sie eingespielt werden können (für die Sicherung) */
 const TABELLEN = ['nutzer', 'sitzungen', 'anfragen', 'positionen', 'noten', 'note_positionen', 'kommentare', 'verlauf',
-    'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails', 'links', 'protokoll', 'nachweise', 'nachrichten', 'messwerte'];
+    'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails', 'links', 'protokoll', 'nachweise', 'nachrichten', 'messwerte',
+    'push_abos', 'push_nachrichten'];
 
 /**
  * Datenbank öffnen und auf den neuesten Stand bringen.

@@ -134,12 +134,19 @@ export function datenschutzHtml(r, { istDemo = false } = {}) {
       <li><strong>${esc(firma)}:</strong> bekommt die Prämienabrechnungen als Rechnungsempfänger.</li>
     </ul>
     <p>Es gibt keine Werbung, kein Tracking, keine Analyse-Dienste und keine eingebundenen fremden Inhalte
-      (Schriften und Programmteile liegen auf demselben Server). Daten werden nicht in Länder außerhalb der EU übermittelt.</p>
+      (Schriften und Programmteile liegen auf demselben Server). Daten werden nicht in Länder außerhalb der EU übermittelt
+      – einzige Ausnahme sind freiwillig eingeschaltete Push-Mitteilungen (siehe 5).</p>
 
-    <h2>5. E-Mails</h2>
+    <h2>5. E-Mails und Push-Mitteilungen</h2>
     <p>Die App verschickt automatische E-Mails (Zugangsdaten, Eingangsbestätigung, Annahme, Rückgabe, Zahlung;
       an die Redaktion bzw. Buchhaltung bei neuen Prämienabrechnungen). Dafür werden Name, E-Mail-Adresse, Nummer,
       Leistungen und Beträge der Prämienabrechnung verwendet – nie die Bankverbindung.</p>
+    <p><strong>Push-Mitteilungen (freiwillig):</strong> Wer sie im Profil für ein Gerät einschaltet, dessen Browser meldet
+      sich beim Push-Dienst seines Herstellers an (z. B. Google, Apple, Mozilla – teils mit Servern außerhalb der EU).
+      Die App speichert dazu die Geräte-Adresse dieses Dienstes und schickt darüber nur einen <em>leeren</em> Weckruf;
+      den Text der Mitteilung holt sich das Gerät mit der Anmeldung direkt bei der App. Der Push-Dienst erfährt also
+      keine Inhalte. Ausschalten im Profil oder durch Abmelden; die Geräte-Adresse wird dann gelöscht
+      (Einwilligung, Art. 6 Abs. 1 lit. a DSGVO).</p>
 
     <h2>6. Wie lange?</h2>
     <ul>

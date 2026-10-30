@@ -1,7 +1,8 @@
 // Tests für den Server (PHP, wie auf World4You): Rollen, Rechte, Abläufe und E-Mails über die echte HTTP-API
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { createHmac } from 'node:crypto';
+import { createHmac, createPublicKey, verify } from 'node:crypto';
+import { createServer } from 'node:http';
 import { phpServerStarten, mailAbwarten } from './php-server.mjs';
 import { CAMPUS_A_PROFIL, campusSeiten, campusHolen } from './campus-fixtures.mjs';
 
@@ -9,7 +10,7 @@ let php;
 let basis;
 
 before(async () => {
-  php = await phpServerStarten({ campusHolen });
+  php = await phpServerStarten({ campusHolen, envZusatz: { HONORARE_PUSH_TEST: '1' } });
   basis = php.basis;
 });
 
@@ -1199,6 +1200,70 @@ test('Kommandozentrale: Zustand, Messwerte je Stunde, Leistungstest, Wartungsakt
   assert.equal((await andere.aufruf('aktuellerNutzer')).daten, null, 'andere abgemeldet');
   assert.equal((await k.admin.ok('aktuellerNutzer')).email, 'admin@example.org', 'eigene Sitzung bleibt');
   assert.ok((await k.admin.ok('protokoll', { suche: 'Kommandozentrale' })).eintraege.length >= 4);
+});
+
+test('Push-Mitteilungen: Gerät anmelden, leerer Push mit VAPID, Mitteilung abholen, abgelaufenes Gerät fällt weg', async () => {
+  // nachgebauter Push-Dienst (wie FCM/Mozilla/Apple): merkt sich die Anfragen, antwortet mit „status“
+  const empfangen = [];
+  let status = 201;
+  const dienst = createServer((req, res) => {
+    let body = '';
+    req.on('data', (d) => { body += d; });
+    req.on('end', () => { empfangen.push({ pfad: req.url, auth: req.headers.authorization, ttl: req.headers.ttl, body }); res.writeHead(status); res.end(); });
+  });
+  await new Promise((ok) => dienst.listen(0, '127.0.0.1', ok));
+  const endpoint = `http://127.0.0.1:${dienst.address().port}/push/admin-handy`;
+  const abo = { endpoint, keys: { p256dh: 'B'.repeat(87), auth: 'a'.repeat(22) } };
+  const warten = async (n) => { for (let i = 0; i < 60 && empfangen.length < n; i++) await new Promise((ok) => setTimeout(ok, 50)); };
+  try {
+    const schluessel = await k.admin.ok('pushSchluessel');
+    assert.match(schluessel, /^[A-Za-z0-9_-]{87}$/, 'unkomprimierter P-256-Schlüssel, base64url');
+    assert.equal(await k.admin.ok('pushSchluessel'), schluessel, 'bleibt gleich');
+    assert.equal((await k.admin.ok('einstellungen')).vapid, undefined, 'privater Schlüssel geht nie an den Browser');
+    assert.match((await k.admin.aufruf('pushAbonnieren', { ...abo, endpoint: 'http://boese.example/x' })).fehler, /keine Push/);
+    assert.match((await k.admin.aufruf('pushTest')).fehler, /keinem Gerät/);
+    await k.admin.ok('pushAbonnieren', abo, 'Testhandy');
+
+    // Probe-Mitteilung: leerer Push mit gültiger VAPID-Signatur
+    await k.admin.ok('pushTest');
+    await warten(1);
+    assert.equal(empfangen.length, 1);
+    assert.equal(empfangen[0].pfad, '/push/admin-handy');
+    assert.equal(empfangen[0].body, '', 'kein Inhalt – der geht nicht über den Push-Dienst');
+    const [, jwt, k64] = empfangen[0].auth.match(/^vapid t=([^,]+), k=(.+)$/);
+    assert.equal(k64, schluessel);
+    const [kopf, inhalt, sig] = jwt.split('.');
+    const claims = JSON.parse(Buffer.from(inhalt, 'base64url'));
+    assert.equal(claims.aud, `http://127.0.0.1:${dienst.address().port}`);
+    assert.ok(claims.exp > Date.now() / 1000);
+    const roh = Buffer.from(schluessel, 'base64url');
+    const pub = createPublicKey({ key: { kty: 'EC', crv: 'P-256', x: roh.subarray(1, 33).toString('base64url'), y: roh.subarray(33).toString('base64url') }, format: 'jwk' });
+    assert.ok(verify('sha256', Buffer.from(`${kopf}.${inhalt}`), { key: pub, dsaEncoding: 'ieee-p1363' }, Buffer.from(sig, 'base64url')), 'ES256-Signatur stimmt');
+
+    // der Service Worker holt die Mitteilung ab – jede nur einmal, andere Konten sehen nichts
+    assert.deepEqual((await k.admin.ok('pushAbholen', endpoint)).map((m) => [m.titel, m.ziel]), [['Push-Mitteilungen funktionieren ✓', '#/profil']]);
+    assert.deepEqual(await k.admin.ok('pushAbholen', endpoint), []);
+    const kasse = client();
+    await kasse.ok('anmelden', 'kasse@example.org', 'geheim12345');
+    assert.deepEqual(await kasse.ok('pushAbholen', endpoint), [], 'fremdes Gerät: nichts');
+
+    // Ereignis wie bei der E-Mail: neue Zugangsanfrage -> Push an die Admins
+    await client().ok('zugangAnfragen', { vorname: 'Paula', nachname: 'Push', email: 'paula@example.org', zustimmung: true });
+    await warten(2);
+    assert.deepEqual((await k.admin.ok('pushAbholen', endpoint)).map((m) => [m.titel, m.ziel]),
+      [['Neue Zugangsanfrage: Paula Push', '#/admin/anfragen']]);
+    const anfrage = (await k.admin.ok('anfragen')).find((a) => a.email === 'paula@example.org');
+    await k.admin.ok('anfrageAblehnen', anfrage.id);
+
+    // Gerät abgemeldet beim Push-Dienst (410): Abo wird gelöscht
+    status = 410;
+    await k.admin.ok('pushTest');
+    await warten(3);
+    for (let i = 0; i < 40 && php.sql('select count(*) n from push_abos').zeilen[0].n; i++) await new Promise((ok) => setTimeout(ok, 50));
+    assert.equal(php.sql('select count(*) n from push_abos').zeilen[0].n, 0);
+  } finally {
+    dienst.close();
+  }
 });
 
 test('Schutz: CSRF-Header, fremde Origin, unbekannte Funktionen', async () => {

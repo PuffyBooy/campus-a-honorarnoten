@@ -4,6 +4,7 @@ DirectoryIndex index.html
 AddDefaultCharset utf-8
 AddType text/javascript .js .mjs
 AddType image/svg+xml .svg
+AddType application/manifest+json .webmanifest
 AddType application/vnd.openxmlformats-officedocument.wordprocessingml.document .docx
 
 <IfModule mod_rewrite.c>
@@ -29,7 +30,7 @@ AddType application/vnd.openxmlformats-officedocument.wordprocessingml.document 
   Header always set Referrer-Policy "no-referrer"
   Header always set Permissions-Policy "camera=(), microphone=(), geolocation=()"
   Header always set Strict-Transport-Security "max-age=31536000" "expr=%{HTTPS} == 'on'"
-  <FilesMatch "\.(html|js|mjs|css|svg|docx)$">
+  <FilesMatch "\.(html|js|mjs|css|svg|docx|webmanifest)$">
     Header set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
     Header set Cross-Origin-Opener-Policy "same-origin"
     # nach einem Update sofort die neuen Dateien laden
