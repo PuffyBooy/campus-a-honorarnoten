@@ -1838,7 +1838,7 @@ final class Honorare
         // geht gleich nach der Antwort hinaus; das Ergebnis fragt die Seite mit mailStatus ab
         $mailId = $mail ? mail_einreihen($db, $an, mail_einladung($db, $link, $tage, $admin)) : null;
         $this->log('info', 'konten', "Registrierungslink erstellt: $tage Tage, " . ($max === null ? 'beliebig oft' : "{$max}×") . ($an !== '' ? ", an $an" : ''));
-        return ['link' => $link, 'mail' => $mail, 'mail_id' => $mailId, 'tage' => $tage, 'max' => $max];
+        return ['link' => $link, 'mail' => $mail, 'mail_id' => $mailId, 'email' => $an, 'tage' => $tage, 'max' => $max];
     }
 
     public function registrierungslinks(): array

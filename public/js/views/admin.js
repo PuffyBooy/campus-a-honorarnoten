@@ -135,6 +135,45 @@ function zugangsText(z) {
     + 'Beim ersten Anmelden legst du dein eigenes Passwort fest.\n\nLiebe Grüße\ndeine Redaktion';
 }
 
+/**
+ * Zugangs- und Einladungsmails gehen gleich nach der Antwort hinaus (die Seite wartet nicht auf den Mailserver).
+ * Hier wird das Ergebnis abgefragt und angezeigt: unterwegs → gesendet oder fehler (mit Meldung des Mailservers).
+ */
+async function mailVerfolgen(store, obj, beiAenderung) {
+  if (!obj?.mail || !obj.mail_id || obj.verfolgt || (obj.mail_status && obj.mail_status !== 'unterwegs')) return;
+  obj.verfolgt = true;
+  obj.mail_status = 'unterwegs';
+  for (let i = 0; i < 30; i++) {
+    await new Promise((ok) => setTimeout(ok, i < 6 ? 700 : 2000));
+    let st;
+    try { st = await store.mailStatus(obj.mail_id); } catch { continue; }
+    if (st.status === 'gesendet' || st.status === 'fehler') {
+      Object.assign(obj, { mail_status: st.status, mail_fehler: st.fehler });
+      beiAenderung();
+      return;
+    }
+  }
+  obj.mail_status = 'dauert';
+  beiAenderung();
+}
+
+/** Stand der Mail als Hinweis: wird verschickt / verschickt / Fehler / dauert länger */
+function mailStatusHtml(z, { gesendet, fehler }) {
+  if (!z.mail) return '';
+  if (z.mail_status === 'gesendet') return `<p class="erfolgbox">${gesendet}</p>`;
+  if (z.mail_status === 'fehler') {
+    return `<p class="fehlerbox"><strong>${fehler}</strong> Meldung des Mailservers: ${esc(z.mail_fehler)}<br>
+      Die App versucht es später automatisch noch einmal. Sicherer: selbst weitergeben und unter Admin → E-Mail die Einstellungen prüfen.</p>`;
+  }
+  if (z.mail_status === 'dauert') {
+    return `<p class="hinweisbox">Die E-Mail an <strong>${esc(z.email)}</strong> ist noch in der Warteschlange – die App verschickt sie
+      in Kürze. Den Stand zeigt die <a href="#/admin/server">Kommandozentrale</a> (Mail-Warteschlange).</p>`;
+  }
+  return `<p class="hinweisbox mail-unterwegs" role="status">⏳ Die E-Mail an <strong>${esc(z.email)}</strong> wird gerade verschickt …</p>`;
+}
+const mailVerschickt = (z) => z.mail && z.mail_status === 'gesendet';
+const mailOffen = (z) => z.mail && (!z.mail_status || z.mail_status === 'unterwegs');
+
 function zugangsdatenHtml(z) {
   // Mit eingerichtetem E-Mail-Versand geht alles automatisch hinaus – dann nur zur Info
   const mailto = `mailto:${encodeURIComponent(z.email)}?subject=${encodeURIComponent('Dein Zugang zu den Anerkennungsprämien')}`
@@ -142,12 +181,10 @@ function zugangsdatenHtml(z) {
   return `
     <section class="karte zugangsdaten" role="status">
       <h2>Zugangsdaten für ${esc(z.vorname)}</h2>
-      ${z.mail && !z.mail_fehler ? `<p class="erfolgbox">Die Zugangs-Mail wurde an <strong>${esc(z.email)}</strong> verschickt,
-        mit einem Knopf, der direkt anmeldet. Du musst nichts weiter tun.</p>`
-        : z.mail ? `<p class="fehlerbox"><strong>Die E-Mail an ${esc(z.email)} konnte nicht verschickt werden.</strong>
-          Meldung des Mailservers: ${esc(z.mail_fehler)}<br>Die App versucht es später automatisch noch einmal.
-          Sicherer: Zugangsdaten jetzt selbst weitergeben und unter Admin → E-Mail die Einstellungen prüfen.</p>`
-        : '<p>Der E-Mail-Versand ist nicht eingerichtet (Admin → E-Mail). Bitte die Zugangsdaten selbst weitergeben. Sie werden nur jetzt angezeigt.</p>'}
+      ${z.mail ? mailStatusHtml(z, {
+        gesendet: `Die Zugangs-Mail wurde an <strong>${esc(z.email)}</strong> verschickt, mit einem Knopf, der direkt anmeldet. Du musst nichts weiter tun.`,
+        fehler: `Die E-Mail an ${esc(z.email)} konnte nicht verschickt werden.`,
+      }) : '<p>Der E-Mail-Versand ist nicht eingerichtet (Admin → E-Mail). Bitte die Zugangsdaten selbst weitergeben. Sie werden nur jetzt angezeigt.</p>'}
       <div class="kopierblock">
         <div class="kopierzeile"><span class="kopier-label">E-Mail</span><span class="kopier-wert">${esc(z.email)}</span><span></span></div>
         <div class="kopierzeile"><span class="kopier-label">Startpasswort</span>
@@ -158,9 +195,9 @@ function zugangsdatenHtml(z) {
           <button type="button" class="btn btn-klein" data-z="link">Kopieren</button></div>` : ''}
       </div>
       <div class="aktionen">
-        ${z.mail && !z.mail_fehler ? '' : `<a class="btn btn-primaer" href="${esc(mailto)}">E-Mail vorbereiten</a>
+        ${mailVerschickt(z) || mailOffen(z) ? '' : `<a class="btn btn-primaer" href="${esc(mailto)}">E-Mail vorbereiten</a>
         <button type="button" class="btn" data-z="text">Text kopieren</button>`}
-        <button type="button" class="btn" data-z="fertig">${z.mail && !z.mail_fehler ? 'Ok' : 'Erledigt'}</button>
+        <button type="button" class="btn" data-z="fertig">${mailVerschickt(z) ? 'Ok' : 'Erledigt'}</button>
       </div>
     </section>`;
 }
@@ -194,9 +231,10 @@ async function einladen(inhalt, { store, neuLaden, istDemo }) {
   inhalt.innerHTML = `
     ${neuerLink ? `<section class="karte zugangsdaten" role="status">
       <h2>Registrierungslink erstellt</h2>
-      ${neuerLink.mail && !neuerLink.mail_fehler ? '<p class="erfolgbox">Die Einladung wurde per E-Mail verschickt.</p>' : ''}
-      ${neuerLink.mail_fehler ? `<p class="fehlerbox"><strong>Die Einladung konnte nicht per E-Mail verschickt werden.</strong>
-        Meldung des Mailservers: ${esc(neuerLink.mail_fehler)}. Bitte den Link selbst weitergeben.</p>` : ''}
+      ${neuerLink.mail ? mailStatusHtml(neuerLink, {
+        gesendet: 'Die Einladung wurde per E-Mail verschickt.',
+        fehler: 'Die Einladung konnte nicht per E-Mail verschickt werden. Bitte den Link selbst weitergeben.',
+      }) : ''}
       <p>Gilt ${esc(LINK_GUELTIG[neuerLink.tage])}, ${neuerLink.max == null ? 'beliebig oft' : neuerLink.max === 1 ? 'für eine Person' : `für ${neuerLink.max} Personen`}.
         <strong>Der Link wird nur jetzt angezeigt.</strong></p>
       <div class="kopierblock"><div class="kopierzeile"><span class="kopier-label">Link</span>
@@ -241,6 +279,8 @@ async function einladen(inhalt, { store, neuLaden, istDemo }) {
         </tr>`).join('')}</tbody></table>` : '<p class="klein">Noch keine Registrierungslinks.</p>'}
     </section>`;
 
+  // Einladungsmail: Ergebnis abwarten und dann neu zeichnen (falls man noch hier ist)
+  mailVerfolgen(store, neuerLink, () => { if (inhalt.isConnected && neuerLink) neuLaden(); });
   inhalt.querySelector('#l-kopieren')?.addEventListener('click', (ev) => kopierenMitFeedback(ev.currentTarget, neuerLink.link));
   inhalt.querySelector('#l-ok')?.addEventListener('click', () => { neuerLink = null; neuLaden(); });
   const form = inhalt.querySelector('#l-form');
@@ -428,6 +468,7 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
     } else if (knopf.dataset.aktion === 'ansehen') {
       try {
         await store.ansichtStarten(n.id);
+        window.dispatchEvent(new CustomEvent('honorare:anmeldung-geaendert'));
         location.hash = '#/';
       } catch (e) {
         meldung(fehlerText(e), 'fehler');
@@ -898,6 +939,14 @@ export async function render(el, ctx) {
     </nav>`}
     <div id="a-zugang">${zugangsdaten ? zugangsdatenHtml(zugangsdaten) : ''}</div>
     <div id="a-inhalt"></div>`;
-  zugangsdatenBinden(el.querySelector('#a-zugang'), ctx.neuLaden);
+  const zugang = el.querySelector('#a-zugang');
+  zugangsdatenBinden(zugang, ctx.neuLaden);
+  // Zugangs-Mail: Ergebnis abwarten und nur diesen Kasten neu zeichnen
+  mailVerfolgen(ctx.store, zugangsdaten, () => {
+    const box = document.getElementById('a-zugang');
+    if (!box || !zugangsdaten) return;
+    box.innerHTML = zugangsdatenHtml(zugangsdaten);
+    zugangsdatenBinden(box, ctx.neuLaden);
+  });
   el.querySelector('#a-inhalt').replaceWith(inhalt);
 }

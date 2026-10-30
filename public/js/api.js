@@ -1,11 +1,13 @@
 // Datenhaltung im Server-Modus: dieselben Funktionen wie store.js (Demo),
 // aber jede Anfrage geht an den eigenen Server. Rechte prüft der Server.
 import { kontoFertig } from './lib/konto.js';
+import { anfrageGemessen, serverTiming } from './lib/messung.js';
 
 class Fehler extends Error {}
 
 async function aufruf(name, ...args) {
   let res;
+  const t0 = performance.now();
   try {
     res = await fetch(`api/${name}`, {
       method: 'POST',
@@ -18,6 +20,8 @@ async function aufruf(name, ...args) {
   }
   let body = {};
   try { body = await res.json(); } catch { /* keine JSON-Antwort */ }
+  // für die Kommandozentrale: wie lange im Browser, wie lange davon am Server
+  anfrageGemessen(name, performance.now() - t0, serverTiming(res.headers.get('Server-Timing')));
   if (!res.ok) {
     // Sitzung abgelaufen -> App zeigt wieder die Anmeldung
     if (body.abgemeldet) window.dispatchEvent(new CustomEvent('honorare:abgemeldet'));
@@ -76,6 +80,9 @@ export const nachweisLaden = f('nachweisLaden');
 export const meineArtikel = f('meineArtikel');
 export const naechsteNummer = f('naechsteNummer');
 export const nummerFestlegen = f('nummerFestlegen');
+export const mailStatus = f('mailStatus');
+export const ping = f('ping');
+export const anfrageAnalyse = f('anfrageAnalyse');
 export const pushSchluessel = f('pushSchluessel');
 export const pushAbonnieren = f('pushAbonnieren');
 export const pushAbmelden = f('pushAbmelden');

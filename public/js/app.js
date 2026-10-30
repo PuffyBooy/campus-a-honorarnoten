@@ -23,6 +23,7 @@ import { nachweisHerunterladen } from './lib/nachweise.js';
 import { nurAnsehen } from './lib/ansicht.js';
 import { vorratLeeren } from './views/redaktion-detail.js';
 import { pushAusschalten, swRegistrieren } from './lib/push.js';
+import { wechselEnde, wechselStart } from './lib/messung.js';
 
 // Demo: Daten im Browser (store.js). Server: Daten über die API (api.js).
 const IST_DEMO = MODUS !== 'server';
@@ -206,6 +207,7 @@ function hinweisBanner(nutzer, recht) {
     banner.querySelector('#ansicht-ende').addEventListener('click', async (ev) => {
       ev.currentTarget.disabled = true;
       await Promise.resolve(store.ansichtBeenden()).catch(() => {});
+      nutzerVorrat = null; // wieder das eigene Konto
       // neue Adresse zeichnet über hashchange neu – nur wenn sie gleich bleibt, selbst (sonst doppelt)
       if (location.hash === '#/admin/benutzer') render();
       else location.hash = '#/admin/benutzer';
@@ -231,6 +233,7 @@ function hinweisBanner(nutzer, recht) {
     knopf.disabled = true;
     try {
       await store.hinweisBestaetigen();
+      nutzerVorrat = null; // Anmeldung beim nächsten Seitenwechsel frisch holen (sonst käme der Hinweis kurz wieder)
       knopf.closest('aside').remove(); // nur diesen Hinweis, andere (z. B. „Neu“) bleiben
     } catch (e) {
       knopf.disabled = false;
@@ -272,6 +275,7 @@ async function wartungSeite(pfad, text) {
 }
 
 let breitenBeobachter = null;
+let nutzerVorrat = null; // zuletzt geprüfte Anmeldung (für schnelle Seitenwechsel)
 
 // zuletzt vollständig gezeichnete Seite (für den schnellen Wechsel innerhalb einer Seite, z. B. Redaktion)
 let zuletzt = null;
@@ -302,7 +306,12 @@ async function render({ schnell = false } = {}) {
   const pfad = aktuellerPfad();
   // Innerhalb derselben Seite wechseln (z. B. zur nächsten Abrechnung in der Redaktion): nur den Teil austauschen
   const t = schnell === true && zuletzt && pfad ? finde(pfad) : null;
-  if (t && t.route.view === zuletzt.route.view && t.route.view.wechseln?.(main, kontext(t, zuletzt.nutzer, lauf))) return;
+  wechselStart(pfad); // Messung für die Kommandozentrale
+  const gewechselt = t && t.route.view === zuletzt.route.view ? t.route.view.wechseln?.(main, kontext(t, zuletzt.nutzer, lauf)) : null;
+  if (gewechselt) {
+    Promise.resolve(gewechselt).finally(() => { if (lauf === renderZaehler) wechselEnde('schnell'); });
+    return;
+  }
   zuletzt = null;
   // Breite der Seite (die Redaktion ist breiter) erst umstellen, wenn der neue Inhalt kommt –
   // sonst springt der alte Inhalt kurz in die neue Breite
@@ -316,8 +325,21 @@ async function render({ schnell = false } = {}) {
   }
   let nutzer;
   try {
-    nutzer = await store.aktuellerNutzer();
+    // Seitenwechsel in der App (hashchange): Anmeldung von vorhin nehmen und gleichzeitig im Hintergrund
+    // nachprüfen – spart eine Runde zum Server. Hat sich etwas geändert (abgemeldet, Rollen …), neu zeichnen.
+    if (schnell === true && nutzerVorrat?.nutzer && Date.now() - nutzerVorrat.zeit < 5 * 60000) {
+      nutzer = nutzerVorrat.nutzer;
+      const vorher = JSON.stringify(nutzer);
+      Promise.resolve(store.aktuellerNutzer()).then((n) => {
+        nutzerVorrat = { nutzer: n, zeit: Date.now() };
+        if (JSON.stringify(n) !== vorher && lauf === renderZaehler) render();
+      }).catch(() => { nutzerVorrat = null; });
+    } else {
+      nutzer = await store.aktuellerNutzer();
+      nutzerVorrat = { nutzer, zeit: Date.now() };
+    }
   } catch (e) {
+    nutzerVorrat = null;
     if (e.wartung) {
       await wartungSeite(pfad, e.wartung);
       return;
@@ -421,7 +443,10 @@ async function render({ schnell = false } = {}) {
   try {
     await treffer.route.view.render(main, kontext(treffer, nutzer, lauf, f));
     ladenFertig();
-    if (lauf === renderZaehler) zuletzt = { route: treffer.route, nutzer };
+    if (lauf === renderZaehler) {
+      zuletzt = { route: treffer.route, nutzer };
+      wechselEnde();
+    }
   } catch (e) {
     console.error(e);
     if (lauf !== renderZaehler) return;
@@ -451,6 +476,8 @@ async function start() {
     rechtVorrat = null; // Betreiber-Angaben vielleicht geändert
     if (!fokus?.closest('form')) render();
   });
+  // Anmeldung hat sich geändert (z. B. „Ansehen als“): beim nächsten Seitenwechsel frisch holen
+  window.addEventListener('honorare:anmeldung-geaendert', () => { nutzerVorrat = null; });
   // Server: Sitzung abgelaufen -> zurück zur Anmeldung
   window.addEventListener('honorare:abgemeldet', () => render());
   // Server: Wartungsmodus wurde eingeschaltet -> Hinweis zeigen
