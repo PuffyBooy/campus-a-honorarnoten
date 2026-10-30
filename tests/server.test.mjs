@@ -43,6 +43,17 @@ function client() {
   return { aufruf, ok };
 }
 
+/** Wartet, bis eine eingereihte Mail verschickt oder gescheitert ist (sie geht nach der Antwort hinaus) */
+async function mailStatusAbwarten(c, id) {
+  let st;
+  for (let i = 0; i < 60; i++) {
+    st = await c.ok('mailStatus', id);
+    if (st.status !== 'unterwegs') return st;
+    await new Promise((ok) => setTimeout(ok, 50));
+  }
+  return st;
+}
+
 async function anmeldenMitNeuemPasswort(c, email, startPw, neu = 'geheim12345') {
   await c.ok('anmelden', email, startPw);
   await c.ok('erstesPasswortSetzen', neu);
@@ -352,10 +363,14 @@ test('Link in der Zugangs-Mail meldet direkt an (einmal, danach eigenes Passwort
   const vorher = php.smtp.mails.length;
   const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Lina', nachname: 'Link', email: 'lina@example.org', rollen: ['autor'] });
   assert.match(z.link, /#\/link\/[\w-]{20,}$/);
-  assert.deepEqual([z.mail, z.mail_fehler, z.mail_id], [true, '', undefined], 'gleich verschickt, Ergebnis für den Admin');
-  // schon verschickt, bevor die Antwort kam (nicht erst im Hintergrund)
+  // die Antwort wartet nicht auf den Mailserver – die Mail geht gleich danach hinaus, die Seite fragt das Ergebnis ab
+  assert.equal(z.mail, true);
+  assert.ok(z.mail_id);
+  assert.equal(z.mail_fehler, undefined);
+  assert.equal((await mailStatusAbwarten(k.admin, z.mail_id)).status, 'gesendet');
   const mail = php.smtp.mails.slice(vorher).find((m) => m.an === 'lina@example.org' && m.betreff.startsWith('Dein Zugang'));
-  assert.ok(mail, 'Zugangs-Mail sofort verschickt');
+  assert.ok(mail, 'Zugangs-Mail verschickt');
+  assert.equal((await k.rita.aufruf('mailStatus', z.mail_id)).status, 403, 'nur für Admins');
   assert.ok(mail.html.includes(z.link.replace(/&/g, '&amp;')), 'der Knopf führt zum Anmeldelink');
   const token = z.link.split('#/link/')[1];
   const lina = client();
@@ -391,8 +406,8 @@ test('Passwort vergessen: neutrale Antwort, Link per E-Mail (einmal, 1 Stunde), 
   const vor = php.smtp.mails.length;
   assert.equal(await client().ok('passwortVergessen', 'niemand@example.org'), true, 'gleiche Antwort für unbekannte Adressen');
   assert.equal(await client().ok('passwortVergessen', 'VERA@example.org '), true);
-  const mail = php.smtp.mails.slice(vor).find((m) => m.an === 'vera@example.org' && m.betreff === 'Neues Passwort für die Anerkennungsprämien');
-  assert.ok(mail, 'sofort verschickt');
+  const mail = await mailAbwarten(php.smtp, (m) => m.an === 'vera@example.org' && m.betreff === 'Neues Passwort für die Anerkennungsprämien');
+  assert.ok(mail, 'gleich nach der Antwort verschickt');
   assert.ok(!php.smtp.mails.slice(vor).some((m) => m.an === 'niemand@example.org'));
   const token = mail.html.match(/#\/passwort\/([\w-]+)/)[1];
   assert.equal((await client().aufruf('linkAnmelden', token)).status, 404, 'ist kein Anmeldelink');
@@ -409,6 +424,10 @@ test('Passwort vergessen: neutrale Antwort, Link per E-Mail (einmal, 1 Stunde), 
   // ein neuer Link macht den alten ungültig; abgelaufen gilt er auch nicht
   await client().ok('passwortVergessen', 'vera@example.org');
   await client().ok('passwortVergessen', 'vera@example.org');
+  // die Mails gehen nach der Antwort hinaus – auf beide warten
+  for (let i = 0; i < 60 && php.smtp.mails.filter((m) => m.an === 'vera@example.org' && m.betreff.startsWith('Neues Passwort')).length < 3; i++) {
+    await new Promise((ok) => setTimeout(ok, 50));
+  }
   const links = php.smtp.mails.filter((m) => m.an === 'vera@example.org' && m.betreff.startsWith('Neues Passwort')).map((m) => m.html.match(/#\/passwort\/([\w-]+)/)[1]);
   assert.equal(links.length, 3);
   assert.equal((await client().aufruf('passwortNeuSetzen', links[1], 'neues-passwort-2')).status, 410);
@@ -486,7 +505,9 @@ test('Zugangs-Mail: Mailserver nicht erreichbar -> der Admin sieht den Fehler, s
   await k.admin.ok('mailEinstellungenSpeichern', { ...e, port: 1 });
   const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Otto', nachname: 'Offline', email: 'otto@example.org', rollen: ['autor'] });
   assert.equal(z.mail, true);
-  assert.match(z.mail_fehler, /Keine Verbindung zum Mailserver/);
+  const st = await mailStatusAbwarten(k.admin, z.mail_id);
+  assert.equal(st.status, 'fehler');
+  assert.match(st.fehler, /Keine Verbindung zum Mailserver/);
   assert.ok((await k.admin.ok('protokoll', { stufe: 'warnung', suche: 'otto@example.org' })).eintraege.length, 'steht im Protokoll');
   await k.admin.ok('mailEinstellungenSpeichern', { ...e, port: php.smtp.port });
   php.sql('update mails set gesperrt_bis = 0');
@@ -1189,6 +1210,27 @@ test('Kommandozentrale: Zustand, Messwerte je Stunde, Leistungstest, Wartungsakt
   assert.ok(t.ergebnisse.every((e) => ['ok', 'warnung', 'fehler'].includes(e.stufe)));
   assert.equal(t.ergebnisse.find((e) => e.titel === 'Mailserver').stufe === 'fehler', false, 'Test-Mailserver erreichbar');
   assert.equal(php.sql("select count(*) n from versuche where schluessel like 'leistungstest-%'").zeilen[0].n, 0, 'räumt hinter sich auf');
+  for (const n of ['Datenbank-Verbindung', 'Antwort vor Hintergrundarbeit', 'OPcache']) assert.ok(namen.includes(n), n);
+  assert.match(t.ergebnisse.find((e) => e.titel === 'Mailserver').text, /Verbindung \d/, 'Schritte des Mailservers mit Zeiten');
+
+  // jede Anfrage: Phasen im Server-Timing-Header und im Anfrage-Protokoll
+  const res = await fetch(`${basis}/api/ping`, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Honorare': '1' }, body: '{}' });
+  assert.equal(res.status, 401);
+  const st = res.headers.get('server-timing');
+  assert.match(st, /start;dur=[\d.]+/);
+  assert.match(st, /gesamt;dur=[\d.]+/);
+  assert.match(st, /sql;dur=[\d.]+;desc="\d+ SQL-Abfragen"/);
+  for (let i = 0; i < 3; i++) await k.admin.ok('ping');
+  assert.equal((await k.rita.aufruf('anfrageAnalyse')).status, 403);
+  const a = await k.admin.ok('anfrageAnalyse', 24);
+  assert.ok(a.anzahl > 10);
+  assert.deepEqual(a.phasen.map((x) => x.schluessel), ['ms_start', 'ms_db', 'ms_sitzung', 'ms_funktion', 'sql_ms', 'ms_gesamt', 'ms_hintergrund']);
+  assert.ok(a.phasen.every((x) => x.max >= x.p95 && x.p95 >= x.p50 && x.p50 >= 0));
+  const ping = a.je_funktion.find((f) => f.funktion === 'ping');
+  assert.ok(ping && ping.anzahl >= 3 && ping.sql_anzahl >= 1, 'ping: Sitzung prüfen braucht Abfragen');
+  assert.ok(a.hintergrund.some((h) => h.aufgabe === 'mails'), 'Mailversand im Hintergrund gemessen');
+  assert.ok(a.langsamste.length > 0 && a.langsamste[0].ms_gesamt >= a.langsamste.at(-1).ms_gesamt);
+  assert.ok(a.befunde.length > 0 && a.befunde.every((b) => b.titel && b.text));
 
   assert.match(await k.admin.ok('serverAktion', 'artikel_neu'), /Artikellisten/);
   assert.match(await k.admin.ok('serverAktion', 'aufraeumen'), /entfernt/);

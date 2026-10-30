@@ -2,6 +2,51 @@
 // Kleine Helfer für den ganzen Server (gleiches Verhalten wie die Gegenstücke in JavaScript).
 declare(strict_types=1);
 
+/**
+ * Zeitmessung einer Anfrage für die Kommandozentrale: Phasen (Start, Datenbank, Sitzung, Funktion),
+ * Anzahl und Dauer der SQL-Abfragen und was nach der Antwort im Hintergrund lief.
+ */
+final class Messung
+{
+    public static float $beginn = 0;   // hrtime der Anfrage (so früh wie möglich gesetzt)
+    private static float $marke = 0;
+    public static array $phasen = [];  // Name => ms
+    public static int $sql = 0;
+    public static float $sqlMs = 0;
+    public static array $hintergrund = []; // Aufgabe => ms
+    public static ?float $antwortMs = null;
+
+    public static function start(?float $beginn = null): void
+    {
+        self::$beginn = self::$marke = $beginn ?? hrtime(true);
+    }
+
+    /** Zeit seit der letzten Marke dieser Phase zuschreiben */
+    public static function phase(string $name): void
+    {
+        if (!self::$beginn) return;
+        $jetzt = hrtime(true);
+        self::$phasen[$name] = (self::$phasen[$name] ?? 0) + ($jetzt - self::$marke) / 1e6;
+        self::$marke = $jetzt;
+    }
+
+    public static function seitBeginn(): float
+    {
+        return self::$beginn ? (hrtime(true) - self::$beginn) / 1e6 : 0;
+    }
+
+    /** Hintergrund-Aufgabe ausführen und ihre Dauer merken */
+    public static function hintergrund(string $name, callable $fn): mixed
+    {
+        $t = hrtime(true);
+        try {
+            return $fn();
+        } finally {
+            self::$hintergrund[$name] = (self::$hintergrund[$name] ?? 0) + (hrtime(true) - $t) / 1e6;
+        }
+    }
+}
+
 final class Fehler extends Exception
 {
     public function __construct(string $meldung, public readonly int $status = 400)

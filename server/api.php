@@ -3,7 +3,14 @@
 // Auf World4You leitet die .htaccess im Hauptordner api/<Funktion> hierher weiter.
 declare(strict_types=1);
 
+$beginn = hrtime(true); // ab hier zählt die Anfrage (auch das Laden des Programms)
 require_once __DIR__ . '/lib/app.php';
+Messung::start($beginn);
+// keine Kompression für die Schnittstelle: sonst hält der Server die Antwort zurück, bis auch die
+// Hintergrundarbeit (Mails, Sicherung …) fertig ist – die Antworten sind ohnehin klein
+@ini_set('zlib.output_compression', '0');
+if (function_exists('apache_setenv')) @apache_setenv('no-gzip', '1');
+Messung::phase('start');
 
 const COOKIE = 'hn_sitzung';
 const MAX_BODY = 100 * 1024;
@@ -45,13 +52,21 @@ function antworten(int $status, array $daten): void
     header('Content-Type: application/json; charset=utf-8');
     header('Content-Length: ' . strlen($text));
     header('Connection: close');
+    // Zeiten für den Browser (Entwicklertools → Netzwerk → Timing) und die Messung in der Kommandozentrale
+    $st = [];
+    foreach (['start' => 'Start', 'datenbank' => 'Datenbank', 'sitzung' => 'Anmeldung', 'funktion' => 'Funktion'] as $k => $titel) {
+        if (isset(Messung::$phasen[$k])) $st[] = sprintf('%s;dur=%.1f;desc="%s"', $k, Messung::$phasen[$k], $titel);
+    }
+    $st[] = sprintf('sql;dur=%.1f;desc="%d SQL-Abfragen"', Messung::$sqlMs, Messung::$sql);
+    $st[] = sprintf('gesamt;dur=%.1f', Messung::seitBeginn());
+    header('Server-Timing: ' . implode(', ', $st));
     echo $text;
     if (function_exists('fastcgi_finish_request')) {
         fastcgi_finish_request();
     } else {
         while (ob_get_level() > 0) ob_end_flush();
         flush();
-    }
+    }    Messung::$antwortMs = Messung::seitBeginn();
 }
 
 /**
@@ -86,8 +101,10 @@ function api(): array
     if (!is_array($body)) return [400, ['fehler' => 'Ungültige Anfrage.']];
     $args = is_array($body['args'] ?? null) ? array_values($body['args']) : [];
 
+    Messung::phase('start'); // Anfrage lesen zählt noch zum Start
     try {
         $db = datenbank();
+        Messung::phase('datenbank');
     } catch (Throwable $e) {
         error_log('Anerkennungsprämien: Datenbank: ' . $e->getMessage());
         // noch nicht eingerichtet (z. B. World4You: kein SQLite und noch keine MySQL-Zugangsdaten)
@@ -162,6 +179,7 @@ function api(): array
         return [429, ['fehler' => 'Zu viele Test-E-Mails. Bitte in 15 Minuten erneut versuchen.']];
     }
 
+    Messung::phase('sitzung');
     $ctx = new Ctx($db, $nutzer, $nutzerId ? $token : null);
     $ctx->ansichtVon = $ansichtVon;
     // Beim Aufruf genau so viele Argumente übergeben, wie die Funktion annimmt
@@ -173,6 +191,7 @@ function api(): array
         throw $e;
     }
     // angemeldet: die Fehlversuche dieser Adresse sind erledigt
+    Messung::phase('funktion');
     if ($name === 'anmelden' && $ctx->neueSitzung) q($db, 'delete from versuche where schluessel = ?', ['login:' . strtolower(tr($args[0] ?? ''))]);
     if ($ctx->neueSitzung) cookie_setzen($ctx->neueSitzung);
     if ($ctx->sitzungLoeschen) cookie_setzen(null);
@@ -196,13 +215,16 @@ try {
     }
 }
 antworten($status, $daten);
-try {
-    // Messwert für die Kommandozentrale (Anfragen, Antwortzeit, Fehler je Stunde)
-    messwert_speichern(datenbank(), $status, (hrtime(true) - $beginn) / 1e6);
-} catch (Throwable) {
-}
+$sqlVorHintergrund = [Messung::$sql, Messung::$sqlMs];
 try {
     hintergrundarbeit(datenbank());
 } catch (Throwable $e) {
     error_log('Prämienabrechnungen: ' . $e->getMessage());
+}
+try {
+    // Messwerte für die Kommandozentrale: je Stunde (Anfragen, Antwortzeit, Fehler) und jede Anfrage mit ihren Phasen
+    $db = datenbank();
+    messwert_speichern($db, $status, Messung::$antwortMs ?? Messung::seitBeginn());
+    anfrage_log_speichern($db, (string) ($_GET['f'] ?? ''), $status, $sqlVorHintergrund);
+} catch (Throwable) {
 }

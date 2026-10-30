@@ -93,24 +93,24 @@ function hintergrundarbeit(PDO $db): void
 {
     // zuerst Warn-Mail und Erinnerung zum Monatsende einreihen, damit sie gleich mit verschickt werden
     try {
-        warnmail_pruefen($db);
-        monatserinnerung($db);
+        Messung::hintergrund('warnmail', fn () => warnmail_pruefen($db));
+        Messung::hintergrund('erinnerung', fn () => monatserinnerung($db));
     } catch (Throwable $e) {
         error_log('Prämienabrechnungen: Warn-Mail/Erinnerung: ' . $e->getMessage());
     }
     try {
-        mails_verschicken($db);
+        Messung::hintergrund('mails', fn () => mails_verschicken($db));
     } catch (Throwable $e) {
         error_log('Prämienabrechnungen: Mailversand: ' . $e->getMessage());
     }
     try {
-        pushes_verschicken($db);
+        Messung::hintergrund('push', fn () => pushes_verschicken($db));
     } catch (Throwable $e) {
         error_log('Prämienabrechnungen: Push-Mitteilungen: ' . $e->getMessage());
     }
     try {
-        if (random_int(1, 50) === 1) aufraeumen($db);
-        taegliche_sicherung($db);
+        if (random_int(1, 50) === 1) Messung::hintergrund('aufraeumen', fn () => aufraeumen($db));
+        Messung::hintergrund('sicherung', fn () => taegliche_sicherung($db));
     } catch (Throwable $e) {
         error_log('Prämienabrechnungen: Sicherung: ' . $e->getMessage());
         protokoll($db, 'fehler', 'sicherung', 'Tägliche Sicherung fehlgeschlagen: ' . $e->getMessage());
