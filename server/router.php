@@ -55,7 +55,9 @@ if ($versteckt || !$ziel || !str_starts_with($ziel, $wurzel . DIRECTORY_SEPARATO
     return true;
 }
 header('Content-Type: ' . ($typen[strtolower(pathinfo($ziel, PATHINFO_EXTENSION))] ?? 'application/octet-stream'));
-header('Cache-Control: no-cache');
+// mit Versionsnummer (?v=…, beim Ausliefern angehängt) ändert sich die Datei nie – ein Jahr behalten;
+// ohne (z. B. index.html) jedes Mal nachfragen, damit Updates sofort ankommen
+header('Cache-Control: ' . (preg_match('/(^|&)v=/', (string) ($_SERVER['QUERY_STRING'] ?? '')) ? 'public, max-age=31536000, immutable' : 'no-cache'));
 header('Content-Length: ' . filesize($ziel));
 readfile($ziel);
 return true;

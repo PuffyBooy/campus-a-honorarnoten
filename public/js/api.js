@@ -1,11 +1,13 @@
 // Datenhaltung im Server-Modus: dieselben Funktionen wie store.js (Demo),
 // aber jede Anfrage geht an den eigenen Server. Rechte prüft der Server.
 import { kontoFertig } from './lib/konto.js';
+import { anfrageGemessen, serverTiming } from './lib/messung.js';
 
 class Fehler extends Error {}
 
 async function aufruf(name, ...args) {
   let res;
+  const t0 = performance.now();
   try {
     res = await fetch(`api/${name}`, {
       method: 'POST',
@@ -18,9 +20,11 @@ async function aufruf(name, ...args) {
   }
   let body = {};
   try { body = await res.json(); } catch { /* keine JSON-Antwort */ }
+  // für die Kommandozentrale: wie lange im Browser, wie lange davon am Server
+  anfrageGemessen(name, performance.now() - t0, serverTiming(res.headers.get('Server-Timing')));
   if (!res.ok) {
     // Sitzung abgelaufen -> App zeigt wieder die Anmeldung
-    if (body.abgemeldet) window.dispatchEvent(new CustomEvent('honorare:abgemeldet'));
+    if (body.abgemeldet) { vorratLeeren(); window.dispatchEvent(new CustomEvent('honorare:abgemeldet')); }
     // Wartungsmodus: App zeigt den Hinweis statt der Seite
     if (body.wartung && name !== 'aktuellerNutzer') window.dispatchEvent(new CustomEvent('honorare:wartung'));
     throw Object.assign(new Fehler(body.fehler || `Fehler ${res.status}. Bitte später erneut versuchen.`), { wartung: body.wartung });
@@ -28,7 +32,60 @@ async function aufruf(name, ...args) {
   return body.daten;
 }
 
-const f = (name) => (...args) => aufruf(name, ...args);
+// ------------------------------------------------------------------ Daten-Vorrat
+// Lesende Abfragen kommen in einen Vorrat: Beim nächsten Mal ist die Seite sofort da, im Hintergrund wird
+// nachgefragt; hat sich etwas geändert, zeichnet die App die Seite neu (Ereignis „honorare:daten-neu“).
+// Jede Änderung (speichern, annehmen …) leert den Vorrat – Eigenes ist also nie veraltet.
+const LESEN = new Set(['einstellungen', 'ablaufZeiten', 'meineLeistungen', 'meineArtikel', 'naechsteNummer', 'notenDiesenMonat',
+  'meineNoten', 'note', 'nachrichten', 'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'kommentare', 'verlaufVon',
+  'offeneZahlungen', 'bezahlteNoten', 'bezahlteNotenSeit', 'zahlungskonto', 'nutzerListe', 'anfragen', 'offeneAnfragenAnzahl',
+  'registrierungslinks', 'dashboard', 'protokoll', 'sicherungen', 'mailEinstellungen', 'wartung', 'statistik', 'loeschprotokoll']);
+// immer frisch, ändern aber nichts (Vorrat bleibt)
+const NEUTRAL = new Set(['aktuellerNutzer', 'navZaehler', 'rechtliches', 'nachweisLaden', 'zahlungsavis', 'serverStatus', 'anfrageAnalyse',
+  'ping', 'mailStatus', 'pushSchluessel', 'leistungstest', 'funktionstest', 'exportieren', 'sicherungHerunterladen', 'einladungPruefen',
+  'pdfMailen', 'testMail']);
+const VORRAT_MAX_MS = 10 * 60000; // älter: nicht mehr zeigen, neu holen
+const NACHFRAGEN_AB_MS = 3000;    // jünger: gilt als frisch, keine zweite Anfrage
+const vorrat = new Map();         // "name|args" -> { zeit, daten (JSON-Text) }
+let vorratStand = 0;              // zählt hoch, wenn der Vorrat geleert wird (späte Antworten verwerfen)
+
+export function vorratLeeren() {
+  vorrat.clear();
+  vorratStand++;
+}
+
+async function gelesen(name, args) {
+  const schluessel = `${name}|${JSON.stringify(args)}`;
+  const v = vorrat.get(schluessel);
+  const alter = v ? Date.now() - v.zeit : Infinity;
+  const holen = async () => {
+    const stand = vorratStand;
+    const daten = await aufruf(name, ...args);
+    const text = JSON.stringify(daten);
+    if (stand !== vorratStand) return daten; // inzwischen wurde etwas geändert – diese Antwort nicht merken
+    const vorher = vorrat.get(schluessel);
+    vorrat.set(schluessel, { zeit: Date.now(), daten: text });
+    if (vorher && vorher.daten !== text) window.dispatchEvent(new CustomEvent('honorare:daten-neu', { detail: { name } }));
+    return daten;
+  };
+  if (alter < VORRAT_MAX_MS) {
+    if (alter > NACHFRAGEN_AB_MS) holen().catch(() => {}); // im Hintergrund nachfragen
+    return JSON.parse(v.daten); // eigene Kopie – die Seite darf sie verändern
+  }
+  return holen();
+}
+
+async function anfrage(name, ...args) {
+  if (LESEN.has(name)) return gelesen(name, args);
+  if (!NEUTRAL.has(name)) vorratLeeren(); // ändert etwas: vorher und nachher nichts Altes zeigen
+  try {
+    return await aufruf(name, ...args);
+  } finally {
+    if (!NEUTRAL.has(name)) vorratLeeren();
+  }
+}
+
+const f = (name) => (...args) => anfrage(name, ...args);
 
 export const initialisieren = async () => {};
 
@@ -76,6 +133,9 @@ export const nachweisLaden = f('nachweisLaden');
 export const meineArtikel = f('meineArtikel');
 export const naechsteNummer = f('naechsteNummer');
 export const nummerFestlegen = f('nummerFestlegen');
+export const mailStatus = f('mailStatus');
+export const ping = f('ping');
+export const anfrageAnalyse = f('anfrageAnalyse');
 export const pushSchluessel = f('pushSchluessel');
 export const pushAbonnieren = f('pushAbonnieren');
 export const pushAbmelden = f('pushAbmelden');

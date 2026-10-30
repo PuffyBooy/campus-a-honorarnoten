@@ -914,6 +914,21 @@ export function naechsteNummer(n = ich(), jahr = Number(heuteIso().slice(0, 4)))
     nummer: honorarnoteNummer({ vorname: n.vorname, nachname: n.nachname, jahr, laufendeNummer: lfd }) };
 }
 
+// Messung: in der Demo gibt es keinen Server – die Browser-Messung (Seitenwechsel) läuft trotzdem
+export function ping() { ich(); return { zeit: new Date().toISOString() }; }
+export function mailStatus() { brauche('admin'); return { status: 'unbekannt', fehler: '' }; }
+export function anfrageAnalyse(stunden = 24) {
+  brauche('admin');
+  const leer = { avg: 0, p50: 0, p95: 0, max: 0 };
+  const phasen = [['ms_start', 'Programmstart'], ['ms_db', 'Datenbank verbinden'], ['ms_sitzung', 'Anmeldung prüfen'], ['ms_funktion', 'Funktion'],
+    ['sql_ms', 'davon SQL'], ['ms_gesamt', 'Antwort gesamt'], ['ms_hintergrund', 'Danach im Hintergrund']]
+    .map(([schluessel, titel]) => ({ schluessel, titel, text: '', ...leer }));
+  return {
+    stunden, anzahl: 0, phasen, je_funktion: [], hintergrund: [], langsamste: [],
+    befunde: [{ stufe: 'info', titel: 'Demo: kein Server', text: 'Die Engpass-Analyse misst jede Anfrage am echten Server. In der Demo läuft alles im Browser – unten die Browser-Messung zeigt trotzdem, wie lange Seitenwechsel dauern.' }],
+  };
+}
+
 // Push-Mitteilungen gibt es nur in der echten App (sie brauchen einen Server)
 const NUR_SERVER = 'Push-Mitteilungen gibt es nur in der echten App, nicht in der Demo.';
 export function pushSchluessel() { ich(); throw new Fehler(NUR_SERVER); }

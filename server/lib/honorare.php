@@ -258,7 +258,7 @@ final class Honorare
     public const FUNKTIONEN = [
         'aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'erstesPasswortSetzen', 'passwortAendern',
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'nachweisHochladen', 'nachweisLoeschen', 'nachweisLaden', 'meineArtikel',
-        'naechsteNummer', 'nummerFestlegen', 'pushSchluessel', 'pushAbonnieren', 'pushAbmelden', 'pushAbholen', 'pushTest', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
+        'naechsteNummer', 'nummerFestlegen', 'mailStatus', 'ping', 'anfrageAnalyse', 'pushSchluessel', 'pushAbonnieren', 'pushAbmelden', 'pushAbholen', 'pushTest', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
         'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'ablaufZeiten', 'neuigkeitenGesehen', 'serverStatus', 'leistungstest', 'serverAktion', 'funktionstest', 'sicherungZurueckspielen', 'ansichtStarten', 'ansichtBeenden',
         'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
@@ -1113,6 +1113,30 @@ final class Honorare
         return true;
     }
 
+    /** Stand einer gerade eingereihten Mail (Zugang, Einladung): unterwegs, gesendet oder fehler (mit Meldung) */
+    public function mailStatus(mixed $id = null): array
+    {
+        brauche($this->ctx, 'admin');
+        $m = zeile($this->db(), 'select gesendet_am, versuche, fehler from mails where id = ?', [s($id)]);
+        if (!$m) return ['status' => 'unbekannt', 'fehler' => ''];
+        if ($m['gesendet_am']) return ['status' => 'gesendet', 'fehler' => ''];
+        return (int) $m['versuche'] > 0 ? ['status' => 'fehler', 'fehler' => (string) $m['fehler']] : ['status' => 'unterwegs', 'fehler' => ''];
+    }
+
+    /** Für die Messung im Browser: eine Anfrage mit allem drum und dran (Datenbank, Anmeldung), aber ohne Arbeit */
+    public function ping(): array
+    {
+        ich($this->ctx);
+        return ['zeit' => jetzt()];
+    }
+
+    /** Engpass-Suche: alle Anfragen der letzten Stunden nach Phasen, Funktionen und Hintergrundarbeit */
+    public function anfrageAnalyse(mixed $stunden = 24): array
+    {
+        brauche($this->ctx, 'admin');
+        return anfrage_analyse($this->db(), max(1, min(24 * 7, (int) $stunden)));
+    }
+
     // ---------------------------------------------------------------- Push-Mitteilungen (Handy-App)
     /** Öffentlicher VAPID-Schlüssel – damit meldet der Browser das Gerät beim Push-Dienst an */
     public function pushSchluessel(): string
@@ -1281,7 +1305,7 @@ final class Honorare
         pruefe($r, 'Bitte mindestens eine Rolle wählen.');
         $passwort = startpasswort();
         $hash = passwort_hash($passwort);
-        return zugang_senden($db, transaktion($db, function () use ($db, $admin, $anfrageId, $r, $passwort, $hash) {
+        return transaktion($db, function () use ($db, $admin, $anfrageId, $r, $passwort, $hash) {
             $a = zeile($db, 'select * from anfragen where id = ?', [s($anfrageId)]);
             pruefe($a, 'Diese Anfrage gibt es nicht (mehr).', 404);
             pruefe($a['status'] === 'offen', 'Diese Anfrage wurde bereits bearbeitet.');
@@ -1290,7 +1314,7 @@ final class Honorare
             q($db, "update anfragen set status = 'freigeschaltet', bearbeitet_am = ?, bearbeitet_von = ? where id = ?", [jetzt(), anzeigename($admin), $a['id']]);
             $this->log('info', 'konten', "Zugangsanfrage freigeschaltet: {$a['vorname']} {$a['nachname']} ({$a['email']})");
             return zugang_melden($db, ['id' => $id, 'email' => $a['email'], 'vorname' => $a['vorname'], 'passwort' => $passwort]);
-        }));
+        });
     }
 
     public function anfrageAblehnen(mixed $anfrageId = null): bool
@@ -1315,13 +1339,13 @@ final class Honorare
         pruefe($r, 'Bitte mindestens eine Rolle wählen.');
         $passwort = startpasswort();
         $hash = passwort_hash($passwort);
-        return zugang_senden($db, transaktion($db, function () use ($db, $d, $email, $r, $passwort, $hash) {
+        return transaktion($db, function () use ($db, $d, $email, $r, $passwort, $hash) {
             pruefe(!wert($db, 'select 1 from nutzer where email = ?', [$email]), 'Für diese E-Mail-Adresse gibt es schon ein Konto.');
             $id = konto_einfuegen($db, s($d['vorname']), s($d['nachname']), $email, $r, $hash);
             q($db, "update anfragen set status = 'freigeschaltet', bearbeitet_am = ? where email = ? and status = 'offen'", [jetzt(), $email]);
             $this->log('info', 'konten', 'Konto angelegt: ' . tr($d['vorname']) . ' ' . tr($d['nachname']) . " ($email), Rollen: " . implode(', ', $r));
             return zugang_melden($db, ['id' => $id, 'email' => $email, 'vorname' => tr($d['vorname']), 'passwort' => $passwort]);
-        }));
+        });
     }
 
     public function nutzerListe(): array
@@ -1371,7 +1395,7 @@ final class Honorare
         q($db, 'update nutzer set passwort = ?, muss_passwort_aendern = 1 where id = ?', [passwort_hash($passwort), $n['id']]);
         alle_sitzungen_beenden($db, $n['id'], $n['id'] === $this->ctx->nutzer['id'] ? $this->ctx->token : null);
         $this->log('info', 'konten', 'Passwort zurückgesetzt: ' . anzeigename($n));
-        return zugang_senden($db, zugang_melden($db, ['id' => $n['id'], 'email' => $n['email'], 'vorname' => $n['vorname'], 'passwort' => $passwort], false));
+        return zugang_melden($db, ['id' => $n['id'], 'email' => $n['email'], 'vorname' => $n['vorname'], 'passwort' => $passwort], false);
     }
 
     /** E-Mail-Adresse eines Kontos ändern (z. B. Tippfehler). Alte und neue Adresse bekommen eine Info-Mail. */
@@ -1726,9 +1750,9 @@ final class Honorare
         // ältere Links „Passwort vergessen“ gelten nicht mehr
         q($db, "update links set widerrufen_am = ? where nutzer_id = ? and art = 'anmelden' and notiz = ? and widerrufen_am is null", [jetzt(), $n['id'], PASSWORT_LINK]);
         $link = app_link($db, 'passwort/' . link_erstellen($db, 'anmelden', ['nutzer_id' => $n['id'], 'max' => 1, 'sekunden' => 3600, 'notiz' => PASSWORT_LINK]));
+        // die Mail geht gleich nach der Antwort hinaus – nicht auf den Mailserver warten (Fehler stehen dann im Protokoll)
         $id = mail_einreihen($db, $n['email'], mail_passwort_vergessen($db, $n['vorname'], $link));
-        $fehler = $id ? mail_jetzt_senden($db, $id) : 'E-Mail-Versand ist ausgeschaltet';
-        protokoll($db, $fehler ? 'warnung' : 'info', 'anmeldung', 'Passwort vergessen: Link angefordert' . ($fehler ? " (E-Mail nicht verschickt: $fehler)" : ''), $n);
+        protokoll($db, $id ? 'info' : 'warnung', 'anmeldung', 'Passwort vergessen: Link angefordert' . ($id ? '' : ' (E-Mail-Versand ist ausgeschaltet)'), $n);
         return true;
     }
 
@@ -1811,9 +1835,10 @@ final class Honorare
         ]));
         $mail = $an !== '' && mail_einstellungen($db)['aktiv'];
         // gleich verschicken, damit der Admin sieht, ob es geklappt hat
-        $mailFehler = $mail ? (mail_jetzt_senden($db, (string) mail_einreihen($db, $an, mail_einladung($db, $link, $tage, $admin))) ?? '') : '';
+        // geht gleich nach der Antwort hinaus; das Ergebnis fragt die Seite mit mailStatus ab
+        $mailId = $mail ? mail_einreihen($db, $an, mail_einladung($db, $link, $tage, $admin)) : null;
         $this->log('info', 'konten', "Registrierungslink erstellt: $tage Tage, " . ($max === null ? 'beliebig oft' : "{$max}×") . ($an !== '' ? ", an $an" : ''));
-        return ['link' => $link, 'mail' => $mail, 'mail_fehler' => $mailFehler, 'tage' => $tage, 'max' => $max];
+        return ['link' => $link, 'mail' => $mail, 'mail_id' => $mailId, 'email' => $an, 'tage' => $tage, 'max' => $max];
     }
 
     public function registrierungslinks(): array
@@ -2049,20 +2074,6 @@ function zugang_melden(PDO $db, array $z, bool $neu = true): array
     $e = mail_einstellungen($db);
     $z['mail'] = $e['aktiv'] && $e['zugangsdaten'];
     if ($z['mail']) $z['mail_id'] = mail_einreihen($db, $z['email'], mail_zugang($db, $z, $neu));
-    return $z;
-}
-
-/**
- * Zugangs-Mail sofort verschicken (nach dem Speichern, außerhalb der Transaktion), damit der Admin das Ergebnis
- * sieht: mail_fehler leer = verschickt, sonst die Meldung des Mailservers (weitere Versuche folgen automatisch).
- */
-function zugang_senden(PDO $db, array $z): array
-{
-    $id = $z['mail_id'] ?? null;
-    unset($z['mail_id']);
-    if (!$id) return $z;
-    $z['mail_fehler'] = mail_jetzt_senden($db, $id) ?? '';
-    if ($z['mail_fehler'] === '') protokoll($db, 'info', 'mail', "Zugangs-Mail an {$z['email']} verschickt");
     return $z;
 }
 

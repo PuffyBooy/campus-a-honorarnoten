@@ -147,17 +147,27 @@ final class Smtp
 {
     /** @var resource */
     private $verbindung;
+    /** Dauer der Schritte beim Verbinden in ms (für die Kommandozentrale) */
+    public array $zeiten = [];
 
     public function __construct(private array $e)
     {
+        $t = hrtime(true);
+        $schritt = function (string $name) use (&$t) {
+            $jetzt = hrtime(true);
+            $this->zeiten[$name] = round(($jetzt - $t) / 1e6, 1);
+            $t = $jetzt;
+        };
         $host = $e['host'];
         $ssl = $e['verschluesselung'] === 'ssl';
         $kontext = stream_context_create(['ssl' => ['peer_name' => $host, 'verify_peer' => true, 'verify_peer_name' => true]]);
         $v = @stream_socket_client(($ssl ? 'ssl://' : 'tcp://') . $host . ':' . $e['port'], $nr, $text, 15, STREAM_CLIENT_CONNECT, $kontext);
         if (!$v) throw new RuntimeException("Keine Verbindung zum Mailserver $host:{$e['port']} ($text).");
+        $schritt($ssl ? 'verbindung_tls' : 'verbindung');
         stream_set_timeout($v, 20);
         $this->verbindung = $v;
         $this->antwort(220);
+        $schritt('begruessung');
         $this->hallo();
         if ($e['verschluesselung'] === 'starttls') {
             $this->befehl('STARTTLS', 220);
@@ -165,6 +175,9 @@ final class Smtp
                 throw new RuntimeException('Verschlüsselte Verbindung (STARTTLS) zum Mailserver nicht möglich.');
             }
             $this->hallo();
+            $schritt('tls');
+        } else {
+            $schritt('ehlo');
         }
         if ($e['benutzer'] !== '' || $e['passwort'] !== '') {
             $this->befehl('AUTH LOGIN', 334);
@@ -174,6 +187,7 @@ final class Smtp
             } catch (RuntimeException) {
                 throw new RuntimeException('Anmeldung beim Mailserver fehlgeschlagen – bitte E-Mail-Adresse und Passwort prüfen.');
             }
+            $schritt('anmeldung');
         }
     }
 

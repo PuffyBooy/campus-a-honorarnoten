@@ -135,3 +135,12 @@ test('Jahresübersicht als PDF: Summen je Status, zurückgegebene zählen nicht'
   const viele = Array.from({ length: 80 }, (_, i) => n(`B-${i}`, '2026-05', 'bezahlt', 15, '2026-06-01'));
   assert.ok((await PDFLib.PDFDocument.load(await jahresuebersichtPdf(viele, 2026, { vorname: 'B', nachname: 'C' }, PDFLib))).getPageCount() >= 2);
 });
+
+test('index.html lädt alle Start-Module vorab (sonst lädt der Browser Ebene für Ebene)', async () => {
+  const { indexMitPreload, preloadZeilen } = await import('../scripts/modulepreload.mjs');
+  const { readFileSync } = await import('node:fs');
+  const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+  assert.equal(html, indexMitPreload(html), 'Liste veraltet: node scripts/modulepreload.mjs ausführen');
+  const zeilen = preloadZeilen();
+  assert.ok(zeilen.length >= 40 && zeilen.some((z) => z.includes('js/api.js')) && zeilen.some((z) => z.includes('vendor/jszip.mjs')));
+});

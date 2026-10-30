@@ -2,9 +2,10 @@
 // technische Details und Wartungsaktionen. Lädt erst, wenn man den Bereich öffnet.
 import { esc, formatZeitpunkt } from '../lib/format.js';
 import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
+import { letzteWechsel, letzterStart, messungenLeeren, pingSerie } from '../lib/messung.js';
 
-const STUFE_ZEICHEN = { ok: '✓', warnung: '!', fehler: '✕' };
-const STUFE_TEXT = { ok: 'in Ordnung', warnung: 'Warnung', fehler: 'Problem' };
+const STUFE_ZEICHEN = { ok: '✓', warnung: '!', fehler: '✕', info: 'i' };
+const STUFE_TEXT = { ok: 'in Ordnung', warnung: 'Warnung', fehler: 'Problem', info: 'Hinweis' };
 const groesse = (b) => (b == null ? '–' : b < 1048576 ? `${Math.round(b / 1024)} KB`
   : b < 1073741824 ? `${(b / 1048576).toFixed(1).replace('.', ',')} MB` : `${(b / 1073741824).toFixed(1).replace('.', ',')} GB`);
 const zahl = (n) => Number(n ?? 0).toLocaleString('de-AT');
@@ -72,6 +73,120 @@ function tippBinden(el) {
 
 const liste = (paare) => `<dl class="angaben kompakt">${paare.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>`;
 
+// ------------------------------------------------------------------ Engpass-Analyse (jede Anfrage am Server)
+
+let analyseStunden = 24;
+let pingErgebnis = null;
+
+/** schmaler Balken (SVG, weil Inline-Styles per CSP gesperrt sind) */
+const balken = (wert, max) => `<svg class="balken" viewBox="0 0 100 6" preserveAspectRatio="none" aria-hidden="true">
+  <rect class="balken-grund" width="100" height="6" rx="3"/><rect class="balken-wert" width="${Math.max(wert ? 2 : 0, Math.min(100, (wert / Math.max(max, 1)) * 100)).toFixed(1)}" height="6" rx="3"/></svg>`;
+const zelle = (n, grenze = 1000) => `<td class="rechts mono${n >= grenze ? ' wert-langsam' : n >= grenze / 3 ? ' wert-mittel' : ''}">${esc(ms(n))}</td>`;
+const uhrzeit = (iso) => new Date(iso).toLocaleString('de-AT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+function analyseHtml(a) {
+  const gesamt = a.phasen.find((p) => p.schluessel === 'ms_gesamt')?.avg || 1;
+  const funktionen = a.je_funktion;
+  const funktionZeile = (f) => `<tr><td class="mono">${esc(f.funktion)}</td><td class="rechts">${esc(zahl(f.anzahl))}</td>
+    ${zelle(f.avg)}${zelle(f.p95)}${zelle(f.max)}<td class="rechts mono">${esc(String(f.sql_anzahl).replace('.', ','))} · ${esc(ms(f.sql_ms))}</td></tr>`;
+  return `
+    <ul class="pruefliste">${a.befunde.map((b) => `<li class="pruef-${esc(b.stufe)}">${ampel(b.stufe)}<span><strong>${esc(b.titel)}</strong><br>
+      <span class="klein">${esc(b.text)}</span></span></li>`).join('')}</ul>
+    ${a.anzahl ? `
+    <h4>Wohin die Zeit geht – ${esc(zahl(a.anzahl))} Anfragen</h4>
+    <div class="tabelle-scroll"><table class="tabelle kompakt engpass">
+      <thead><tr><th>Phase</th><th class="rechts">Ø</th><th class="rechts">Median</th><th class="rechts">95 %</th><th class="rechts">Max</th>
+        <th>Anteil (Ø)</th><th>Was passiert da?</th></tr></thead>
+      <tbody>${a.phasen.map((p) => `<tr${p.schluessel === 'ms_gesamt' ? ' class="summe"' : ''}><td><strong>${esc(p.titel)}</strong></td>
+        ${zelle(p.avg, p.schluessel === 'ms_gesamt' || p.schluessel === 'ms_hintergrund' ? 1000 : 300)}${zelle(p.p50, 1000)}${zelle(p.p95, 1000)}${zelle(p.max, 2000)}
+        <td>${p.schluessel === 'ms_hintergrund' ? '' : balken(p.avg, gesamt)}</td><td class="klein">${esc(p.text)}</td></tr>`).join('')}</tbody>
+    </table></div>
+    <p class="klein">„95 %“: so lange dauern 95 von 100 Anfragen höchstens – zeigt, wie oft es langsam ist. „Max“: die eine langsamste.</p>
+
+    <h4>Je Funktion (die langsamsten zuerst)</h4>
+    <div class="tabelle-scroll"><table class="tabelle kompakt">
+      <thead><tr><th>Funktion</th><th class="rechts">Anzahl</th><th class="rechts">Ø</th><th class="rechts">95 %</th><th class="rechts">Max</th><th class="rechts">SQL Ø Anzahl · Zeit</th></tr></thead>
+      <tbody>${funktionen.slice(0, 12).map(funktionZeile).join('')}</tbody>
+    </table></div>
+    ${funktionen.length > 12 ? `<details class="aufklapp"><summary>Alle ${funktionen.length} Funktionen</summary>
+      <div class="tabelle-scroll"><table class="tabelle kompakt"><tbody>${funktionen.slice(12).map(funktionZeile).join('')}</tbody></table></div></details>` : ''}
+
+    <h4>Nach der Antwort im Hintergrund</h4>
+    ${a.hintergrund.length ? `<div class="tabelle-scroll"><table class="tabelle kompakt">
+      <thead><tr><th>Aufgabe</th><th class="rechts">Anzahl</th><th class="rechts">Ø</th><th class="rechts">95 %</th><th class="rechts">Max</th></tr></thead>
+      <tbody>${a.hintergrund.map((h) => `<tr><td>${esc(h.aufgabe)}</td><td class="rechts">${esc(zahl(h.anzahl))}</td>${zelle(h.avg)}${zelle(h.p95)}${zelle(h.max, 2000)}</tr>`).join('')}</tbody>
+    </table></div>` : '<p class="klein">Nichts Nennenswertes (unter 5 ms).</p>'}
+
+    <h4>Die langsamsten Anfragen</h4>
+    <div class="tabelle-scroll"><table class="tabelle kompakt">
+      <thead><tr><th>Zeit</th><th>Funktion</th><th class="rechts">Gesamt</th><th class="rechts">Start</th><th class="rechts">Datenbank</th>
+        <th class="rechts">Anmeldung</th><th class="rechts">Funktion</th><th class="rechts">SQL</th><th>Danach</th></tr></thead>
+      <tbody>${a.langsamste.map((z) => `<tr><td class="klein">${esc(uhrzeit(z.zeit))}</td><td class="mono">${esc(z.funktion)}${z.status >= 400 ? ` <span class="klein">(${esc(String(z.status))})</span>` : ''}</td>
+        ${zelle(z.ms_gesamt)}${zelle(z.ms_start, 300)}${zelle(z.ms_db, 300)}${zelle(z.ms_sitzung, 300)}${zelle(z.ms_funktion)}
+        <td class="rechts mono">${esc(String(z.sql_anzahl))} · ${esc(ms(z.sql_ms))}</td><td class="klein">${esc(z.hintergrund || '–')}</td></tr>`).join('')}</tbody>
+    </table></div>` : ''}`;
+}
+
+// ------------------------------------------------------------------ Browser-Messung (dieser Browser, dieses Netz)
+
+const SEITEN = { leistungen: 'Mein Monat', noten: 'Meine Abrechnungen', redaktion: 'Redaktion', zahlung: 'Buchhaltung', admin: 'Admin',
+  profil: 'Profil', neu: 'Was ist neu?', start: 'Start' };
+const seiteName = (p) => {
+  const [a, b] = String(p).split('/');
+  return `${SEITEN[a] ?? a}${b ? ` · ${/^[\w-]{20,}$/.test(b) ? 'Abrechnung' : b}` : ''}`;
+};
+
+function browserHtml() {
+  const st = letzterStart();
+  const w = letzteWechsel();
+  const p = pingErgebnis;
+  const bewertung = !p ? '' : p.warten_median != null && p.warten_median > 150
+    ? `<p class="hinweisbox"><strong>Der Browser wartet nach dem Server noch Ø ${esc(ms(p.warten_median))}.</strong>
+        Das ist mehr als Netz und Server zusammen erklären – typisch, wenn die Antwort erst nach der Hintergrundarbeit
+        (Mails, Sicherung) losgeschickt wird. Bitte die Engpass-Analyse oben und „Antwort vor Hintergrundarbeit“ im Leistungstest ansehen.</p>`
+    : p.datei_median > 300
+      ? `<p class="hinweisbox"><strong>Das Netz ist langsam:</strong> schon eine kleine Datei braucht Ø ${esc(ms(p.datei_median))}.
+          Der Server ist nicht schuld – WLAN, Mobilnetz oder Entfernung zum Rechenzentrum.</p>`
+      : p.ausreisser
+        ? `<p class="hinweisbox">${esc(String(p.ausreisser))} von ${esc(String(p.anzahl))} Anfragen waren deutlich langsamer als die anderen (Ausreißer).
+            Kommt das öfter vor, zeigt die Engpass-Analyse oben bei „Die langsamsten Anfragen“, was da am Server lief.</p>`
+        : '<p class="erfolgbox">Netz und Server antworten gleichmäßig schnell.</p>';
+  return `
+    <div class="spalten">
+      <div>
+        <h4>Seite laden (letzter Start in diesem Tab)</h4>
+        ${st ? liste([
+          ['Seite (HTML)', esc(ms(st.html_ms))],
+          ['Programmdateien', esc(`${st.dateien} Dateien, ${zahl(st.kb)} KB übertragen${st.aus_cache ? `, ${st.aus_cache} aus dem Cache` : ''}`)],
+          ['… alle geladen nach', esc(ms(st.skripte_ms))],
+          ['Erste Seite fertig nach', `<strong>${esc(ms(st.bis_fertig_ms))}</strong>`],
+        ]) : '<p class="klein">Noch nicht gemessen – einmal die Seite neu laden.</p>'}
+      </div>
+      <div>
+        <h4>Ping-Serie</h4>
+        ${p ? liste([
+          ['Anfrage an die App', esc(`Ø ${ms(p.median)} (schnellste ${ms(p.min)}, langsamste ${ms(p.max)})`)],
+          ['davon am Server', esc(p.server_median == null ? '–' : `${ms(p.server_median)} (Datenbank, Anmeldung)`)],
+          ['kleine Datei ohne PHP', esc(`${ms(p.datei_median)} (reines Netz)`)],
+          ['Warten darüber hinaus', `<strong>${esc(p.warten_median == null ? '–' : ms(p.warten_median))}</strong>`],
+        ]) : '<p class="klein">15 Anfragen nacheinander: zeigt, wie viel das Netz kostet, wie viel der Server und ob der Browser zusätzlich wartet.</p>'}
+        ${bewertung}
+      </div>
+    </div>
+    <h4>Deine letzten Seitenwechsel</h4>
+    ${w.length ? `<div class="tabelle-scroll"><table class="tabelle kompakt">
+      <thead><tr><th>Zeit</th><th>Seite</th><th class="rechts">Dauer</th><th class="rechts">Anfragen</th><th class="rechts">Server</th>
+        <th class="rechts">Netz/Warten</th><th>Langsamste Anfrage</th></tr></thead>
+      <tbody>${w.map((x) => `<tr><td class="klein">${esc(uhrzeit(x.zeit))}</td>
+        <td>${esc(seiteName(x.pfad))}${x.art === 'schnell' ? ' <span class="klein">(schnell)</span>' : ''}</td>${zelle(x.ms)}
+        <td class="rechts">${esc(String(x.anfragen))}</td><td class="rechts mono">${esc(ms(x.server_ms))}</td>
+        <td class="rechts mono">${esc(ms(Math.max(0, x.ms - x.server_ms)))}</td>
+        <td class="klein">${x.langsamste ? `<span class="mono">${esc(x.langsamste.name)}</span> ${esc(ms(x.langsamste.ms))}${x.langsamste.server != null ? ` (Server ${esc(ms(x.langsamste.server))})` : ''}` : '–'}</td></tr>`).join('')}</tbody>
+    </table></div>
+    <p class="klein">„Netz/Warten“ = Dauer minus Server-Zeit: Netz, Zeichnen im Browser und Anfragen, die nacheinander statt gleichzeitig laufen.</p>`
+    : '<p class="klein">Noch keine – einfach ein paar Seiten öffnen, dann hier wieder vorbeischauen.</p>'}`;
+}
+
 function testHtml(t) {
   return `
     <table class="tabelle kompakt leistungstest">
@@ -117,6 +232,24 @@ export async function render(inhalt, { store, istDemo, neuLaden, istAktuell }) {
         <span class="klein">${a.last ? `1, 5 und 15 Minuten${a.kerne ? ` · ${a.kerne} Kerne` : ''}` : 'vom Hoster nicht freigegeben'}</span></div>
       <div class="kennzahl"><span class="kennzahl-titel">Anmeldungen (24 h)</span><strong>${esc(zahl(a.anmeldungen_24h))}</strong>
         <span class="klein">${esc(zahl(a.gesperrt_24h))} wegen zu vieler Versuche gebremst</span></div>
+    </section>
+
+    <section class="karte">
+      <div class="kopfzeile"><h3>Engpass-Analyse</h3>
+        <label class="check">Zeitraum <select id="k-zeitraum">${[[1, 'letzte Stunde'], [24, 'letzte 24 Stunden'], [168, 'letzte 7 Tage']]
+          .map(([h, t]) => `<option value="${h}"${h === analyseStunden ? ' selected' : ''}>${t}</option>`).join('')}</select></label></div>
+      <p class="klein">Jede Anfrage wird am Server in Phasen gemessen: Programmstart, Datenbank, Anmeldung, die eigentliche Funktion
+        und was danach im Hintergrund läuft. So sieht man, wo die Zeit hängt.</p>
+      <div id="k-analyse"><p class="laden">Wird ausgewertet …</p></div>
+    </section>
+
+    <section class="karte">
+      <div class="kopfzeile"><h3>Browser-Messung</h3>
+        <span class="aktionen eng"><button type="button" class="btn" id="k-ping">Ping-Serie starten</button>
+          <button type="button" class="btn btn-klein" id="k-messung-leeren">Liste leeren</button></span></div>
+      <p class="klein">Misst in diesem Browser: wie lange das Laden der Seite und jeder Seitenwechsel dauert und wie viel davon
+        Netz und wie viel Server ist. Bleibt nur in diesem Tab.</p>
+      <div id="k-browser">${browserHtml()}</div>
     </section>
 
     <section class="karte">
@@ -193,6 +326,37 @@ export async function render(inhalt, { store, istDemo, neuLaden, istAktuell }) {
   }
   tippBinden(inhalt);
   inhalt.querySelector('#k-neu').addEventListener('click', neuLaden);
+
+  // Engpass-Analyse lädt nach (die Seite wartet nicht darauf)
+  const analyse = inhalt.querySelector('#k-analyse');
+  const analyseLaden = async () => {
+    try {
+      const a = await store.anfrageAnalyse(analyseStunden);
+      analyse.innerHTML = analyseHtml(a); // auch wenn der Reiter noch nicht eingesetzt ist (Admin baut ihn erst losgelöst auf)
+    } catch (e) {
+      analyse.innerHTML = `<p class="fehlerbox">${esc(fehlerText(e))}</p>`;
+    }
+  };
+  analyseLaden();
+  inhalt.querySelector('#k-zeitraum').addEventListener('change', (ev) => {
+    analyseStunden = Number(ev.target.value);
+    analyse.innerHTML = '<p class="laden">Wird ausgewertet …</p>';
+    analyseLaden();
+  });
+
+  const browser = inhalt.querySelector('#k-browser');
+  inhalt.querySelector('#k-ping').addEventListener('click', (ev) => mitSperre(ev.currentTarget, async () => {
+    const knopf = ev.currentTarget;
+    try {
+      pingErgebnis = await pingSerie(store, 15, (i, n) => { knopf.textContent = `${i} / ${n} …`; });
+      browser.innerHTML = browserHtml();
+    } catch (e) {
+      meldung(fehlerText(e), 'fehler');
+    } finally {
+      knopf.textContent = 'Ping-Serie starten';
+    }
+  }));
+  inhalt.querySelector('#k-messung-leeren').addEventListener('click', () => { messungenLeeren(); browser.innerHTML = browserHtml(); });
   inhalt.querySelector('#k-auto').addEventListener('change', (ev) => {
     clearInterval(automatisch);
     automatisch = ev.target.checked ? setInterval(() => {

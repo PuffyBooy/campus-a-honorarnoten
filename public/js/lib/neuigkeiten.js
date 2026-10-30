@@ -2,6 +2,14 @@
 // Neue Einträge oben anfügen (id = Datum, bei mehreren am Tag mit Buchstaben).
 export const NEUIGKEITEN = [
   {
+    id: '2026-10-30c', datum: '2026-10-30', titel: 'Schneller: Seitenwechsel, Start und Einladen',
+    punkte: [
+      ['', 'Seitenwechsel brauchen nur noch eine Runde zum Server statt zwei bis drei; die App startet schneller (alle Programmdateien auf einmal).'],
+      ['admin', 'Einladen und Personen anlegen warten nicht mehr auf den Mailserver – das Ergebnis der E-Mail erscheint ein paar Sekunden später.'],
+      ['admin', 'Kommandozentrale: Engpass-Analyse jeder Anfrage (wo die Zeit hängt), Browser-Messung (Netz, Server, Seitenwechsel) und ein erweiterter Leistungstest.'],
+    ],
+  },
+  {
     id: '2026-10-30b', datum: '2026-10-30', titel: 'Handy-App mit Push-Mitteilungen',
     punkte: [
       ['', 'Die App lässt sich jetzt aufs Handy oder den Computer installieren – mit eigenem Symbol, ohne Browserleiste (Mein Profil → Handy-App).'],

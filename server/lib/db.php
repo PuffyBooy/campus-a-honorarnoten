@@ -348,6 +348,27 @@ const MIGRATIONEN = [
     );
     create index if not exists push_nachrichten_nutzer on push_nachrichten (nutzer_id, erstellt_am);
     SQL,
+    // Version 23: jede Anfrage mit ihren Phasen (für die Engpass-Suche in der Kommandozentrale, 7 Tage)
+    <<<'SQL'
+    create table if not exists anfrage_log (
+      id             integer primary key autoincrement,
+      zeit           text not null,
+      funktion       text not null,
+      status         integer not null,
+      ms_gesamt      real not null,
+      ms_start       real not null default 0,
+      ms_db          real not null default 0,
+      ms_sitzung     real not null default 0,
+      ms_funktion    real not null default 0,
+      sql_anzahl     integer not null default 0,
+      sql_ms         real not null default 0,
+      ms_hintergrund real not null default 0,
+      hintergrund    text not null default '',
+      speicher_kb    integer not null default 0,
+      antwort_frei   integer not null default 0
+    );
+    create index if not exists anfrage_log_zeit on anfrage_log (zeit);
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -667,12 +688,33 @@ const MYSQL_MIGRATIONEN = [
       foreign key (nutzer_id) references nutzer(id) on delete cascade
     ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
     SQL,
+    // Version 16 = SQLite-Version 23
+    <<<'SQL'
+    create table if not exists anfrage_log (
+      id             bigint not null auto_increment primary key,
+      zeit           varchar(30) not null,
+      funktion       varchar(60) not null,
+      status         int not null,
+      ms_gesamt      double not null,
+      ms_start       double not null default 0,
+      ms_db          double not null default 0,
+      ms_sitzung     double not null default 0,
+      ms_funktion    double not null default 0,
+      sql_anzahl     int not null default 0,
+      sql_ms         double not null default 0,
+      ms_hintergrund double not null default 0,
+      hintergrund    varchar(300) not null default '',
+      speicher_kb    int not null default 0,
+      antwort_frei   tinyint not null default 0,
+      index anfrage_log_zeit (zeit)
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    SQL,
 ];
 
 /** Tabellen in der Reihenfolge, in der sie eingespielt werden können (für die Sicherung) */
 const TABELLEN = ['nutzer', 'sitzungen', 'anfragen', 'positionen', 'noten', 'note_positionen', 'kommentare', 'verlauf',
     'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails', 'links', 'protokoll', 'nachweise', 'nachrichten', 'messwerte',
-    'push_abos', 'push_nachrichten'];
+    'push_abos', 'push_nachrichten', 'anfrage_log'];
 
 /**
  * Datenbank öffnen und auf den neuesten Stand bringen.
@@ -719,8 +761,13 @@ function oeffne_mysql(array $k): PDO
     ]);
     $db->exec("set names utf8mb4 collate utf8mb4_unicode_ci, time_zone = '+00:00', "
         . "sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'");
-    $db->exec('create table if not exists schema_version (version int not null) engine=InnoDB');
-    $version = (int) $db->query('select coalesce(max(version), 0) from schema_version')->fetchColumn();
+    // je Anfrage nur eine Abfrage für den Schema-Stand – die Tabelle anlegen nur beim allerersten Mal
+    try {
+        $version = (int) $db->query('select coalesce(max(version), 0) from schema_version')->fetchColumn();
+    } catch (PDOException) {
+        $db->exec('create table if not exists schema_version (version int not null) engine=InnoDB');
+        $version = 0;
+    }
     if ($version < count(MYSQL_MIGRATIONEN)) {
         // nur eine Anfrage gleichzeitig darf das Schema ändern (Tabellen anlegen beendet Transaktionen in MySQL)
         $db->query("select get_lock('anerkennungspraemien_schema', 30)");
@@ -779,8 +826,11 @@ function upsert(PDO $db, string $tabelle, array $werte, array $schluessel): void
 /** Abfrage mit Parametern; liefert das Statement */
 function q(PDO $db, string $sql, array $params = []): PDOStatement
 {
+    $t = hrtime(true);
     $st = $db->prepare($sql);
     $st->execute(array_values($params));
+    Messung::$sql++;
+    Messung::$sqlMs += (hrtime(true) - $t) / 1e6;
     return $st;
 }
 

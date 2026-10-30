@@ -8,7 +8,8 @@
     "dev:server": "HONORARE_DATENBANK=daten/honorarnoten.sqlite php -S 127.0.0.1:3000 server/router.php",
     "admin": "HONORARE_DATENBANK=daten/honorarnoten.sqlite php server/cli.php admin",
     "paket": "scripts/world4you-paket.sh",
-    "lasttest": "php scripts/lasttest.php"
+    "lasttest": "php scripts/lasttest.php",
+    "modulepreload": "node scripts/modulepreload.mjs"
   },
   "engines": {
     "node": ">=22.13",

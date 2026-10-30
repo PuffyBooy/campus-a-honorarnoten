@@ -419,6 +419,20 @@ section.fehlerbox { border: 0; }
 .ampel-ok { background: var(--erfolg); }
 .ampel-warnung { background: var(--warnung); }
 .ampel-fehler { background: var(--gefahr); }
+.ampel-info { background: var(--marke); font-style: italic; font-family: Georgia, serif; }
+/* Engpass-Analyse und Browser-Messung */
+.tabelle-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.tabelle-scroll .tabelle { min-width: 36rem; }
+@media (max-width: 759px) { .tabelle-scroll .tabelle { display: table; } .tabelle-scroll .tabelle tr { display: table-row; }
+  .tabelle-scroll .tabelle td, .tabelle-scroll .tabelle th { display: table-cell; width: auto; } .tabelle-scroll .tabelle thead { display: table-header-group; }
+  .tabelle-scroll .tabelle tbody { display: table-row-group; } .tabelle-scroll .tabelle td::before { content: none; } }
+.balken { display: block; width: 8rem; height: .45rem; }
+.balken-grund { fill: var(--rand); }
+.balken-wert { fill: var(--marke); }
+.wert-mittel { color: var(--warnung); font-weight: 600; }
+.wert-langsam { color: var(--gefahr); font-weight: 700; }
+.engpass tr.summe td { border-top: 2px solid var(--rand); background: var(--marke-hell); }
+#k-analyse h4, #k-browser h4 { margin: 1.25rem 0 .4rem; }
 .pruefliste { list-style: none; padding: 0; margin: .5rem 0 0; display: grid; gap: .5rem 1rem; }
 @media (min-width: 800px) { .pruefliste { grid-template-columns: 1fr 1fr; } }
 .pruefliste li { display: flex; gap: .6rem; align-items: flex-start; }

@@ -24,6 +24,16 @@ AddType application/vnd.openxmlformats-officedocument.wordprocessingml.document 
   RewriteRule ^app(/|$) - [F,L]
 </IfModule>
 
+# Schnittstelle nie komprimieren: die Antwort soll sofort beim Browser sein, auch wenn danach noch
+# Mails verschickt werden (sonst wartet der Browser darauf)
+<IfModule mod_setenvif.c>
+  SetEnvIfNoCase Request_URI "^/api" no-gzip dont-vary
+</IfModule>
+# Programmdateien komprimieren (aus rund 470 KB JavaScript werden etwa 120 KB)
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css text/javascript application/javascript image/svg+xml application/manifest+json
+</IfModule>
+
 <IfModule mod_headers.c>
   Header always set X-Content-Type-Options "nosniff"
   Header always set X-Frame-Options "DENY"
@@ -33,7 +43,9 @@ AddType application/vnd.openxmlformats-officedocument.wordprocessingml.document 
   <FilesMatch "\.(html|js|mjs|css|svg|docx|webmanifest)$">
     Header set Content-Security-Policy "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: blob:; connect-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
     Header set Cross-Origin-Opener-Policy "same-origin"
-    # nach einem Update sofort die neuen Dateien laden
+    # nach einem Update sofort die neuen Dateien laden …
     Header set Cache-Control "no-cache"
+    # … außer mit Versionsnummer (?v=…, beim Ausliefern angehängt): die ändert sich nie, der Browser behält sie ein Jahr
+    Header set Cache-Control "public, max-age=31536000, immutable" "expr=%{QUERY_STRING} =~ /(^|&)v=/"
   </FilesMatch>
 </IfModule>

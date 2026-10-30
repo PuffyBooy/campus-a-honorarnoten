@@ -91,10 +91,7 @@ export function wechseln(el, ctx) {
   stand.ctx = ctx;
   // nach Annehmen/Zurückgeben, oder während die Liste gerade neu lädt (Filter geklickt): Liste neu holen,
   // aber nur die Redaktion (nicht die ganze App) – sonst bliebe der neue Filter ohne Anzeige
-  if (stand.veraltet || listeLaeuft) {
-    listeNeu(id);
-    return true;
-  }
+  if (stand.veraltet || listeLaeuft) return listeNeu(id); // Promise: die Messung weiß, wann es fertig ist
   stand.id = id;
   el.querySelectorAll('.eingang').forEach((li) => {
     const an = li.dataset.id === id;
@@ -102,8 +99,7 @@ export function wechseln(el, ctx) {
     li.querySelector('a')?.toggleAttribute('aria-current', an);
   });
   el.querySelector('.arbeitsplatz').classList.add('mit-auswahl');
-  detailZeigen(ctx).catch((e) => ctx.neuLaden?.(e));
-  return true;
+  return detailZeigen(ctx).catch((e) => ctx.neuLaden?.(e)).then(() => true);
 }
 
 /**
