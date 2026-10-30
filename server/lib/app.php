@@ -10,6 +10,7 @@ require_once __DIR__ . '/totp.php';
 require_once __DIR__ . '/protokoll.php';
 require_once __DIR__ . '/artikel.php';
 require_once __DIR__ . '/mail.php';
+require_once __DIR__ . '/push.php';
 require_once __DIR__ . '/pdf.php';
 require_once __DIR__ . '/nachweise.php';
 require_once __DIR__ . '/mail-vorlagen.php';
@@ -101,6 +102,11 @@ function hintergrundarbeit(PDO $db): void
         mails_verschicken($db);
     } catch (Throwable $e) {
         error_log('Prämienabrechnungen: Mailversand: ' . $e->getMessage());
+    }
+    try {
+        pushes_verschicken($db);
+    } catch (Throwable $e) {
+        error_log('Prämienabrechnungen: Push-Mitteilungen: ' . $e->getMessage());
     }
     try {
         if (random_int(1, 50) === 1) aufraeumen($db);

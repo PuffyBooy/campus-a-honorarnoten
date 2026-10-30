@@ -22,6 +22,7 @@ import { cookieBanner, gewaehlt } from './lib/cookies.js';
 import { nachweisHerunterladen } from './lib/nachweise.js';
 import { nurAnsehen } from './lib/ansicht.js';
 import { vorratLeeren } from './views/redaktion-detail.js';
+import { pushAusschalten, swRegistrieren } from './lib/push.js';
 
 // Demo: Daten im Browser (store.js). Server: Daten über die API (api.js).
 const IST_DEMO = MODUS !== 'server';
@@ -168,6 +169,7 @@ async function renderNav(nutzer, pfad) {
     </div>`;
   nav.querySelector('#suche-oeffnen').addEventListener('click', () => sucheOeffnen({ store, nutzer }));
   nav.querySelector('#abmelden').addEventListener('click', async () => {
+    await pushAusschalten(store); // dieses Gerät bekommt keine Mitteilungen mehr für dieses Konto
     await Promise.resolve(store.abmelden()).catch(() => {});
     // Adresse ohne Route; genau einmal neu zeichnen (sonst gehen Eingaben verloren)
     history.replaceState(null, '', location.pathname + location.search);
@@ -392,7 +394,7 @@ async function render({ schnell = false } = {}) {
         if (aktuellerPfad() === ziel) render();
         else location.hash = '#/' + ziel;
       },
-      abmelden: async () => { await Promise.resolve(store.abmelden()).catch(() => {}); render(); },
+      abmelden: async () => { await pushAusschalten(store); await Promise.resolve(store.abmelden()).catch(() => {}); render(); },
     });
     return;
   }
@@ -439,6 +441,7 @@ async function start() {
   }
   document.body.classList.toggle('modus-demo', IST_DEMO);
   await store.initialisieren({ demoDaten, demoAktualisieren: demoModul?.demoKontenAktualisieren });
+  swRegistrieren(); // Handy-App: installierbar, Offline-Hinweis, Push-Mitteilungen
   window.addEventListener('hashchange', () => { window.scrollTo(0, 0); render({ schnell: true }); });
   // Demo: Änderung in einem anderen Tab -> neu zeichnen, außer man tippt gerade etwas.
   // Auch die Login-Seite: sie zeigt den Betreiber-Hinweis, der im anderen Tab geändert worden sein kann

@@ -914,6 +914,13 @@ export function naechsteNummer(n = ich(), jahr = Number(heuteIso().slice(0, 4)))
     nummer: honorarnoteNummer({ vorname: n.vorname, nachname: n.nachname, jahr, laufendeNummer: lfd }) };
 }
 
+// Push-Mitteilungen gibt es nur in der echten App (sie brauchen einen Server)
+const NUR_SERVER = 'Push-Mitteilungen gibt es nur in der echten App, nicht in der Demo.';
+export function pushSchluessel() { ich(); throw new Fehler(NUR_SERVER); }
+export function pushAbonnieren() { ich(); throw new Fehler(NUR_SERVER); }
+export function pushAbmelden() { return true; }
+export function pushTest() { ich(); throw new Fehler(NUR_SERVER); }
+
 /** Nummer der zuletzt geschriebenen Prämienabrechnung dieses Jahres (z. B. vor der App) – ab da wird weitergezählt */
 export function nummerFestlegen(letzte) {
   const n = brauche('autor');

@@ -2,6 +2,19 @@
 // Neue Einträge oben anfügen (id = Datum, bei mehreren am Tag mit Buchstaben).
 export const NEUIGKEITEN = [
   {
+    id: '2026-10-30b', datum: '2026-10-30', titel: 'Handy-App mit Push-Mitteilungen',
+    punkte: [
+      ['', 'Die App lässt sich jetzt aufs Handy oder den Computer installieren – mit eigenem Symbol, ohne Browserleiste (Mein Profil → Handy-App).'],
+      ['', 'Push-Mitteilungen: Rückfragen, Annahme, Zahlung und neue Abrechnungen sofort auf dem Gerät – dieselbe Auswahl wie bei den E-Mails.'],
+    ],
+  },
+  {
+    id: '2026-10-30a', datum: '2026-10-30', titel: 'Jahresübersicht als PDF',
+    punkte: [
+      ['autor', 'In „Meine Abrechnungen“: alle Abrechnungen eines Jahres mit Summen als PDF – z. B. für Steuer oder Beihilfe.'],
+    ],
+  },
+  {
     id: '2026-10-29e', datum: '2026-10-29', titel: 'Nummer der Prämienabrechnung selbst festlegen',
     punkte: [
       ['autor', 'Schon vor der App Prämienabrechnungen geschrieben? Unter „Mein Profil → Nummerierung“ (oder „ändern“ neben der Nummer) die letzte Nummer eintragen – die App zählt von dort weiter.'],

@@ -30,7 +30,7 @@ if ($pfad === '/einrichten.php') {
 $typen = [
     'html' => 'text/html; charset=utf-8', 'js' => 'text/javascript; charset=utf-8', 'mjs' => 'text/javascript; charset=utf-8',
     'css' => 'text/css; charset=utf-8', 'svg' => 'image/svg+xml', 'png' => 'image/png', 'ico' => 'image/x-icon',
-    'json' => 'application/json; charset=utf-8', 'txt' => 'text/plain; charset=utf-8',
+    'json' => 'application/json; charset=utf-8', 'txt' => 'text/plain; charset=utf-8', 'webmanifest' => 'application/manifest+json',
     'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
 ];
 foreach (STATISCH_HEADER as $k => $v) header("$k: $v");

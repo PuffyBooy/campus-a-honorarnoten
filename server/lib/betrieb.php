@@ -74,7 +74,9 @@ function monatserinnerung(PDO $db): int
         if (!$n || !$n['aktiv']) continue;
         $n['benachrichtigungen'] = (array) $n['benachrichtigungen'];
         if (!bekommt($n, 'erinnerung')) continue;
-        mail_einreihen($db, $n['email'], mail_monatserinnerung($db, $n['vorname'], (int) $z['anzahl'], euro((int) $z['summe']), $rest));
+        $mail = mail_monatserinnerung($db, $n['vorname'], (int) $z['anzahl'], euro((int) $z['summe']), $rest);
+        mail_einreihen($db, $n['email'], $mail);
+        push_einreihen($db, $n['id'], $mail['betreff'], PUSH_ZIELE['erinnerung']);
         $gesendet++;
     }
     protokoll($db, 'info', 'mail', "Erinnerung zum Monatsende an $gesendet " . ($gesendet === 1 ? 'Person' : 'Personen') . ' mit gespeicherten Leistungen');
