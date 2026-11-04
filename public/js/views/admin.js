@@ -623,6 +623,11 @@ async function einstellungen(inhalt, { store, neuLaden, rechtVergessen }) {
         Jede Person kann das im Profil abschalten.</p>
       <label for="e-erinnerung">Tage vor Monatsende (0 = keine Erinnerung)</label>
       <input id="e-erinnerung" name="erinnerung" type="number" min="0" max="31" step="1" inputmode="numeric" value="${esc(e.erinnerung_tage ?? 3)}">
+      <h2 class="abstand-oben">Redigier-Zähler <span class="badge">Test</span></h2>
+      <p class="tipp">Wer redigiert, zählt jeden Text mit einem Knopf (auch am Handy oder mit der Chrome-Erweiterung im CMS);
+        die Redaktion sieht live, wie viele es diesen Monat sind. Abgerechnet wird weiter am Monatsende.</p>
+      <label class="check"><input type="checkbox" name="redigier_zaehler" ${e.redigier_zaehler ? 'checked' : ''}>
+        Redigier-Zähler einschalten</label>
       <h2 class="abstand-oben">Datenschutz</h2>
       <label for="e-kontakt">Kontakt für Datenschutzanfragen (E-Mail)</label>
       <input id="e-kontakt" name="kontakt" type="email" value="${esc(e.datenschutzKontakt)}">
@@ -721,6 +726,7 @@ async function einstellungen(inhalt, { store, neuLaden, rechtVergessen }) {
       datenschutzKontakt: form.kontakt.value,
       honorarsaetze,
       rueckgabe_vorlagen: form.vorlagen.value.split('\n'),
+      redigier_zaehler: form.redigier_zaehler.checked,
       // leeres Feld = bisheriger Wert (nicht stillschweigend „keine Erinnerung“)
       erinnerung_tage: form.erinnerung.value.trim() === '' ? (e.erinnerung_tage ?? 3) : Number(form.erinnerung.value),
       betreiber: {

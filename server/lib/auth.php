@@ -60,6 +60,16 @@ function sitzung_pruefen(PDO $db, ?string $token): ?string
     return $s['nutzer_id'];
 }
 
+/** Persönlicher Schlüssel (z. B. für die Chrome-Erweiterung): liefert die Konto-ID oder null */
+function schluessel_pruefen(PDO $db, string $schluessel): ?string
+{
+    if (strlen($schluessel) < 20 || strlen($schluessel) > 100) return null;
+    $z = zeile($db, 'select id, nutzer_id, zuletzt_am from api_schluessel where hash = ?', [token_hash($schluessel)]);
+    if (!$z) return null;
+    if (!$z['zuletzt_am'] || $z['zuletzt_am'] < zeit_iso(time() - 300)) q($db, 'update api_schluessel set zuletzt_am = ? where id = ?', [jetzt(), $z['id']]);
+    return $z['nutzer_id'];
+}
+
 function sitzung_beenden(PDO $db, ?string $token): void
 {
     if ($token) q($db, 'delete from sitzungen where token_hash = ?', [token_hash($token)]);

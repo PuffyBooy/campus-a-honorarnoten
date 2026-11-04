@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <h1>Redigier-Zähler</h1>
+  <p class="zahl"><strong id="anzahl">…</strong> <span id="einheit">Texte diesen Monat</span></p>
+  <p class="seite" id="seite"></p>
+  <button type="button" id="zaehlen">✓ Diese Seite als redigiert zählen</button>
+  <p class="meldung" id="meldung" role="status"></p>
+  <ul id="letzte"></ul>
+  <p class="fuss">Tastenkürzel: <kbd>Alt</kbd> + <kbd>Umschalt</kbd> + <kbd>R</kbd> · <a id="app" target="_blank">App öffnen</a></p>
+  <script src="einstellungen.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

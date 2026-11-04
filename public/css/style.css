@@ -783,3 +783,60 @@ a.kennzahl-link.kennzahl-marke { color: #fff; }
 kbd { font-family: var(--mono); font-size: .78rem; padding: .05rem .35rem; border: 1px solid var(--rand); border-bottom-width: 2px; border-radius: 4px; background: var(--flaeche); }
 .kuerzel-hinweis { margin: .75rem 0 0; color: var(--text-leise); }
 @media (hover: none) { .kuerzel-hinweis { display: none; } }
+
+/* ---- Redigier-Zähler (Mein Monat, Handy-Seite #/zaehlen) */
+.redigier-zaehler .kopfzeile h2 { margin: 0; }
+.zaehler-haupt { display: flex; align-items: flex-end; justify-content: space-between; gap: 1rem; margin: .25rem 0 1rem; }
+.zaehler-zahl { display: flex; flex-direction: column; }
+.zaehler-zahl strong { font-size: 3rem; line-height: 1; font-variant-numeric: tabular-nums; color: var(--marke-dunkel); }
+/* Stapel: ein Blatt pro gezähltem Text, wächst von unten nach oben (10 Blätter pro Reihe) */
+.stapel { display: flex; flex-wrap: wrap-reverse; justify-content: flex-end; align-content: flex-start; gap: 3px;
+  width: calc(10 * 14px + 9 * 3px); max-width: 55%; }
+.blatt { width: 14px; height: 9px; border-radius: 2px; background: var(--marke-hell); border: 1px solid var(--marke); box-sizing: border-box; }
+.blatt-zehn { background: var(--marke); }
+.blatt.neu { animation: blatt-fallen .35s ease-out; }
+@keyframes blatt-fallen { from { transform: translateY(-14px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .blatt.neu { animation: none; } }
+.stapel-mehr { font-size: .75rem; color: var(--text-leise); width: 100%; text-align: right; }
+.zaehler-knoepfe { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+.zaehler-plus { font-size: 1.1rem; padding: .7rem 1.4rem; }
+.zaehler-letzte { list-style: none; padding: 0; margin: .5rem 0 0; }
+.zaehler-letzte li { display: flex; justify-content: space-between; gap: 1rem; padding: .3rem 0; border-bottom: 1px solid var(--rand); }
+.zaehler-details { margin-top: .75rem; }
+.zaehler-fuss { margin: .75rem 0 0; }
+.zaehler-gross { margin-top: 1rem; }
+.zaehler-gross .zaehler-zahl strong { font-size: 4.5rem; }
+.zaehler-gross .zaehler-knoepfe { flex-direction: column; align-items: stretch; }
+.zaehler-gross .zaehler-plus { font-size: 1.5rem; padding: 1.4rem 1rem; border-radius: 16px; }
+.zaehlen-tipp { margin: 1rem .25rem; }
+div.schmal { max-width: 440px; margin: 0 auto; }
+
+/* ---- Redigieren live (Redaktion) */
+.redigier-tabelle td { vertical-align: middle; }
+.redigier-tabelle .anteil { display: block; width: 100%; max-width: 220px; height: 5px; margin: .3rem 0 .1rem; }
+.anteil-grund { fill: var(--rand); }
+.anteil-wert { fill: var(--marke); }
+.gross-zahl { font-size: 1.2rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+.redigier-verlauf svg { height: 170px; }
+.redigier-verlauf .saeule { cursor: pointer; }
+.redigier-verlauf .saeule.gewaehlt .saeule-wert { fill: var(--marke-dunkel); }
+.redigier-verlauf .saeule.gewaehlt text { font-weight: 700; fill: var(--text); }
+.redigier-verlauf .saeule-zahl { font-size: 11px; fill: var(--text); }
+.rl-stand { margin-top: .5rem; }
+@media (max-width: 560px) { .nur-breit { display: none; } }
+/* als eigenes kleines Fenster: nur der Inhalt */
+body.nur-fenster .kopf, body.nur-fenster .fuss, body.nur-fenster .banner-bereich, body.nur-fenster .skip { display: none; }
+body.nur-fenster .inhalt { min-height: 100vh; padding-top: 1rem; }
+.rl-kopf-aktionen { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.rl-kopf-aktionen select { width: auto; margin: 0; }
+/* bleibt auch schmal eine Tabelle (wenige Spalten, Zuletzt/Abgerechnet fallen weg) */
+@media (max-width: 759px) {
+  .redigier-tabelle { display: table; } .redigier-tabelle thead { display: table-header-group; }
+  .redigier-tabelle tbody { display: table-row-group; } .redigier-tabelle tfoot { display: table-footer-group; }
+  .redigier-tabelle tr { display: table-row; } .redigier-tabelle td, .redigier-tabelle th { display: table-cell; width: auto; padding: .45rem .5rem; }
+  .redigier-tabelle td::before { content: none; } .redigier-tabelle .rechts { text-align: right; }
+}
+.rl-fenster .kennzahlen { grid-template-columns: repeat(3, 1fr); gap: .5rem; }
+.rl-fenster .kennzahl { padding: .6rem .75rem; }
+.rl-fenster .kennzahl strong { font-size: 1.2rem; }
+.anleitung li { margin: .35rem 0; }

@@ -10,6 +10,8 @@ import {
   installierenStarten, istInstalliert, istIos, kannInstallieren, pushAbo, pushAusschalten, pushEinschalten, pushMoeglich,
 } from '../lib/push.js';
 import qrcode from '../../vendor/qrcode-generator.mjs';
+import { darfRedigieren } from '../lib/konto.js';
+import { erweiterungKarte } from '../lib/erweiterung.js';
 
 function feld(name, label, wert, { typ = 'text', pflicht = true, attrs = '' } = {}) {
   return `
@@ -89,6 +91,8 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
             <label class="check bestaetigen"><input type="checkbox" name="${esc(b.typ)}" ${bekommt(nutzer, b.typ) ? 'checked' : ''}> ${esc(b.text)}</label>`).join('')}
           <p><button class="btn abstand-oben" type="submit">Auswahl speichern</button></p>
         </form>` : ''}
+        ${darfRedigieren(nutzer) && nutzer.redigier_zaehler && !nutzer.ansicht_von
+          ? '<section class="karte" id="ew-karte" aria-live="polite"><h2>Chrome-Erweiterung</h2><p class="laden">…</p></section>' : ''}
         <section class="karte" id="app-karte" aria-live="polite"><h2>Handy-App und Push-Mitteilungen</h2><p class="laden">…</p></section>
         <form class="karte" id="pw-form" novalidate>
           <h2>Passwort ändern</h2>
@@ -120,6 +124,7 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
   el.querySelector('#p-nummer')?.addEventListener('click', async () => { if (await nummerAendern(store, naechste)) neuLaden(); });
 
   appKarte(el.querySelector('#app-karte'), { store, istDemo });
+  if (el.querySelector('#ew-karte')) erweiterungKarte(el.querySelector('#ew-karte'), { store, istDemo });
 
   const form = el.querySelector('#profil-form');
   const setFehler = (name, t) => {

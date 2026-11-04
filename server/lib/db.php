@@ -369,6 +369,28 @@ const MIGRATIONEN = [
     );
     create index if not exists anfrage_log_zeit on anfrage_log (zeit);
     SQL,
+    // Version 24: Redigieren mitzählen (Knopf oder Chrome-Erweiterung) und persönliche Schlüssel für die Erweiterung
+    <<<'SQL'
+    create table if not exists redigier_eintraege (
+      id          text primary key,
+      nutzer_id   text not null references nutzer(id) on delete cascade,
+      monat       text not null,
+      artikel_id  text,
+      titel       text not null default '',
+      quelle      text not null default 'knopf',
+      erstellt_am text not null
+    );
+    create index if not exists redigier_monat on redigier_eintraege (monat, nutzer_id);
+    create unique index if not exists redigier_artikel on redigier_eintraege (nutzer_id, monat, artikel_id);
+    create table if not exists api_schluessel (
+      id          text primary key,
+      nutzer_id   text not null references nutzer(id) on delete cascade,
+      hash        text not null unique,
+      zweck       text not null,
+      erstellt_am text not null,
+      zuletzt_am  text
+    );
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -709,12 +731,37 @@ const MYSQL_MIGRATIONEN = [
       index anfrage_log_zeit (zeit)
     ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
     SQL,
+    // Version 17 = SQLite-Version 24
+    <<<'SQL'
+    create table if not exists redigier_eintraege (
+      id          varchar(36) not null primary key,
+      nutzer_id   varchar(36) not null,
+      monat       varchar(7) not null,
+      artikel_id  varchar(40) null,
+      titel       varchar(300) not null default '',
+      quelle      varchar(20) not null default 'knopf',
+      erstellt_am varchar(30) not null,
+      index redigier_monat (monat, nutzer_id),
+      unique key redigier_artikel (nutzer_id, monat, artikel_id),
+      foreign key (nutzer_id) references nutzer(id) on delete cascade
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    create table if not exists api_schluessel (
+      id          varchar(36) not null primary key,
+      nutzer_id   varchar(36) not null,
+      hash        varchar(64) not null,
+      zweck       varchar(30) not null,
+      erstellt_am varchar(30) not null,
+      zuletzt_am  varchar(30) null,
+      unique key api_schluessel_hash (hash),
+      foreign key (nutzer_id) references nutzer(id) on delete cascade
+    ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    SQL,
 ];
 
 /** Tabellen in der Reihenfolge, in der sie eingespielt werden können (für die Sicherung) */
 const TABELLEN = ['nutzer', 'sitzungen', 'anfragen', 'positionen', 'noten', 'note_positionen', 'kommentare', 'verlauf',
     'loeschprotokoll', 'einstellungen', 'artikel', 'versuche', 'artikel_listen', 'mails', 'links', 'protokoll', 'nachweise', 'nachrichten', 'messwerte',
-    'push_abos', 'push_nachrichten', 'anfrage_log'];
+    'push_abos', 'push_nachrichten', 'anfrage_log', 'redigier_eintraege', 'api_schluessel'];
 
 /**
  * Datenbank öffnen und auf den neuesten Stand bringen.

@@ -3,6 +3,7 @@
 import { esc, formatZeitpunkt } from '../lib/format.js';
 import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { letzteWechsel, letzterStart, messungenLeeren, pingSerie } from '../lib/messung.js';
+import { tippBinden } from '../lib/diagramm.js';
 
 const STUFE_ZEICHEN = { ok: '✓', warnung: '!', fehler: '✕', info: 'i' };
 const STUFE_TEXT = { ok: 'in Ordnung', warnung: 'Warnung', fehler: 'Problem', info: 'Hinweis' };
@@ -54,22 +55,6 @@ function saeulenHtml(stunden, wert, { titel, einheit, format }) {
     </figure>`;
 }
 
-function tippBinden(el) {
-  el.querySelectorAll('.diagramm-flaeche').forEach((f) => {
-    const tipp = f.querySelector('.diagramm-tipp');
-    f.addEventListener('pointermove', (ev) => {
-      const g = ev.target.closest('[data-tipp]');
-      f.querySelectorAll('.saeule.aktiv').forEach((x) => x !== g && x.classList.remove('aktiv'));
-      if (!g) { tipp.hidden = true; return; }
-      g.classList.add('aktiv');
-      tipp.textContent = g.dataset.tipp;
-      tipp.hidden = false;
-      const r = f.getBoundingClientRect();
-      tipp.style.left = `${Math.min(Math.max(ev.clientX - r.left, 70), r.width - 70)}px`;
-    });
-    f.addEventListener('pointerleave', () => { tipp.hidden = true; f.querySelectorAll('.saeule.aktiv').forEach((x) => x.classList.remove('aktiv')); });
-  });
-}
 
 const liste = (paare) => `<dl class="angaben kompakt">${paare.map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join('')}</dl>`;
 

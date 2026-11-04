@@ -15,6 +15,8 @@ import * as rechtlichesSeite from './views/rechtliches.js';
 import * as registrieren from './views/registrieren.js';
 import * as passwortSeite from './views/passwort.js';
 import * as neuSeite from './views/neu.js';
+import * as redigierenLive from './views/redigieren.js';
+import * as zaehlen from './views/zaehlen.js';
 import { sucheOeffnen } from './lib/suche.js';
 import { NEUESTE, ungesehen } from './lib/neuigkeiten.js';
 import { hinweisOffen, zustimmungHtml } from './lib/rechtliches.js';
@@ -43,6 +45,11 @@ const ROUTEN = [
   { pfad: 'extern', view: generator, rolle: ['autor'], titel: 'Externe Honorarnote' },
   { pfad: 'redaktion', view: redaktion, rolle: ['redaktion', 'admin'], titel: 'Redaktion' },
   { pfad: 'redaktion/:id', view: redaktion, rolle: ['redaktion', 'admin'] },
+  // Redigier-Zähler (noch im Test): nur, wenn der Admin ihn eingeschaltet hat
+  { pfad: 'redigieren', view: redigierenLive, rolle: ['redaktion', 'admin'], titel: 'Redigieren live', nur: (n) => n.redigier_zaehler },
+  { pfad: 'redigieren/:ansicht', view: redigierenLive, rolle: ['redaktion', 'admin'], nur: (n) => n.redigier_zaehler },
+  { pfad: 'zaehlen', view: zaehlen, rolle: ['redigieren'], nur: (n) => n.redigier_zaehler },
+  { pfad: 'zaehlen/:aktion', view: zaehlen, rolle: ['redigieren'], nur: (n) => n.redigier_zaehler },
   { pfad: 'zahlung', view: zahlung, rolle: ['buchhaltung', 'admin'], titel: 'Buchhaltung' },
   { pfad: 'zahlung/:tab', view: zahlung, rolle: ['buchhaltung', 'admin'] },
   { pfad: 'admin', view: admin, rolle: ['admin'], titel: 'Admin' },
@@ -54,7 +61,7 @@ const ROUTEN = [
 /** „Maria Muster“ -> „MM“ für den runden Knopf zum Profil */
 const initialen = (n) => (`${n.vorname?.[0] ?? ''}${n.nachname?.[0] ?? ''}`.toUpperCase() || (n.email?.[0] ?? '?').toUpperCase());
 
-const darf = (nutzer, route) => route.rolle.some((r) => nutzer.rollen.includes(r));
+const darf = (nutzer, route) => route.rolle.some((r) => nutzer.rollen.includes(r)) && (!route.nur || Boolean(route.nur(nutzer)));
 const kontoEinrichten = (nutzer) => nutzer.muss_passwort_aendern || !store.profilVollstaendig(nutzer);
 
 function aktuellerPfad() {
@@ -305,6 +312,8 @@ function kontext(treffer, nutzer, lauf, f = null) {
 async function render({ schnell = false } = {}) {
   const lauf = ++renderZaehler;
   const pfad = aktuellerPfad();
+  // „Redigieren live“ als eigenes kleines Fenster: ohne Kopfzeile, Menü und Fußzeile
+  document.body.classList.toggle('nur-fenster', pfad === 'redigieren/fenster');
   // Innerhalb derselben Seite wechseln (z. B. zur nächsten Abrechnung in der Redaktion): nur den Teil austauschen
   const t = schnell === true && zuletzt && pfad ? finde(pfad) : null;
   wechselStart(pfad); // Messung für die Kommandozentrale

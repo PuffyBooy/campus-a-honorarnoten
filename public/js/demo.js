@@ -194,6 +194,27 @@ export async function demoDaten(db, { passwortHash }) {
   // Beispielkonto für die SEPA-Datei der Buchhaltung
   db.einstellungen.zahlungskonto = { name: 'campus a Medien GmbH', iban: 'AT022050302101023600', bic: 'SPIHAT22XXX' };
   db.einstellungen.betreiber = BEISPIEL_BETREIBER();
+
+  // Redigieren mitzählen: Beispielverlauf der letzten Monate (Maria und Jonas), diesen Monat ein paar per Erweiterung
+  jonas.rollen = [...jonas.rollen, 'redigieren'];
+  db.redigieren = [];
+  const jetzt = new Date();
+  const ARTIKEL = [['4311', 'Bettwäsche, Geschirr, Müll: Diese Aufgaben darf Airbnb Gästen künftig nicht mehr aufbrummen'],
+    ['4302', 'Schulautonomie: Was Direktionen jetzt selbst entscheiden'], ['4298', 'Mensa-Streik: Wie es weitergeht']];
+  [[14, 6], [9, 4], [17, 8], [12, 3], [20, 7], [6, 2]].forEach(([m, j], i) => {
+    const vor = 5 - i; // 5 Monate zurück … dieser Monat
+    const d = new Date(jetzt.getFullYear(), jetzt.getMonth() - vor, 1);
+    const monat = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    const tage = vor === 0 ? Math.max(1, jetzt.getDate()) : 28;
+    [[maria, m], [jonas, j]].forEach(([u, anzahl]) => {
+      for (let k = 0; k < anzahl; k++) {
+        const am = new Date(d.getFullYear(), d.getMonth(), 1 + Math.floor((k * tage) / anzahl), 9 + (k % 8), (k * 13) % 60);
+        const a = vor === 0 && u === maria && k < ARTIKEL.length ? ARTIKEL[k] : null;
+        db.redigieren.push({ id: `demo-red-${u.id}-${monat}-${k}`, nutzer_id: u.id, monat, artikel_id: a?.[0] ?? null, titel: a?.[1] ?? '',
+          quelle: a ? 'erweiterung' : 'knopf', erstellt_am: am.toISOString() });
+      }
+    });
+  });
 }
 
 // Beispiel-Betreiber der Demo: zeigt den Hinweis „nicht bei campus a angestellt“, Impressum und Datenschutz

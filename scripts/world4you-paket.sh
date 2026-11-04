@@ -14,6 +14,9 @@ mkdir -p "$ziel"
 cp -R public/. "$ziel/"
 rm -f "$ziel/.nojekyll"
 printf "// Betriebsart: Server (Daten auf dem eigenen Webspace)\nexport const MODUS = 'server';\n" > "$ziel/js/modus.js"
+# Redigier-Zähler ist noch im Test (nur in der Demo): Kurzbefehl „＋1 redigiert“ nicht ins Handy-Menü der echten App
+node -e 'const f = process.argv[1], fs = require("fs"); const m = JSON.parse(fs.readFileSync(f, "utf8")); delete m.shortcuts;
+  fs.writeFileSync(f, JSON.stringify(m, null, 2) + "\n");' "$ziel/manifest.webmanifest"
 scripts/cache-bust.sh "$ziel" "$version"
 
 # Server-Teil (PHP) im geschützten Ordner app/

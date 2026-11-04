@@ -113,6 +113,7 @@ function einstellungen_laden(PDO $db): array
     $e['betreiber'] = array_merge(BETREIBER_STANDARD, array_intersect_key(is_array($e['betreiber']) ? $e['betreiber'] : [], BETREIBER_STANDARD));
     $e['rueckgabe_vorlagen'] = vorlagen_normalisieren($e['rueckgabe_vorlagen'] ?? null);
     $e['erinnerung_tage'] = max(0, min(31, (int) ($e['erinnerung_tage'] ?? ERINNERUNG_TAGE)));
+    $e['redigier_zaehler'] = ($e['redigier_zaehler'] ?? false) === true;
     return $e;
 }
 
@@ -258,7 +259,8 @@ final class Honorare
     public const FUNKTIONEN = [
         'aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'erstesPasswortSetzen', 'passwortAendern',
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'nachweisHochladen', 'nachweisLoeschen', 'nachweisLaden', 'meineArtikel',
-        'naechsteNummer', 'nummerFestlegen', 'mailStatus', 'ping', 'anfrageAnalyse', 'pushSchluessel', 'pushAbonnieren', 'pushAbmelden', 'pushAbholen', 'pushTest', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
+        'naechsteNummer', 'nummerFestlegen', 'redigiertZaehlen', 'redigiertRueckgaengig', 'redigierStand', 'redigiertMelden', 'redigierUebersicht',
+        'redigierSchluessel', 'redigierSchluesselErstellen', 'redigierSchluesselWiderrufen', 'mailStatus', 'ping', 'anfrageAnalyse', 'pushSchluessel', 'pushAbonnieren', 'pushAbmelden', 'pushAbholen', 'pushTest', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
         'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'ablaufZeiten', 'neuigkeitenGesehen', 'serverStatus', 'leistungstest', 'serverAktion', 'funktionstest', 'sicherungZurueckspielen', 'ansichtStarten', 'ansichtBeenden',
         'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
@@ -271,12 +273,15 @@ final class Honorare
     ];
 
     /** „Als Person ansehen“: nur diese Funktionen (lesen) – alles andere ist gesperrt (lib/ansicht.js) */
-    public const NUR_ANSEHEN = ['aktuellerNutzer', 'abmelden', 'ansichtBeenden', 'einstellungen', 'rechtliches', 'navZaehler', 'ablaufZeiten',
+    public const NUR_ANSEHEN = ['redigierStand', 'redigierUebersicht', 'aktuellerNutzer', 'abmelden', 'ansichtBeenden', 'einstellungen', 'rechtliches', 'navZaehler', 'ablaufZeiten',
         'meineLeistungen', 'meineArtikel', 'naechsteNummer', 'notenDiesenMonat', 'meineNoten', 'note', 'nachrichten', 'nachweisLaden',
         'zahlungsavis', 'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'kommentare', 'verlaufVon',
         'offeneZahlungen', 'bezahlteNoten', 'bezahlteNotenSeit', 'zahlungskonto'];
 
     /** ohne Anmeldung erlaubt (Impressum und Datenschutz müssen für alle lesbar sein) */
+    /** Diese Funktionen gehen auch mit persönlichem Schlüssel statt Anmeldung (Chrome-Erweiterung) */
+    public const MIT_SCHLUESSEL = ['redigiertMelden', 'redigierStand'];
+
     public const OEFFENTLICH = ['aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'rechtliches',
         'linkAnmelden', 'einladungPruefen', 'mitLinkRegistrieren', 'passwortVergessen', 'passwortNeuSetzen'];
 
@@ -302,6 +307,11 @@ final class Honorare
         // Admins sehen oben, dass der Wartungsmodus an ist
         if (ist_admin($n) && wartung_laden($this->db())['an']) $n['wartung'] = true;
         if ($n && $this->ctx->ansichtVon) $n['ansicht_von'] = anzeigename($this->ctx->ansichtVon);
+        // Redigier-Zähler (noch im Test): nur wer ihn braucht, erfährt, ob er eingeschaltet ist – fürs Menü
+        if ($n && array_intersect($n['rollen'], ['redigieren', 'redaktion', 'admin'])
+            && json_decode((string) wert($this->db(), "select wert from einstellungen where schluessel = 'redigier_zaehler'"), true) === true) {
+            $n['redigier_zaehler'] = true;
+        }
         return $n;
     }
 
@@ -1113,6 +1123,103 @@ final class Honorare
         return true;
     }
 
+    // ---------------------------------------------------------------- Redigieren mitzählen
+    /** Nur mit Berechtigung „Redigieren“ und wenn der Admin den Zähler eingeschaltet hat */
+    private function redigierer(): array
+    {
+        $n = ich($this->ctx);
+        pruefe(einstellungen_laden($this->db())['redigier_zaehler'], 'Der Redigier-Zähler ist noch nicht eingeschaltet (Admin → Einstellungen).', 403);
+        pruefe(darf_redigieren($n), 'Redigieren ist für dein Konto nicht freigeschaltet.', 403);
+        return $n;
+    }
+
+    /** Einen redigierten Text dazuzählen (Knopf in „Mein Monat“ oder Kurzbefehl am Handy) */
+    public function redigiertZaehlen(mixed $quelle = 'knopf'): array
+    {
+        $db = $this->db();
+        $n = $this->redigierer();
+        q($db, 'insert into redigier_eintraege (id, nutzer_id, monat, quelle, erstellt_am) values (?, ?, ?, ?, ?)',
+            [neue_id(), $n['id'], substr(heute_iso(), 0, 7), in_array($quelle, ['knopf', 'kurzbefehl'], true) ? $quelle : 'knopf', jetzt()]);
+        return redigier_stand($db, $n);
+    }
+
+    /** Den zuletzt gezählten Text dieses Monats wieder abziehen (vertippt) */
+    public function redigiertRueckgaengig(): array
+    {
+        $db = $this->db();
+        $n = $this->redigierer();
+        $id = wert($db, 'select id from redigier_eintraege where nutzer_id = ? and monat = ? order by erstellt_am desc limit 1', [$n['id'], substr(heute_iso(), 0, 7)]);
+        pruefe($id, 'Diesen Monat ist noch nichts gezählt.');
+        q($db, 'delete from redigier_eintraege where id = ?', [$id]);
+        return redigier_stand($db, $n);
+    }
+
+    public function redigierStand(): array
+    {
+        return redigier_stand($this->db(), $this->redigierer());
+    }
+
+    /** Von der Chrome-Erweiterung: dieser Artikel wurde redigiert – jeder Artikel zählt pro Monat einmal */
+    public function redigiertMelden(mixed $artikelId = null, mixed $titel = ''): array
+    {
+        $db = $this->db();
+        $n = $this->redigierer();
+        $id = s($artikelId);
+        pruefe(preg_match('/^[A-Za-z0-9_-]{1,40}$/', $id) === 1, 'Ungültige Artikel-Nummer.');
+        $monat = substr(heute_iso(), 0, 7);
+        $neu = !wert($db, 'select 1 from redigier_eintraege where nutzer_id = ? and monat = ? and artikel_id = ?', [$n['id'], $monat, $id]);
+        if ($neu) {
+            try {
+                q($db, 'insert into redigier_eintraege (id, nutzer_id, monat, artikel_id, titel, quelle, erstellt_am) values (?, ?, ?, ?, ?, ?, ?)',
+                    [neue_id(), $n['id'], $monat, $id, kuerze(tr($titel), 300), 'erweiterung', jetzt()]);
+            } catch (PDOException) {
+                $neu = false; // gleichzeitig schon gezählt
+            }
+        }
+        return ['neu' => $neu] + redigier_stand($db, $n);
+    }
+
+    /** Für die Redaktion: wie viel diesen (oder einen anderen) Monat schon redigiert wurde, pro Person, und der Verlauf */
+    public function redigierUebersicht(mixed $monat = null): array
+    {
+        $db = $this->db();
+        brauche($this->ctx, 'redaktion');
+        pruefe(einstellungen_laden($db)['redigier_zaehler'], 'Der Redigier-Zähler ist noch nicht eingeschaltet (Admin → Einstellungen).', 403);
+        $m = s($monat) ?: substr(heute_iso(), 0, 7);
+        pruefe(preg_match('/^20\d{2}-(0[1-9]|1[0-2])$/', $m) === 1, 'Ungültiger Monat.');
+        return redigier_uebersicht($db, $m);
+    }
+
+    /** Persönlicher Schlüssel für die Chrome-Erweiterung: gibt es einen, wann zuletzt benutzt? */
+    public function redigierSchluessel(): array
+    {
+        $n = $this->redigierer();
+        $z = zeile($this->db(), "select erstellt_am, zuletzt_am from api_schluessel where nutzer_id = ? and zweck = 'redigieren'", [$n['id']]);
+        return ['vorhanden' => (bool) $z, 'erstellt_am' => $z['erstellt_am'] ?? null, 'zuletzt_am' => $z['zuletzt_am'] ?? null];
+    }
+
+    /** Neuen Schlüssel erstellen (der alte gilt dann nicht mehr) – wird nur jetzt einmal angezeigt */
+    public function redigierSchluesselErstellen(): array
+    {
+        $db = $this->db();
+        $n = $this->redigierer();
+        $schluessel = 'hn_' . rtrim(strtr(base64_encode(random_bytes(30)), '+/', '-_'), '=');
+        transaktion($db, function () use ($db, $n, $schluessel) {
+            q($db, "delete from api_schluessel where nutzer_id = ? and zweck = 'redigieren'", [$n['id']]);
+            q($db, 'insert into api_schluessel (id, nutzer_id, hash, zweck, erstellt_am) values (?, ?, ?, ?, ?)',
+                [neue_id(), $n['id'], token_hash($schluessel), 'redigieren', jetzt()]);
+        });
+        $this->log('info', 'konto', 'Schlüssel für die Chrome-Erweiterung erstellt');
+        return ['schluessel' => $schluessel, 'adresse' => aktuelle_adresse()];
+    }
+
+    public function redigierSchluesselWiderrufen(): bool
+    {
+        $n = ich($this->ctx);
+        q($this->db(), "delete from api_schluessel where nutzer_id = ? and zweck = 'redigieren'", [$n['id']]);
+        return true;
+    }
+
     /** Stand einer gerade eingereihten Mail (Zugang, Einladung): unterwegs, gesendet oder fehler (mit Meldung) */
     public function mailStatus(mixed $id = null): array
     {
@@ -1469,9 +1576,12 @@ final class Honorare
             $erinnerung = filter_var($d['erinnerung_tage'], FILTER_VALIDATE_INT);
             pruefe($erinnerung !== false && $erinnerung >= 0 && $erinnerung <= 31, 'Erinnerung: bitte 0 bis 31 Tage vor Monatsende angeben (0 = aus).');
         }
+        // Redigier-Zähler: erst zum Testen, auf dem echten Server ausgeschaltet, bis der Admin ihn einschaltet
+        $zaehler = array_key_exists('redigier_zaehler', $d) ? $d['redigier_zaehler'] === true : einstellungen_laden($db)['redigier_zaehler'];
         $speichere = fn ($schluessel, $wert) => upsert($db, 'einstellungen', ['schluessel' => $schluessel, 'wert' => json_text($wert)], ['schluessel']);
-        transaktion($db, function () use ($speichere, $e, $kontakt, $saetze, $betreiber, $vorlagen, $erinnerung) {
+        transaktion($db, function () use ($speichere, $e, $kontakt, $saetze, $betreiber, $vorlagen, $erinnerung, $zaehler) {
             $speichere('erinnerung_tage', $erinnerung);
+            $speichere('redigier_zaehler', $zaehler);
             $speichere('betreiber', $betreiber);
             $speichere('rueckgabe_vorlagen', $vorlagen);
             $speichere('empfaenger', [
@@ -2151,4 +2261,52 @@ function admin_anlegen(PDO $db, string $email, string $vorname = '', string $nac
     $passwort = startpasswort();
     konto_einfuegen($db, $vorname ?: 'Admin', $nachname, $email, ['admin'], passwort_hash($passwort));
     return ['email' => $email, 'passwort' => $passwort];
+}
+
+/** Mein Stand diesen Monat: Anzahl, heute, die letzten Einträge, Betrag (Anzahl × Satz) */
+function redigier_stand(PDO $db, array $n): array
+{
+    $monat = substr(heute_iso(), 0, 7);
+    $satz = (float) (einstellungen_laden($db)['honorarsaetze']['college']['redigieren'] ?? SATZ_STANDARD['redigieren']);
+    $anzahl = (int) wert($db, 'select count(*) from redigier_eintraege where nutzer_id = ? and monat = ?', [$n['id'], $monat]);
+    $letzte = zeilen($db, 'select titel, artikel_id, quelle, erstellt_am from redigier_eintraege where nutzer_id = ? and monat = ? order by erstellt_am desc limit 8',
+        [$n['id'], $monat]);
+    $heute = (int) wert($db, 'select count(*) from redigier_eintraege where nutzer_id = ? and erstellt_am >= ?', [$n['id'], zeit_iso(strtotime('today'))]);
+    return ['monat' => $monat, 'anzahl' => $anzahl, 'heute' => $heute, 'satz' => $satz, 'betrag' => round($anzahl * $satz, 2), 'letzte' => $letzte];
+}
+
+/** Übersicht für die Redaktion: pro Person (alle mit Redigier-Berechtigung), Summe, und die letzten 12 Monate */
+function redigier_uebersicht(PDO $db, string $monat): array
+{
+    $satz = (float) (einstellungen_laden($db)['honorarsaetze']['college']['redigieren'] ?? SATZ_STANDARD['redigieren']);
+    $gezaehlt = [];
+    foreach (zeilen($db, 'select nutzer_id, count(*) anzahl, max(erstellt_am) zuletzt, sum(case when quelle = \'erweiterung\' then 1 else 0 end) automatisch
+            from redigier_eintraege where monat = ? group by nutzer_id', [$monat]) as $z) $gezaehlt[$z['nutzer_id']] = $z;
+    // schon abgerechnet: Redigieren-Positionen in Abrechnungen dieses Monats (nicht zurückgegeben)
+    $abgerechnet = [];
+    foreach (zeilen($db, "select n.autor_id, coalesce(sum(np.anzahl), 0) anzahl from note_positionen np join noten n on n.id = np.note_id
+            where np.kategorie = 'redigieren' and n.monat = ? and n.status <> 'abgelehnt' group by n.autor_id", [$monat]) as $z) {
+        $abgerechnet[$z['autor_id']] = (int) $z['anzahl'];
+    }
+    $personen = [];
+    foreach (zeilen($db, 'select * from nutzer where aktiv = 1') as $z) {
+        $n = nutzer_aus_zeile($z);
+        if (!darf_redigieren($n) && !isset($gezaehlt[$n['id']])) continue;
+        $g = $gezaehlt[$n['id']] ?? null;
+        $anzahl = (int) ($g['anzahl'] ?? 0);
+        $personen[] = ['nutzer_id' => $n['id'], 'name' => anzeigename($n), 'anzahl' => $anzahl, 'betrag' => round($anzahl * $satz, 2),
+            'automatisch' => (int) ($g['automatisch'] ?? 0), 'zuletzt' => $g['zuletzt'] ?? null, 'abgerechnet' => $abgerechnet[$n['id']] ?? null];
+    }
+    usort($personen, fn ($a, $b) => $b['anzahl'] <=> $a['anzahl'] ?: strcmp($a['name'], $b['name']));
+    // Verlauf: 12 Monate bis zum gewählten
+    $monate = [];
+    $t = strtotime($monat . '-01');
+    for ($i = 11; $i >= 0; $i--) $monate[] = date('Y-m', strtotime("-$i month", $t));
+    $proMonat = [];
+    foreach (zeilen($db, 'select monat, count(*) anzahl, count(distinct nutzer_id) personen from redigier_eintraege where monat >= ? and monat <= ? group by monat',
+        [$monate[0], $monat]) as $z) $proMonat[$z['monat']] = $z;
+    $verlauf = array_map(fn ($m) => ['monat' => $m, 'anzahl' => (int) ($proMonat[$m]['anzahl'] ?? 0), 'personen' => (int) ($proMonat[$m]['personen'] ?? 0)], $monate);
+    $summe = array_sum(array_column($personen, 'anzahl'));
+    return ['monat' => $monat, 'satz' => $satz, 'personen' => $personen, 'summe' => ['anzahl' => $summe, 'betrag' => round($summe * $satz, 2)],
+        'verlauf' => $verlauf, 'stand' => jetzt()];
 }
