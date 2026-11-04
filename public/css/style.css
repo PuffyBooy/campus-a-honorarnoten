@@ -840,3 +840,12 @@ body.nur-fenster .inhalt { min-height: 100vh; padding-top: 1rem; }
 .rl-fenster .kennzahl { padding: .6rem .75rem; }
 .rl-fenster .kennzahl strong { font-size: 1.2rem; }
 .anleitung li { margin: .35rem 0; }
+.melden { text-align: center; }
+.melden-symbol { font-size: 2.5rem; margin: 0; color: var(--erfolg); }
+.melden h1 { margin: .25rem 0 .5rem; }
+body.nur-fenster .inhalt:has(.melden) { padding-top: .5rem; }
+.lesezeichen-knopf { cursor: grab; border-style: dashed; }
+.kopier-zeile { display: flex; gap: .5rem; }
+.kopier-zeile input { flex: 1; min-width: 0; margin: 0; }
+.befehl-text { width: 100%; font-size: .78rem; white-space: pre-wrap; }
+#ew-karte h3 { margin: 1rem 0 .3rem; font-size: 1rem; }

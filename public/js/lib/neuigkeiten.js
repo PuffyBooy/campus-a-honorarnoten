@@ -2,6 +2,13 @@
 // Neue Einträge oben anfügen (id = Datum, bei mehreren am Tag mit Buchstaben).
 export const NEUIGKEITEN = [
   {
+    id: '2026-11-04b', datum: '2026-11-04', titel: 'Redigier-Zähler: mehr Wege zum automatischen Zählen', nur: 'redigier_zaehler',
+    punkte: [
+      ['redigieren', 'Mein Profil → „Automatisch zählen“: Lesezeichen „＋1 redigiert“ für jeden Browser (auch Safari und iPhone), die Chrome-Erweiterung oder ein persönlicher Schlüssel für Claude, Kurzbefehle und eigene Programme.'],
+      ['redigieren', 'Kein Klick geht verloren: Der Zähler merkt sich jeden Klick sofort im Gerät und schickt ihn nach – auch wenn du die Seite gleich verlässt oder kein Netz hast.'],
+    ],
+  },
+  {
     // nur, wo der Admin den Zähler eingeschaltet hat (noch im Test)
     id: '2026-11-04a', datum: '2026-11-04', titel: 'Redigieren mitzählen (Test)', nur: 'redigier_zaehler',
     punkte: [

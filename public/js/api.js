@@ -5,6 +5,9 @@ import { anfrageGemessen, serverTiming } from './lib/messung.js';
 
 class Fehler extends Error {}
 
+// kleine Anfragen, die auch dann ankommen sollen, wenn die Seite gerade geschlossen wird (Redigier-Zähler)
+const BIS_ZUM_ENDE = new Set(['redigiertZaehlen', 'redigiertRueckgaengig', 'redigiertMelden']);
+
 async function aufruf(name, ...args) {
   let res;
   const t0 = performance.now();
@@ -12,11 +15,12 @@ async function aufruf(name, ...args) {
     res = await fetch(`api/${name}`, {
       method: 'POST',
       credentials: 'same-origin',
+      keepalive: BIS_ZUM_ENDE.has(name),
       headers: { 'Content-Type': 'application/json', 'X-Honorare': '1' },
       body: JSON.stringify({ args }),
     });
   } catch {
-    throw new Fehler('Keine Verbindung zum Server. Bitte Internetverbindung prüfen.');
+    throw Object.assign(new Fehler('Keine Verbindung zum Server. Bitte Internetverbindung prüfen.'), { offline: true });
   }
   let body = {};
   try { body = await res.json(); } catch { /* keine JSON-Antwort */ }
@@ -136,6 +140,7 @@ export const nummerFestlegen = f('nummerFestlegen');
 export const mailStatus = f('mailStatus');
 export const redigiertZaehlen = f('redigiertZaehlen');
 export const redigiertRueckgaengig = f('redigiertRueckgaengig');
+export const redigiertMelden = f('redigiertMelden');
 export const redigierStand = f('redigierStand');
 export const redigierUebersicht = f('redigierUebersicht');
 export const redigierSchluessel = f('redigierSchluessel');

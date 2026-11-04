@@ -92,7 +92,7 @@ export async function render(el, { store, nutzer, navigate, neuLaden, istDemo })
           <p><button class="btn abstand-oben" type="submit">Auswahl speichern</button></p>
         </form>` : ''}
         ${darfRedigieren(nutzer) && nutzer.redigier_zaehler && !nutzer.ansicht_von
-          ? '<section class="karte" id="ew-karte" aria-live="polite"><h2>Chrome-Erweiterung</h2><p class="laden">…</p></section>' : ''}
+          ? '<section class="karte" id="ew-karte" aria-live="polite"><h2>Automatisch zählen</h2><p class="laden">…</p></section>' : ''}
         <section class="karte" id="app-karte" aria-live="polite"><h2>Handy-App und Push-Mitteilungen</h2><p class="laden">…</p></section>
         <form class="karte" id="pw-form" novalidate>
           <h2>Passwort ändern</h2>

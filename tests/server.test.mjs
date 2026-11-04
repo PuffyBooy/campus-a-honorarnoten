@@ -886,6 +886,14 @@ test('Redigieren mitzählen: Knopf, Chrome-Erweiterung mit Schlüssel, Übersich
   assert.equal(st.heute, 2);
   assert.equal(st.betrag, Math.round(2 * st.satz * 100) / 100);
   assert.equal((await k.anna.aufruf('redigiertZaehlen')).status, 403, 'ohne Redigier-Berechtigung');
+  // vom Gerät vorgemerkter Klick: kommt er (nach Verbindungsabbruch) zweimal an, zählt er einmal
+  st = await rudi.ok('redigiertZaehlen', 'knopf', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6');
+  assert.equal(st.anzahl, 3);
+  st = await rudi.ok('redigiertZaehlen', 'knopf', 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6');
+  assert.equal(st.anzahl, 3, 'derselbe Klick nicht doppelt');
+  assert.match((await rudi.aufruf('redigiertZaehlen', 'knopf', 'x y')).fehler, /Ungültige Kennung/);
+  st = await rudi.ok('redigiertRueckgaengig');
+  assert.equal(st.anzahl, 2);
 
   // Chrome-Erweiterung: persönlicher Schlüssel statt Cookie, jeder Artikel zählt pro Monat einmal
   assert.equal((await rudi.ok('redigierSchluessel')).vorhanden, false);

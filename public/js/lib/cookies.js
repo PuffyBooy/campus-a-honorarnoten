@@ -9,6 +9,7 @@ const KOMFORT_PREFIX = 'campus-a-honorare:generator';
 export const COOKIES = [
   { name: 'hn_sitzung', art: 'Cookie', notwendig: true, zweck: 'Hält dich angemeldet. Wird beim Abmelden gelöscht, läuft nach 14 Tagen ab.' },
   { name: 'Cookie-Auswahl', art: 'Browser-Speicher', notwendig: true, zweck: 'Merkt sich deine Auswahl auf diesem Gerät.' },
+  { name: 'Redigier-Zähler', art: 'Browser-Speicher', notwendig: true, zweck: 'Nur wer redigiert: Klicks auf „＋1 redigiert“, die noch nicht beim Server angekommen sind (z. B. ohne Netz). Werden gelöscht, sobald sie übertragen sind.' },
   { name: 'Komfort', art: 'Browser-Speicher', notwendig: false, zweck: 'Merkt den Entwurf und die Nummern der Externen Honorarnote auf diesem Gerät, damit nichts verloren geht. Ohne Zustimmung bleibt der Entwurf nur, bis du die Seite schließt.' },
 ];
 

@@ -408,7 +408,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
   // ---- Redigier-Zähler: Anzahl dieses Monats als Redigier-Leistung ins Formular übernehmen
   const zaehlerKarte = el.querySelector('#zaehler');
   const zaehler = zaehlerKarte ? zaehlerBinden(zaehlerKarte, {
-    store, stand: zaehlStand,
+    store, stand: zaehlStand, nutzerId: nutzer.id,
     uebernehmen: (st) => {
       form.kategorie.value = 'redigieren';
       auswahlAnpassen();

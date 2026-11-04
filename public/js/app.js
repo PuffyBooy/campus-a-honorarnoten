@@ -17,6 +17,7 @@ import * as passwortSeite from './views/passwort.js';
 import * as neuSeite from './views/neu.js';
 import * as redigierenLive from './views/redigieren.js';
 import * as zaehlen from './views/zaehlen.js';
+import * as melden from './views/melden.js';
 import { sucheOeffnen } from './lib/suche.js';
 import { NEUESTE, ungesehen } from './lib/neuigkeiten.js';
 import { hinweisOffen, zustimmungHtml } from './lib/rechtliches.js';
@@ -50,6 +51,9 @@ const ROUTEN = [
   { pfad: 'redigieren/:ansicht', view: redigierenLive, rolle: ['redaktion', 'admin'], nur: (n) => n.redigier_zaehler },
   { pfad: 'zaehlen', view: zaehlen, rolle: ['redigieren'], nur: (n) => n.redigier_zaehler },
   { pfad: 'zaehlen/:aktion', view: zaehlen, rolle: ['redigieren'], nur: (n) => n.redigier_zaehler },
+  // vom Lesezeichen „＋1 redigiert“ (kleines Fenster aus dem CMS)
+  { pfad: 'melden/:id/:titel', view: melden, rolle: ['redigieren'], nur: (n) => n.redigier_zaehler },
+  { pfad: 'melden/:id', view: melden, rolle: ['redigieren'], nur: (n) => n.redigier_zaehler },
   { pfad: 'zahlung', view: zahlung, rolle: ['buchhaltung', 'admin'], titel: 'Buchhaltung' },
   { pfad: 'zahlung/:tab', view: zahlung, rolle: ['buchhaltung', 'admin'] },
   { pfad: 'admin', view: admin, rolle: ['admin'], titel: 'Admin' },
@@ -313,7 +317,7 @@ async function render({ schnell = false } = {}) {
   const lauf = ++renderZaehler;
   const pfad = aktuellerPfad();
   // „Redigieren live“ als eigenes kleines Fenster: ohne Kopfzeile, Menü und Fußzeile
-  document.body.classList.toggle('nur-fenster', pfad === 'redigieren/fenster');
+  document.body.classList.toggle('nur-fenster', pfad === 'redigieren/fenster' || pfad.startsWith('melden/'));
   // Innerhalb derselben Seite wechseln (z. B. zur nächsten Abrechnung in der Redaktion): nur den Teil austauschen
   const t = schnell === true && zuletzt && pfad ? finde(pfad) : null;
   wechselStart(pfad); // Messung für die Kommandozentrale
@@ -409,7 +413,9 @@ async function render({ schnell = false } = {}) {
 
   if (!nutzer) {
     login.render(main, { store, istDemo: IST_DEMO, recht, nachAnmeldung: (ziel) => {
-      history.replaceState(null, '', ziel ? '#/' + ziel : location.pathname + location.search);
+      // aus dem Lesezeichen „＋1 redigiert“ gekommen: nach dem Anmelden gleich zählen
+      const bleiben = /^(melden|zaehlen)(\/|$)/.test(pfad);
+      history.replaceState(null, '', ziel ? '#/' + ziel : bleiben ? location.hash : location.pathname + location.search);
       render();
     } });
     return;
