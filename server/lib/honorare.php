@@ -1134,12 +1134,27 @@ final class Honorare
     }
 
     /** Einen redigierten Text dazuzählen (Knopf in „Mein Monat“ oder Kurzbefehl am Handy) */
-    public function redigiertZaehlen(mixed $quelle = 'knopf'): array
+    /**
+     * Einen Text zählen. $vorgang: Kennung vom Gerät (zufällig) – wird ein Klick nach einem Verbindungsabbruch
+     * nochmal geschickt, zählt er trotzdem nur einmal.
+     */
+    public function redigiertZaehlen(mixed $quelle = 'knopf', mixed $vorgang = null): array
     {
         $db = $this->db();
         $n = $this->redigierer();
-        q($db, 'insert into redigier_eintraege (id, nutzer_id, monat, quelle, erstellt_am) values (?, ?, ?, ?, ?)',
-            [neue_id(), $n['id'], substr(heute_iso(), 0, 7), in_array($quelle, ['knopf', 'kurzbefehl'], true) ? $quelle : 'knopf', jetzt()]);
+        $id = neue_id();
+        if ($vorgang !== null) {
+            pruefe(is_string($vorgang) && preg_match('/^[A-Za-z0-9_-]{8,34}$/', $vorgang), 'Ungültige Kennung.');
+            $id = 'k_' . $vorgang;
+            if (wert($db, 'select 1 from redigier_eintraege where id = ?', [$id])) return redigier_stand($db, $n);
+        }
+        try {
+            q($db, 'insert into redigier_eintraege (id, nutzer_id, monat, quelle, erstellt_am) values (?, ?, ?, ?, ?)',
+                [$id, $n['id'], substr(heute_iso(), 0, 7), in_array($quelle, ['knopf', 'kurzbefehl'], true) ? $quelle : 'knopf', jetzt()]);
+        } catch (PDOException $e) {
+            // derselbe Vorgang kam gleichzeitig zweimal an: zählt einmal
+            if ($vorgang === null || !wert($db, 'select 1 from redigier_eintraege where id = ?', [$id])) throw $e;
+        }
         return redigier_stand($db, $n);
     }
 

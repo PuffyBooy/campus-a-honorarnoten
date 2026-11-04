@@ -161,7 +161,9 @@ export function datenschutzHtml(r, { istDemo = false } = {}) {
       <li><strong>Notwendig</strong> (ohne Einwilligung, § 165 Abs. 3 TKG 2021): das Cookie <code>hn_sitzung</code>,
         damit du angemeldet bleibst (wird beim Abmelden gelöscht, läuft nach 14 Tagen ab), und ein Eintrag im
         Browser-Speicher, der sich deine Cookie-Auswahl merkt. Beim Einrichten der App durch den Admin kommt
-        kurz das Cookie <code>hn_einrichten</code> (Schutz des Einrichtungsformulars) dazu.</li>
+        kurz das Cookie <code>hn_einrichten</code> (Schutz des Einrichtungsformulars) dazu. Wer redigiert und den
+        Redigier-Zähler benutzt: Klicks, die noch nicht beim Server angekommen sind (z. B. ohne Netz), bleiben bis zur
+        Übertragung im Browser-Speicher.</li>
       <li><strong>Optional „Komfort“</strong> (nur mit deiner Einwilligung, Art. 6 Abs. 1 lit. a DSGVO): Der Entwurf
         der Externen Honorarnote und deren Nummern werden im Browser-Speicher dieses Geräts gemerkt. Die Daten
         verlassen dein Gerät dabei nicht.</li>

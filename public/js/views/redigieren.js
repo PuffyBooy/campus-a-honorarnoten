@@ -60,8 +60,7 @@ function personenHtml(u) {
         <tr>
           <td><strong>${esc(p.name)}</strong>
             <svg class="anteil" viewBox="0 0 100 4" preserveAspectRatio="none" aria-hidden="true"><rect class="anteil-grund" width="100" height="4" rx="2"/>
-              <rect class="anteil-wert" width="${Math.max(p.anzahl ? 2 : 0, Math.round((p.anzahl / max) * 100))}" height="4" rx="2"/></svg>
-            ${p.automatisch ? `<span class="klein">davon ${p.automatisch} automatisch</span>` : ''}</td>
+              <rect class="anteil-wert" width="${Math.max(p.anzahl ? 2 : 0, Math.round((p.anzahl / max) * 100))}" height="4" rx="2"/></svg></td>
           <td class="rechts gross-zahl">${p.anzahl}</td>
           <td class="rechts">${esc(formatEuro(p.betrag))}</td>
           <td class="nur-breit klein">${p.zuletzt ? esc(formatZeitpunkt(p.zuletzt)) : '–'}</td>

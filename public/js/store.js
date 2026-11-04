@@ -939,9 +939,13 @@ function redigierStandVon(n) {
   };
 }
 
-export function redigiertZaehlen(quelle = 'knopf') {
+export function redigiertZaehlen(quelle = 'knopf', vorgang = null) {
   const n = redigierer();
-  db.redigieren.push({ id: id(), nutzer_id: n.id, monat: monatJetzt(), artikel_id: null, titel: '', quelle: quelle === 'kurzbefehl' ? quelle : 'knopf', erstellt_am: new Date().toISOString() });
+  if (vorgang != null) {
+    pruefe(/^[A-Za-z0-9_-]{8,34}$/.test(String(vorgang)), 'Ungültige Kennung.');
+    if (db.redigieren.some((e) => e.id === `k_${vorgang}`)) return redigierStandVon(n); // schon gezählt
+  }
+  db.redigieren.push({ id: vorgang != null ? `k_${vorgang}` : id(), nutzer_id: n.id, monat: monatJetzt(), artikel_id: null, titel: '', quelle: quelle === 'kurzbefehl' ? quelle : 'knopf', erstellt_am: new Date().toISOString() });
   speichern();
   return redigierStandVon(n);
 }
