@@ -2,6 +2,15 @@
 // Neue Einträge oben anfügen (id = Datum, bei mehreren am Tag mit Buchstaben).
 export const NEUIGKEITEN = [
   {
+    // nur, wo der Admin den Zähler eingeschaltet hat (noch im Test)
+    id: '2026-11-04a', datum: '2026-11-04', titel: 'Redigieren mitzählen (Test)', nur: 'redigier_zaehler',
+    punkte: [
+      ['redigieren', 'In „Mein Monat“: nach jedem redigierten Text auf „＋1 redigiert“ tippen – der Stapel wächst mit. Am Monatsende mit einem Klick als Leistung übernehmen.'],
+      ['redigieren', 'Am Handy: Seite „Zähler“ mit großem Knopf; in der installierten App beim langen Drücken aufs Symbol „＋1 redigiert“.'],
+      ['redaktion', 'Neue Seite „Redigieren live“: wie viele Texte diesen Monat schon redigiert wurden, je Person, mit Verlauf über 12 Monate – auch als kleines eigenes Fenster.'],
+    ],
+  },
+  {
     id: '2026-10-30c', datum: '2026-10-30', titel: 'Schneller: Seitenwechsel, Start und Einladen',
     punkte: [
       ['', 'Seitenwechsel brauchen nur noch eine Runde zum Server statt zwei bis drei; die App startet schneller (alle Programmdateien auf einmal).'],
@@ -78,7 +87,7 @@ const passt = (rolle, rollen) => !rolle || rollen.includes(rolle) || (rolle !== 
 
 /** Einträge mit den Punkten, die für dieses Konto gelten */
 export function neuigkeitenFuer(nutzer) {
-  return NEUIGKEITEN.map((e) => ({ ...e, punkte: e.punkte.filter(([r]) => passt(r, nutzer.rollen)).map(([, t]) => t) }))
+  return NEUIGKEITEN.filter((e) => !e.nur || nutzer[e.nur]).map((e) => ({ ...e, punkte: e.punkte.filter(([r]) => passt(r, nutzer.rollen)).map(([, t]) => t) }))
     .filter((e) => e.punkte.length);
 }
 

@@ -8,6 +8,7 @@ import { CAMPUS_A_PROFIL, campusSeiten, campusHolen } from './campus-fixtures.mj
 
 let php;
 let basis;
+const basis_url = () => basis;
 
 before(async () => {
   php = await phpServerStarten({ campusHolen, envZusatz: { HONORARE_PUSH_TEST: '1' } });
@@ -854,6 +855,76 @@ test('Redigieren (campus a college): Kategorie wie Kolumne, Anzahl Texte × Satz
   await k.rita.ok('ablehnen', note.id, 'Bitte Zeitraum angeben');
   const [zurueck] = await ida.ok('meineLeistungen');
   assert.deepEqual([zurueck.kategorie, zurueck.anzahl, zurueck.betrag, zurueck.zurueck_grund], ['redigieren', 4, 10, 'Bitte Zeitraum angeben']);
+});
+
+test('Redigieren mitzählen: Knopf, Chrome-Erweiterung mit Schlüssel, Übersicht der Redaktion – erst nach Einschalten', async () => {
+  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Rudi', nachname: 'Rotstift', email: 'rudi@example.org', rollen: ['redigieren'] });
+  const rudi = client();
+  await anmeldenMitNeuemPasswort(rudi, 'rudi@example.org', z.passwort);
+  await rudi.ok('profilSpeichern', {
+    vorname: 'Rudi', nachname: 'Rotstift', email: 'rudi@example.org', strasse: 'Weg 5', plz_ort: '1010 Wien',
+    kontoinhaber: 'Rudi Rotstift', iban: AT_IBAN, campus_a_profil: `https://campus-a.at/profil/${CAMPUS_A_PROFIL}`,
+  });
+  // auf dem echten Server zuerst aus
+  const e = await k.admin.ok('einstellungen');
+  assert.equal(e.redigier_zaehler, false);
+  assert.match((await rudi.aufruf('redigiertZaehlen')).fehler, /noch nicht eingeschaltet/);
+  assert.equal((await rudi.ok('aktuellerNutzer')).redigier_zaehler, undefined, 'aus: kein Menüpunkt');
+  assert.equal((await k.rita.aufruf('redigierUebersicht')).status, 403);
+  const basis = { empfaenger: e.empfaenger, datenschutzKontakt: e.datenschutzKontakt, honorarsaetze: e.honorarsaetze };
+  await k.admin.ok('einstellungenSpeichern', { ...basis, redigier_zaehler: true });
+  assert.equal((await rudi.ok('einstellungen')).redigier_zaehler, true);
+  // fürs Menü: nur wer redigiert, prüft oder Admin ist, erfährt, dass er an ist
+  assert.equal((await rudi.ok('aktuellerNutzer')).redigier_zaehler, true);
+  assert.equal((await k.rita.ok('aktuellerNutzer')).redigier_zaehler, true);
+  assert.equal((await k.anna.ok('aktuellerNutzer')).redigier_zaehler, undefined);
+
+  // Knopf: zählen und rückgängig
+  for (let i = 0; i < 3; i++) await rudi.ok('redigiertZaehlen');
+  let st = await rudi.ok('redigiertRueckgaengig');
+  assert.equal(st.anzahl, 2);
+  assert.equal(st.heute, 2);
+  assert.equal(st.betrag, Math.round(2 * st.satz * 100) / 100);
+  assert.equal((await k.anna.aufruf('redigiertZaehlen')).status, 403, 'ohne Redigier-Berechtigung');
+
+  // Chrome-Erweiterung: persönlicher Schlüssel statt Cookie, jeder Artikel zählt pro Monat einmal
+  assert.equal((await rudi.ok('redigierSchluessel')).vorhanden, false);
+  const { schluessel } = await rudi.ok('redigierSchluesselErstellen');
+  assert.match(schluessel, /^hn_[\w-]{30,}$/);
+  const melden = (key, name = 'redigiertMelden', args = ['4311', 'Bettwäsche, Geschirr, Müll']) => fetch(`${basis_url()}/api/${name}`, {
+    method: 'POST', body: JSON.stringify({ args }),
+    headers: { 'Content-Type': 'application/json', 'X-Honorare': '1', 'X-Honorare-Schluessel': key, Origin: 'chrome-extension://abcdefgh' },
+  }).then(async (r) => ({ status: r.status, ...(await r.json()) }));
+  let r = await melden(schluessel);
+  assert.equal(r.status, 200);
+  assert.deepEqual([r.daten.neu, r.daten.anzahl], [true, 3]);
+  r = await melden(schluessel);
+  assert.deepEqual([r.daten.neu, r.daten.anzahl], [false, 3], 'derselbe Artikel nicht doppelt');
+  assert.equal(r.daten.letzte[0].artikel_id, '4311');
+  assert.equal((await melden(schluessel, 'redigierStand', [])).daten.anzahl, 3);
+  assert.equal((await melden('hn_falsch'.padEnd(40, 'x'))).status, 401);
+  assert.equal((await melden(schluessel, 'meineNoten', [])).status, 403, 'der Schlüssel gilt nur fürs Mitzählen');
+  assert.match((await melden(schluessel, 'redigiertMelden', ['../x'])).fehler, /Artikel-Nummer/);
+  assert.ok((await rudi.ok('redigierSchluessel')).zuletzt_am, 'zuletzt benutzt');
+
+  // Redaktion: Übersicht pro Person, Summe, Verlauf über 12 Monate
+  assert.equal((await k.anna.aufruf('redigierUebersicht')).status, 403);
+  const u = await k.rita.ok('redigierUebersicht');
+  const p = u.personen.find((x) => x.name === 'Rudi Rotstift');
+  assert.deepEqual([p.anzahl, p.automatisch], [3, 1]);
+  assert.ok(u.personen.some((x) => x.name === 'Nina Nachweis' || x.name === 'Ida Lektor'), 'auch wer noch nichts gezählt hat');
+  assert.ok(u.summe.anzahl >= 3);
+  assert.equal(u.verlauf.length, 12);
+  assert.equal(u.verlauf.at(-1).monat, u.monat);
+  assert.ok(u.verlauf.at(-1).anzahl >= 3);
+  assert.match((await k.rita.aufruf('redigierUebersicht', '2026-13')).fehler, /Monat/);
+
+  // Schlüssel zurückziehen, Zähler wieder aus
+  await rudi.ok('redigierSchluesselWiderrufen');
+  assert.equal((await melden(schluessel)).status, 401);
+  await k.admin.ok('einstellungenSpeichern', { ...basis, redigier_zaehler: false });
+  assert.match((await rudi.aufruf('redigierStand')).fehler, /noch nicht eingeschaltet/);
+  await k.admin.ok('nutzerLoeschen', (await k.admin.ok('nutzerListe')).find((n) => n.email === 'rudi@example.org').id);
 });
 
 test('Redigieren: Nachweis (PDF, Word …) anhängen, Redaktion sieht ihn, nur beim Redigieren', async () => {

@@ -66,7 +66,8 @@ function antworten(int $status, array $daten): void
     } else {
         while (ob_get_level() > 0) ob_end_flush();
         flush();
-    }    Messung::$antwortMs = Messung::seitBeginn();
+    }
+    Messung::$antwortMs = Messung::seitBeginn();
 }
 
 /**
@@ -86,8 +87,12 @@ function herkunft_ok(): bool
 function api(): array
 {
     if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') return [405, ['fehler' => 'Nur POST erlaubt.']];
-    if (!herkunft_ok()) return [403, ['fehler' => 'Anfrage abgelehnt.']];
     $name = (string) ($_GET['f'] ?? '');
+    // Chrome-Erweiterung „Redigieren mitzählen“: meldet sich mit einem persönlichen Schlüssel statt mit dem Cookie
+    // (kommt von einer fremden Herkunft, braucht aber keinen Cookie – kein CSRF möglich)
+    $schluessel = (string) ($_SERVER['HTTP_X_HONORARE_SCHLUESSEL'] ?? '');
+    $mitSchluessel = $schluessel !== '' && in_array($name, Honorare::MIT_SCHLUESSEL, true);
+    if (!($mitSchluessel ? ($_SERVER['HTTP_X_HONORARE'] ?? '') === '1' : herkunft_ok())) return [403, ['fehler' => 'Anfrage abgelehnt.']];
     if (!in_array($name, Honorare::FUNKTIONEN, true)) return [404, ['fehler' => 'Unbekannte Funktion.']];
 
     $max = match ($name) { 'pdfMailen' => MAX_BODY_PDF, 'nachweisHochladen' => MAX_BODY_NACHWEIS, default => MAX_BODY };
@@ -114,8 +119,15 @@ function api(): array
         return [503, ['fehler' => 'Keine Verbindung zur Datenbank. Bitte die Zugangsdaten prüfen (' . aktuelle_adresse() . 'einrichten.php).']];
     }
     $ip = (string) ($_SERVER['REMOTE_ADDR'] ?? 'unbekannt');
-    $token = isset($_COOKIE[COOKIE]) && is_string($_COOKIE[COOKIE]) ? $_COOKIE[COOKIE] : null;
-    $nutzerId = sitzung_pruefen($db, $token);
+    if ($mitSchluessel) {
+        if (!versuch_erlaubt($db, "schluessel:$ip", 600, 900)) return [429, ['fehler' => 'Zu viele Anfragen. Bitte später erneut versuchen.']];
+        $token = null;
+        $nutzerId = schluessel_pruefen($db, $schluessel);
+        if (!$nutzerId) return [401, ['fehler' => 'Der Schlüssel ist ungültig oder wurde zurückgezogen. Bitte im Profil einen neuen erstellen.']];
+    } else {
+        $token = isset($_COOKIE[COOKIE]) && is_string($_COOKIE[COOKIE]) ? $_COOKIE[COOKIE] : null;
+        $nutzerId = sitzung_pruefen($db, $token);
+    }
     $nutzer = $nutzerId ? nutzer_laden($db, $nutzerId) : null;
     if ($nutzer && !$nutzer['aktiv']) $nutzer = null;
     if (!$nutzer && !in_array($name, Honorare::OEFFENTLICH, true)) return [401, ['fehler' => 'Bitte melde dich an.', 'abgemeldet' => true]];

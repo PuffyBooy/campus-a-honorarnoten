@@ -215,6 +215,7 @@ export function aktuellerNutzer() {
   const sicht = nutzerSicht(n);
   if (sicht?.rollen.includes('admin') && wartungLaden().an) sicht.wartung = true;
   if (sicht && ansichtAktiv()) sicht.ansicht_von = anzeigename(echterNutzer());
+  if (sicht && ['redigieren', 'redaktion', 'admin'].some((r) => sicht.rollen.includes(r)) && einstellungen().redigier_zaehler) sicht.redigier_zaehler = true;
   return sicht;
 }
 
@@ -914,6 +915,92 @@ export function naechsteNummer(n = ich(), jahr = Number(heuteIso().slice(0, 4)))
     nummer: honorarnoteNummer({ vorname: n.vorname, nachname: n.nachname, jahr, laufendeNummer: lfd }) };
 }
 
+// ------------------------------------------------------------------ Redigieren mitzählen
+
+const monatJetzt = () => heuteIso().slice(0, 7);
+function redigierer() {
+  const n = ich();
+  pruefe(einstellungen().redigier_zaehler, 'Der Redigier-Zähler ist noch nicht eingeschaltet (Admin → Einstellungen).');
+  pruefe(n.rollen.includes('redigieren'), 'Redigieren ist für dein Konto nicht freigeschaltet.');
+  db.redigieren ??= [];
+  return n;
+}
+const redigierSatz = () => einstellungen().honorarsaetze?.college?.redigieren ?? 2;
+
+function redigierStandVon(n) {
+  const monat = monatJetzt();
+  const meine = db.redigieren.filter((e) => e.nutzer_id === n.id && e.monat === monat).sort((a, b) => b.erstellt_am.localeCompare(a.erstellt_am));
+  const heute = new Date(); heute.setHours(0, 0, 0, 0);
+  const satz = redigierSatz();
+  return {
+    monat, anzahl: meine.length, heute: meine.filter((e) => new Date(e.erstellt_am) >= heute).length, satz,
+    betrag: Math.round(meine.length * satz * 100) / 100,
+    letzte: kopie(meine.slice(0, 8).map(({ titel, artikel_id: aid, quelle, erstellt_am: am }) => ({ titel, artikel_id: aid, quelle, erstellt_am: am }))),
+  };
+}
+
+export function redigiertZaehlen(quelle = 'knopf') {
+  const n = redigierer();
+  db.redigieren.push({ id: id(), nutzer_id: n.id, monat: monatJetzt(), artikel_id: null, titel: '', quelle: quelle === 'kurzbefehl' ? quelle : 'knopf', erstellt_am: new Date().toISOString() });
+  speichern();
+  return redigierStandVon(n);
+}
+
+export function redigiertRueckgaengig() {
+  const n = redigierer();
+  const meine = db.redigieren.filter((e) => e.nutzer_id === n.id && e.monat === monatJetzt()).sort((a, b) => b.erstellt_am.localeCompare(a.erstellt_am));
+  pruefe(meine.length, 'Diesen Monat ist noch nichts gezählt.');
+  db.redigieren = db.redigieren.filter((e) => e !== meine[0]);
+  speichern();
+  return redigierStandVon(n);
+}
+
+export function redigierStand() { return redigierStandVon(redigierer()); }
+
+export function redigiertMelden(artikelId, titel = '') {
+  const n = redigierer();
+  pruefe(/^[A-Za-z0-9_-]{1,40}$/.test(String(artikelId ?? '')), 'Ungültige Artikel-Nummer.');
+  const neu = !db.redigieren.some((e) => e.nutzer_id === n.id && e.monat === monatJetzt() && e.artikel_id === artikelId);
+  if (neu) {
+    db.redigieren.push({ id: id(), nutzer_id: n.id, monat: monatJetzt(), artikel_id: String(artikelId), titel: trim(titel).slice(0, 300), quelle: 'erweiterung', erstellt_am: new Date().toISOString() });
+    speichern();
+  }
+  return { neu, ...redigierStandVon(n) };
+}
+
+export function redigierUebersicht(monat = monatJetzt()) {
+  brauche('redaktion');
+  pruefe(einstellungen().redigier_zaehler, 'Der Redigier-Zähler ist noch nicht eingeschaltet (Admin → Einstellungen).');
+  pruefe(/^20\d{2}-(0[1-9]|1[0-2])$/.test(monat), 'Ungültiger Monat.');
+  db.redigieren ??= [];
+  const satz = redigierSatz();
+  const imMonat = db.redigieren.filter((e) => e.monat === monat);
+  const personen = db.nutzer.filter((u) => u.aktiv && (u.rollen.includes('redigieren') || imMonat.some((e) => e.nutzer_id === u.id))).map((u) => {
+    const e = imMonat.filter((x) => x.nutzer_id === u.id);
+    const abgerechnet = db.noten.filter((x) => x.autor_id === u.id && x.monat === monat && x.status !== 'abgelehnt')
+      .flatMap((x) => x.positionen).filter((p) => p.kategorie === 'redigieren').reduce((s2, p) => s2 + (p.anzahl ?? 0), 0);
+    return {
+      nutzer_id: u.id, name: `${u.vorname} ${u.nachname}`.trim(), anzahl: e.length, betrag: Math.round(e.length * satz * 100) / 100,
+      automatisch: e.filter((x) => x.quelle === 'erweiterung').length, zuletzt: e.map((x) => x.erstellt_am).sort().at(-1) ?? null,
+      abgerechnet: abgerechnet || null,
+    };
+  }).sort((a, b) => b.anzahl - a.anzahl || a.name.localeCompare(b.name, 'de'));
+  const [j, m] = monat.split('-').map(Number);
+  const verlauf = Array.from({ length: 12 }, (_, i) => {
+    const d = new Date(Date.UTC(j, m - 1 - (11 - i), 1));
+    const mm = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+    const e = db.redigieren.filter((x) => x.monat === mm);
+    return { monat: mm, anzahl: e.length, personen: new Set(e.map((x) => x.nutzer_id)).size };
+  });
+  const summe = personen.reduce((s2, p) => s2 + p.anzahl, 0);
+  return { monat, satz, personen, summe: { anzahl: summe, betrag: Math.round(summe * satz * 100) / 100 }, verlauf, stand: new Date().toISOString() };
+}
+
+// Schlüssel für die Chrome-Erweiterung gibt es nur auf dem echten Server
+export function redigierSchluessel() { redigierer(); return { vorhanden: false, erstellt_am: null, zuletzt_am: null, demo: true }; }
+export function redigierSchluesselErstellen() { redigierer(); throw new Fehler('Die Chrome-Erweiterung funktioniert nur mit der echten App, nicht mit der Demo.'); }
+export function redigierSchluesselWiderrufen() { return true; }
+
 // Messung: in der Demo gibt es keinen Server – die Browser-Messung (Seitenwechsel) läuft trotzdem
 export function ping() { ich(); return { zeit: new Date().toISOString() }; }
 export function mailStatus() { brauche('admin'); return { status: 'unbekannt', fehler: '' }; }
@@ -1494,6 +1581,7 @@ export function einstellungen() {
   e.betreiber = betreiberOder(e.betreiber);
   e.rueckgabe_vorlagen = vorlagenNormalisieren(e.rueckgabe_vorlagen);
   e.erinnerung_tage ??= 3;
+  e.redigier_zaehler ??= true; // in der Demo zum Ausprobieren an (auf dem echten Server zuerst aus)
   return e;
 }
 
@@ -1521,6 +1609,7 @@ export function hinweisBestaetigen() {
 
 export function einstellungenSpeichern({
   empfaenger, datenschutzKontakt, honorarsaetze, betreiber, rueckgabe_vorlagen: vorlagen, erinnerung_tage: erinnerung,
+  redigier_zaehler: zaehler,
 }) {
   brauche('admin');
   pruefe(!leer(empfaenger?.name), 'Bitte den Namen des Rechnungsempfängers angeben.');
@@ -1537,6 +1626,7 @@ export function einstellungenSpeichern({
   db.einstellungen = {
     ...db.einstellungen,
     erinnerung_tage: erinnerung ?? db.einstellungen.erinnerung_tage ?? 3,
+    redigier_zaehler: typeof zaehler === 'boolean' ? zaehler : db.einstellungen.redigier_zaehler ?? true,
     empfaenger: {
       name: trim(empfaenger.name), strasse: trim(empfaenger.strasse),
       plz_ort: trim(empfaenger.plz_ort), uid: trim(empfaenger.uid),

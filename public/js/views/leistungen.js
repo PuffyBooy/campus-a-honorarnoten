@@ -9,6 +9,7 @@ import {
 } from '../lib/campus.js';
 import { satzFuer } from '../lib/honorarsaetze.js';
 import { darfRedigieren } from '../lib/konto.js';
+import { zaehlerBinden, zaehlerKarteHtml } from '../lib/redigier-zaehler.js';
 import { bestaetigen, fehlerText, meldung, mitSperre } from '../lib/ui.js';
 import { noteKarte, notenAktionen } from './noten.js';
 import { mitNummer, nummerAendern } from '../lib/nummer-aendern.js';
@@ -250,9 +251,11 @@ function formularHtml(p, einstellungen, nutzer, vorlagen = []) {
 }
 
 export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, istAktuell }) {
-  const [liste, meineNoten, naechste, einstellungen, zeiten] = await Promise.all([
+  const mitZaehler = darfRedigieren(nutzer) && nutzer.redigier_zaehler;
+  const [liste, meineNoten, naechste, einstellungen, zeiten, zaehlStand] = await Promise.all([
     store.meineLeistungen(), store.meineNoten(), store.naechsteNummer(), store.einstellungen(),
     Promise.resolve(store.ablaufZeiten()).catch(() => null),
+    mitZaehler ? Promise.resolve(store.redigierStand()).catch(() => null) : null,
   ]);
   if (!istAktuell()) return;
   const heute = heuteIso();
@@ -284,6 +287,7 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
         <strong>${esc(formatEuro(euroSumme(ausgezahlt)))}</strong>
         <a class="klein" href="#/noten">alle Abrechnungen</a></div>
     </section>
+    ${zaehlStand ? zaehlerKarteHtml(zaehlStand, { uebernehmen: true }) : ''}
     <p class="tipp">Beiträge speichern, sobald sie erschienen sind. Am Monatsende einmal einreichen,
       getrennt für campus a college und campus a.</p>
 
@@ -400,6 +404,29 @@ export async function render(el, { store, nutzer, navigate, setFlash, neuLaden, 
     }
   });
   el.querySelector('#l-abbrechen')?.addEventListener('click', () => { bearbeiteId = null; neuLaden(); });
+
+  // ---- Redigier-Zähler: Anzahl dieses Monats als Redigier-Leistung ins Formular übernehmen
+  const zaehlerKarte = el.querySelector('#zaehler');
+  const zaehler = zaehlerKarte ? zaehlerBinden(zaehlerKarte, {
+    store, stand: zaehlStand,
+    uebernehmen: (st) => {
+      form.kategorie.value = 'redigieren';
+      auswahlAnpassen();
+      form.anzahl.value = st.anzahl;
+      form.betrag.value = satzText(redigierBetrag(st.anzahl, saetze));
+      if (!form.titel.value.trim()) form.titel.value = `Redigieren ${formatMonat(st.monat).split(' ')[0]}`;
+      fehler('anzahl', '');
+      form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      form.anzahl.focus({ preventScroll: true });
+      meldung(`${st.anzahl} gezählte Texte übernommen – bitte prüfen und speichern.`);
+    },
+  }) : null;
+  // Kategorie Redigieren gewählt und noch keine Anzahl: gezählte Texte vorschlagen
+  form.addEventListener('change', (ev) => {
+    if (ev.target.name !== 'kategorie' || ev.target.value !== 'redigieren' || form.anzahl.value || !zaehler?.stand().anzahl) return;
+    form.anzahl.value = zaehler.stand().anzahl;
+    form.betrag.value = satzText(redigierBetrag(form.anzahl.value, saetze));
+  });
 
   // ---- „Wie letzten Monat“: Kategorie, Art, Betrag usw. übernehmen; Titel und Datum sind neu
   el.querySelector('.wiederholen')?.addEventListener('click', (ev) => {

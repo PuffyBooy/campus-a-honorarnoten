@@ -41,7 +41,7 @@ const LESEN = new Set(['einstellungen', 'ablaufZeiten', 'meineLeistungen', 'mein
   'offeneZahlungen', 'bezahlteNoten', 'bezahlteNotenSeit', 'zahlungskonto', 'nutzerListe', 'anfragen', 'offeneAnfragenAnzahl',
   'registrierungslinks', 'dashboard', 'protokoll', 'sicherungen', 'mailEinstellungen', 'wartung', 'statistik', 'loeschprotokoll']);
 // immer frisch, ändern aber nichts (Vorrat bleibt)
-const NEUTRAL = new Set(['aktuellerNutzer', 'navZaehler', 'rechtliches', 'nachweisLaden', 'zahlungsavis', 'serverStatus', 'anfrageAnalyse',
+const NEUTRAL = new Set(['redigierStand', 'redigierUebersicht', 'redigierSchluessel', 'aktuellerNutzer', 'navZaehler', 'rechtliches', 'nachweisLaden', 'zahlungsavis', 'serverStatus', 'anfrageAnalyse',
   'ping', 'mailStatus', 'pushSchluessel', 'leistungstest', 'funktionstest', 'exportieren', 'sicherungHerunterladen', 'einladungPruefen',
   'pdfMailen', 'testMail']);
 const VORRAT_MAX_MS = 10 * 60000; // älter: nicht mehr zeigen, neu holen
@@ -134,6 +134,13 @@ export const meineArtikel = f('meineArtikel');
 export const naechsteNummer = f('naechsteNummer');
 export const nummerFestlegen = f('nummerFestlegen');
 export const mailStatus = f('mailStatus');
+export const redigiertZaehlen = f('redigiertZaehlen');
+export const redigiertRueckgaengig = f('redigiertRueckgaengig');
+export const redigierStand = f('redigierStand');
+export const redigierUebersicht = f('redigierUebersicht');
+export const redigierSchluessel = f('redigierSchluessel');
+export const redigierSchluesselErstellen = f('redigierSchluesselErstellen');
+export const redigierSchluesselWiderrufen = f('redigierSchluesselWiderrufen');
 export const ping = f('ping');
 export const anfrageAnalyse = f('anfrageAnalyse');
 export const pushSchluessel = f('pushSchluessel');
