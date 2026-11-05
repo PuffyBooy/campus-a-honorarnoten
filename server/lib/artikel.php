@@ -193,14 +193,22 @@ function artikel_von_profil(PDO $db, string $profilId, string $medium = STANDARD
 
     $details = [];
     $fehlend = [];
+    // gespeicherte Details in wenigen Abfragen (je 200 Adressen) statt einer pro Artikel –
+    // bei der Datenbank auf einem anderen Rechner kostet jede Abfrage eine Runde übers Netz
+    $gespeichert = [];
+    foreach (array_chunk(array_column($liste, 'url'), 200) as $teil) {
+        $platz = implode(',', array_fill(0, count($teil), '?'));
+        foreach (zeilen($db, "select * from artikel where url in ($platz)", $teil) as $z) $gespeichert[$z['url']] = $z;
+    }
     foreach ($liste as $a) {
-        $z = zeile($db, 'select * from artikel where url = ?', [$a['url']]);
+        $z = $gespeichert[$a['url']] ?? null;
         if ($z && $z['datum'] !== '') $details[$a['url']] = $z;
         else $fehlend[] = $a;
     }
     if ($fehlend) {
         // einzelne Artikelseite nicht erreichbar: Artikel trotzdem anzeigen, beim nächsten Mal erneut versuchen
         $seiten = $holen(array_column($fehlend, 'url'), microtime(true) + ARTIKEL_ZEITBUDGET);
+        $neuGelesen = [];
         foreach ($fehlend as $a) {
             $html = $seiten[$a['url']] ?? null;
             if (!is_string($html)) continue;
@@ -208,10 +216,14 @@ function artikel_von_profil(PDO $db, string $profilId, string $medium = STANDARD
             if (!$d || $d['datum'] === '') continue;
             $d['titel'] = $d['titel'] ?: $a['titel'];
             $d['ressort'] = $d['ressort'] ?: $a['ressort'];
-            upsert($db, 'artikel', ['url' => $a['url'], 'titel' => $d['titel'], 'datum' => $d['datum'], 'ressort' => $d['ressort'],
-                'region' => $d['region'], 'kategorie' => $d['kategorie'], 'geholt_am' => jetzt()], ['url']);
+            $neuGelesen[] = ['url' => $a['url'], 'titel' => $d['titel'], 'datum' => $d['datum'], 'ressort' => $d['ressort'],
+                'region' => $d['region'], 'kategorie' => $d['kategorie'], 'geholt_am' => jetzt()];
             $details[$a['url']] = $d;
         }
+        // alle neu gelesenen auf einmal speichern (eine Transaktion statt einer pro Artikel)
+        if ($neuGelesen) transaktion($db, function () use ($db, $neuGelesen) {
+            foreach ($neuGelesen as $z) upsert($db, 'artikel', $z, ['url']);
+        });
     }
 
     $ergebnis = array_map(function ($a) use ($details, $medium) {

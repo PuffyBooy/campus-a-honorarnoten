@@ -32,16 +32,19 @@ function client() {
     });
     const neu = res.headers.get('set-cookie');
     if (neu) cookie = neu.split(';')[0];
+    // Anzahl SQL-Abfragen laut Server-Timing (für Tests, dass nichts pro Eintrag einzeln abgefragt wird)
+    sql.letzte = Number(res.headers.get('server-timing')?.match(/desc="(\d+) SQL/)?.[1] ?? NaN);
     const body = await res.json();
     return { status: res.status, ...body };
   };
+  const sql = { letzte: NaN };
   /** erwartet Erfolg und liefert die Daten */
   const ok = async (name, ...args) => {
     const r = await aufruf(name, ...args);
     assert.equal(r.status, 200, `${name}: ${r.fehler}`);
     return r.daten;
   };
-  return { aufruf, ok };
+  return { aufruf, ok, sql };
 }
 
 /** Wartet, bis eine eingereihte Mail verschickt oder gescheitert ist (sie geht nach der Antwort hinaus) */
@@ -718,6 +721,8 @@ test('Artikel von campus-a-college.at: Profil verknüpfen, alle Artikel sehen, �
   const gespeichert = (await a.ok('meineLeistungen')).find((p) => p.artikel_url === url);
   await a.ok('leistungSpeichern', { ...leistung, id: gespeichert.id, betrag: 16 }); // eigene Leistung bearbeiten geht
   assert.deepEqual((await a.ok('meineArtikel')).artikel.map((x) => x.erfasst), [true, false, false]);
+  // gespeicherte Artikel kommen mit einer Abfrage, nicht mit einer pro Artikel (bei 3 Artikeln vorher 8 Abfragen)
+  assert.ok(a.sql.letzte <= 6, `meineArtikel: ${a.sql.letzte} SQL-Abfragen`);
 
   // bleibt nach dem Abschicken verknüpft und erfasst; die Redaktion sieht den Link
   const note = await a.ok('abrechnungAbschicken', [gespeichert.id]);
