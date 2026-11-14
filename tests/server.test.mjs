@@ -1392,6 +1392,46 @@ test('Push-Mitteilungen: Gerät anmelden, leerer Push mit VAPID, Mitteilung abho
   }
 });
 
+test('Datenbankabfragen: Listen fragen nicht pro Eintrag einzeln ab (gleich viele Abfragen bei mehr Daten)', async () => {
+  // bei der Datenbank auf einem anderen Rechner (World4You) kostet jede Abfrage eine Runde übers Netz –
+  // die Zahl der Abfragen darf also nicht mit der Zahl der Abrechnungen wachsen
+  // frisch anmelden (frühere Tests melden Konten ab, z. B. beim Wartungsmodus)
+  php.sql('delete from versuche');
+  const neu = async (email, pw = 'geheim12345') => { const c = client(); await c.ok('anmelden', email, pw); return c; };
+  const k = { rita: await neu('rita@example.org'), anna: await neu('anna@example.org'), kasse: await neu('kasse@example.org'),
+    admin: await neu('admin@example.org', 'admin-passwort-1') };
+  const faelle = [
+    [k.rita, 'redaktionListe', { status: '' }], [k.rita, 'redaktionListe', { status: 'eingereicht', medium: 'college' }],
+    [k.rita, 'alleNoten'], [k.rita, 'navZaehler'], [k.anna, 'meineNoten'], [k.anna, 'meineLeistungen'], [k.anna, 'navZaehler'],
+    [k.anna, 'notenDiesenMonat'], [k.kasse, 'offeneZahlungen'], [k.admin, 'dashboard'], [k.admin, 'statistik'], [k.admin, 'nutzerListe'],
+    [k.admin, 'navZaehler'], [k.admin, 'mailEinstellungen'],
+  ];
+  const zaehlen = async () => {
+    const z = {};
+    for (const [c, name, ...args] of faelle) {
+      await c.ok(name, ...args);
+      z[`${name} ${JSON.stringify(args)}`] = c.sql.letzte;
+    }
+    return z;
+  };
+  const vorher = await zaehlen();
+  assert.ok(Object.values(vorher).every((x) => Number.isInteger(x) && x > 0), 'Server-Timing liefert die Anzahl');
+  // mehr Daten: sechs Abrechnungen mit je zwei Leistungen, die Hälfte angenommen
+  for (let i = 0; i < 6; i++) {
+    const ids = [];
+    for (let j = 0; j < 2; j++) {
+      ids.push(await k.anna.ok('leistungSpeichern', { kategorie: 'kolumne', titel: `Mehr ${i}-${j}`, veroeffentlichung: '2026-09-01', betrag: 15 }));
+    }
+    const note = await k.anna.ok('abrechnungAbschicken', ids);
+    if (i % 2) await k.rita.ok('annehmen', note.id);
+  }
+  await k.anna.ok('leistungSpeichern', { kategorie: 'kolumne', titel: 'Noch offen', veroeffentlichung: '2026-09-01', betrag: 15 });
+  assert.deepEqual(await zaehlen(), vorher);
+  // die Redaktionsliste kommt mit wenigen Abfragen aus (Anmeldung in einer Abfrage; Zähler, Summe und Monate
+  // zusammengefasst) – vorher waren es 10
+  assert.ok(vorher['redaktionListe [{"status":""}]'] <= 7, `redaktionListe: ${vorher['redaktionListe [{"status":""}]']} Abfragen`);
+});
+
 test('Schutz: CSRF-Header, fremde Origin, unbekannte Funktionen', async () => {
   const ohne = await fetch(`${basis}/api/aktuellerNutzer`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
   assert.equal(ohne.status, 403);

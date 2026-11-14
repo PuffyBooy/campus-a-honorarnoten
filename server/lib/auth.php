@@ -43,21 +43,35 @@ function sitzung_erstellen(PDO $db, string $nutzerId): string
     return $token;
 }
 
-/** Nutzer-ID zur Sitzung (oder null); verlängert die Sitzung höchstens einmal pro Stunde */
-function sitzung_pruefen(PDO $db, ?string $token): ?string
+/**
+ * Alles, was jede Anfrage braucht, in EINER Abfrage: Sitzung, Konto, „Ansehen als“, Wartungsmodus und den Schalter
+ * für den Redigier-Zähler. Bei der Datenbank auf einem anderen Rechner (World4You) spart das pro Anfrage
+ * mehrere Runden übers Netz. Liefert ['nutzer_id', 'zeile' (Konto), 'ansicht_als', 'wartung', 'redigier_zaehler'].
+ * Eine abgelaufene Sitzung wird gelöscht, sonst höchstens einmal pro Stunde verlängert.
+ */
+function anfrage_kontext(PDO $db, ?string $token): array
 {
-    if (!$token || strlen($token) > 100) return null;
-    $h = token_hash($token);
-    $s = zeile($db, 'select nutzer_id, laeuft_ab from sitzungen where token_hash = ?', [$h]);
-    if (!$s) return null;
-    $ablauf = strtotime($s['laeuft_ab']);
+    $h = $token && strlen($token) <= 100 ? token_hash($token) : '';
+    $z = zeile($db, "select s.laeuft_ab sitzung_laeuft_ab, s.ansicht_als sitzung_ansicht_als, n.*,
+            (select wert from einstellungen where schluessel = 'wartung') einstellung_wartung,
+            (select wert from einstellungen where schluessel = 'redigier_zaehler') einstellung_redigier_zaehler
+        from (select 1 eins) e left join sitzungen s on s.token_hash = ? left join nutzer n on n.id = s.nutzer_id", [$h]);
+    $k = [
+        'nutzer_id' => null, 'zeile' => null, 'ansicht_als' => null,
+        'wartung' => wartung_aus_wert($z['einstellung_wartung'] ?? null),
+        'redigier_zaehler' => json_decode((string) ($z['einstellung_redigier_zaehler'] ?? ''), true) === true,
+    ];
+    if (!$h || empty($z['id'])) return $k;
+    $ablauf = strtotime($z['sitzung_laeuft_ab']);
     if ($ablauf < time()) {
         q($db, 'delete from sitzungen where token_hash = ?', [$h]);
-        return null;
+        return $k;
     }
     $neu = time() + SITZUNG_TAGE * 86400;
     if ($neu - $ablauf > 3600) q($db, 'update sitzungen set laeuft_ab = ? where token_hash = ?', [zeit_iso($neu), $h]);
-    return $s['nutzer_id'];
+    $ansicht = $z['sitzung_ansicht_als'] ?: null;
+    unset($z['sitzung_laeuft_ab'], $z['sitzung_ansicht_als'], $z['einstellung_wartung'], $z['einstellung_redigier_zaehler']);
+    return ['nutzer_id' => $z['id'], 'zeile' => $z, 'ansicht_als' => $ansicht] + $k;
 }
 
 /** Persönlicher Schlüssel (z. B. für die Chrome-Erweiterung): liefert die Konto-ID oder null */

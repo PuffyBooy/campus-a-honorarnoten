@@ -796,19 +796,40 @@ function oeffne_sqlite(string $pfad): PDO
     return $db;
 }
 
+/**
+ * MySQL öffnen. Bei World4You läuft die Datenbank auf einem anderen Rechner – jede Runde dorthin kostet Zeit:
+ *  - die Verbindung bleibt nach der Anfrage offen und wird von der nächsten wiederverwendet (spart Aufbau und
+ *    Anmeldung); erlaubt der Server keine weiteren Verbindungen, geht es wie früher mit einer neuen
+ *  - Zeichensatz, Zeitzone und SQL-Modus werden nur beim Aufbau einer neuen Verbindung gesetzt
+ *  - ob der Aufbau der Tabellen aktuell ist, wird höchstens alle 10 Minuten nachgesehen (Merker im Datenordner)
+ */
 function oeffne_mysql(array $k): PDO
 {
     $dsn = 'mysql:host=' . ($k['host'] ?? 'localhost') . ';port=' . (int) ($k['port'] ?? 3306) . ';dbname=' . ($k['name'] ?? '') . ';charset=utf8mb4';
-    $db = new PDO($dsn, $k['benutzer'] ?? '', $k['passwort'] ?? '', [
+    $optionen = [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_TIMEOUT => 10,
         PDO::ATTR_EMULATE_PREPARES => false,
         PDO::ATTR_STRINGIFY_FETCHES => false,
-    ]);
-    $db->exec("set names utf8mb4 collate utf8mb4_unicode_ci, time_zone = '+00:00', "
-        . "sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'");
-    // je Anfrage nur eine Abfrage für den Schema-Stand – die Tabelle anlegen nur beim allerersten Mal
+        (defined('Pdo\\Mysql::ATTR_INIT_COMMAND') ? constant('Pdo\\Mysql::ATTR_INIT_COMMAND') : PDO::MYSQL_ATTR_INIT_COMMAND) =>
+            "set names utf8mb4 collate utf8mb4_unicode_ci, time_zone = '+00:00', "
+            . "sql_mode = 'STRICT_TRANS_TABLES,NO_ZERO_IN_DATE,NO_ZERO_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION'",
+    ];
+    $dauerhaft = ($k['dauerhaft'] ?? true) !== false && !getenv('HONORARE_MYSQL_NEU');
+    try {
+        $db = new PDO($dsn, $k['benutzer'] ?? '', $k['passwort'] ?? '', $optionen + [PDO::ATTR_PERSISTENT => $dauerhaft]);
+    } catch (PDOException $e) {
+        // „Too many connections“ / „max_user_connections“: ohne Wiederverwendung erneut versuchen
+        if (!$dauerhaft || !preg_match('/1040|1203|too many connections|max_user_connections/i', $e->getMessage())) throw $e;
+        $db = new PDO($dsn, $k['benutzer'] ?? '', $k['passwort'] ?? '', $optionen + [PDO::ATTR_PERSISTENT => false]);
+    }
+    // (eine offene Transaktion einer abgebrochenen Anfrage nimmt PHP am Ende jeder Anfrage selbst zurück)
+    $merker = schema_merker_datei($dsn);
+    if ($merker && is_file($merker) && filemtime($merker) > time() - 600 && trim((string) @file_get_contents($merker)) === (string) count(MYSQL_MIGRATIONEN)) {
+        return $db;
+    }
+    // je Prüfung nur eine Abfrage für den Schema-Stand – die Tabelle anlegen nur beim allerersten Mal
     try {
         $version = (int) $db->query('select coalesce(max(version), 0) from schema_version')->fetchColumn();
     } catch (PDOException) {
@@ -828,7 +849,24 @@ function oeffne_mysql(array $k): PDO
             $db->query("select release_lock('anerkennungspraemien_schema')");
         }
     }
+    if ($merker) @file_put_contents($merker, (string) count(MYSQL_MIGRATIONEN), LOCK_EX);
     return $db;
+}
+
+/** Merker „Aufbau ist aktuell“ je Datenbank (im Datenordner); null, wenn es keinen beschreibbaren Datenordner gibt */
+function schema_merker_datei(?string $dsn = null): ?string
+{
+    if (!function_exists('daten_ordner')) return null;
+    $ordner = daten_ordner();
+    if (!is_dir($ordner) || !is_writable($ordner)) return null;
+    return $ordner . '/schema-' . ($dsn === null ? '*' : substr(sha1($dsn), 0, 12)) . '.txt';
+}
+
+/** Nach dem Einspielen einer Sicherung oder dem Einrichten: beim nächsten Öffnen den Aufbau sicher prüfen */
+function schema_merker_vergessen(): void
+{
+    $muster = schema_merker_datei();
+    if ($muster) foreach (glob($muster) ?: [] as $f) @unlink($f);
 }
 
 function ist_mysql(PDO $db): bool

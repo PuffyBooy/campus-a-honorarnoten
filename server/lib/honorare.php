@@ -27,6 +27,9 @@ final class Ctx
     public bool $erlaubtMitStartpasswort = false;
     /** Admin, der die App gerade als $nutzer ansieht (nur lesen), sonst null */
     public ?array $ansichtVon = null;
+    /** Wartungsmodus und Schalter, schon beim Prüfen der Anmeldung mitgelesen (null = bei Bedarf selbst laden) */
+    public ?array $wartung = null;
+    public ?bool $redigierZaehler = null;
     /** @var callable|null Ersatz für den Abruf von campus-a-college.at (Tests) */
     public $holen = null;
 
@@ -305,11 +308,11 @@ final class Honorare
     {
         $n = $this->ctx->nutzer;
         // Admins sehen oben, dass der Wartungsmodus an ist
-        if (ist_admin($n) && wartung_laden($this->db())['an']) $n['wartung'] = true;
+        if (ist_admin($n) && ($this->ctx->wartung ?? wartung_laden($this->db()))['an']) $n['wartung'] = true;
         if ($n && $this->ctx->ansichtVon) $n['ansicht_von'] = anzeigename($this->ctx->ansichtVon);
         // Redigier-Zähler (noch im Test): nur wer ihn braucht, erfährt, ob er eingeschaltet ist – fürs Menü
         if ($n && array_intersect($n['rollen'], ['redigieren', 'redaktion', 'admin'])
-            && json_decode((string) wert($this->db(), "select wert from einstellungen where schluessel = 'redigier_zaehler'"), true) === true) {
+            && ($this->ctx->redigierZaehler ?? json_decode((string) wert($this->db(), "select wert from einstellungen where schluessel = 'redigier_zaehler'"), true) === true)) {
             $n['redigier_zaehler'] = true;
         }
         return $n;
@@ -816,27 +819,33 @@ final class Honorare
         $where = $wo ? 'where ' . implode(' and ', $wo) : '';
         $limit = max(1, min(200, (int) ($f['limit'] ?? 100)));
         $offset = max(0, (int) ($f['offset'] ?? 0));
-        // Zähler je Status für das gewählte Medium, dazu „zu prüfen“ je Medium für den Umschalter
+        // Zähler je Status für das gewählte Medium, „zu prüfen“ je Medium für den Umschalter, Rückfragen und Monate:
+        // alles aus einer gruppierten Abfrage (bei der Datenbank auf einem anderen Rechner kostet jede Abfrage eine Runde)
         $medium = ist_medium($f['medium'] ?? '') ? $f['medium'] : null;
         $zaehler = array_fill_keys(array_keys(STATUS_LABEL), 0);
-        foreach (zeilen($db, 'select status, count(*) anzahl from noten' . ($medium ? ' where medium = ?' : '') . ' group by status', $medium ? [$medium] : []) as $z) {
-            $zaehler[$z['status']] = (int) $z['anzahl'];
-        }
         $zuPruefen = array_fill_keys(MEDIUM_KEYS, 0);
-        foreach (zeilen($db, "select medium, count(*) anzahl from noten where status = 'eingereicht' group by medium") as $z) {
-            $zuPruefen[medium_oder($z['medium'])] += (int) $z['anzahl'];
+        $rueckfragen = ['offen' => 0, 'beantwortet' => 0];
+        $monate = [];
+        foreach (zeilen($db, 'select status, medium, rueckfrage, monat, count(*) anzahl from noten group by status, medium, rueckfrage, monat') as $z) {
+            $anzahl = (int) $z['anzahl'];
+            $monate[$z['monat']] = true;
+            if ($z['status'] === 'eingereicht') $zuPruefen[medium_oder($z['medium'])] += $anzahl;
+            if ($medium && $z['medium'] !== $medium) continue; // wie der Listenfilter (medium = ?)
+            if (isset($zaehler[$z['status']])) $zaehler[$z['status']] += $anzahl;
+            if (isset($rueckfragen[$z['rueckfrage'] ?? ''])) $rueckfragen[$z['rueckfrage']] += $anzahl;
         }
+        krsort($monate, SORT_STRING);
+        // Anzahl und Summe der gefilterten Liste in einer Abfrage
+        $gesamt = zeile($db, "select count(*) anzahl, coalesce(sum((select sum(np.betrag_cent) from note_positionen np where np.note_id = noten.id)), 0) summe
+            from noten $where", $p);
         return [
             'noten' => noten_liste($db, $n, $where, $p, REDAKTION_SORTIERUNG[$f['sortierung'] ?? ''] ?? 'eingereicht_am asc', "limit $limit offset $offset"),
-            'anzahl' => (int) wert($db, "select count(*) from noten $where", $p),
-            'summe' => euro((int) wert($db, "select coalesce(sum(np.betrag_cent), 0) from note_positionen np where np.note_id in (select id from noten $where)", $p)),
+            'anzahl' => (int) $gesamt['anzahl'],
+            'summe' => euro((int) $gesamt['summe']),
             'zaehler' => $zaehler,
             'zu_pruefen_medium' => $zuPruefen,
-            'rueckfragen' => [
-                'offen' => (int) wert($db, "select count(*) from noten where rueckfrage = 'offen'" . ($medium ? ' and medium = ?' : ''), $medium ? [$medium] : []),
-                'beantwortet' => (int) wert($db, "select count(*) from noten where rueckfrage = 'beantwortet'" . ($medium ? ' and medium = ?' : ''), $medium ? [$medium] : []),
-            ],
-            'monate' => array_column(zeilen($db, 'select distinct monat from noten order by monat desc limit 36'), 'monat'),
+            'rueckfragen' => $rueckfragen,
+            'monate' => array_slice(array_map('strval', array_keys($monate)), 0, 36),
         ];
     }
 
@@ -1324,12 +1333,13 @@ final class Honorare
     {
         $db = $this->db();
         $n = ich($this->ctx);
-        return [
-            'anfragen' => hat($n, 'admin') ? (int) wert($db, "select count(*) from anfragen where status = 'offen'") : 0,
-            // nur noch offene Abrechnungen zählen (ältere bezahlte können die Rückfrage noch tragen)
-            'rueckfragen' => (int) wert($db, "select count(*) from noten where autor_id = ? and rueckfrage = 'offen' and status in ('eingereicht', 'angenommen')", [$n['id']]),
-            'antworten' => hat($n, 'redaktion') ? (int) wert($db, "select count(*) from noten where rueckfrage = 'beantwortet' and status in ('eingereicht', 'angenommen')") : 0,
-        ];
+        // läuft bei jedem Seitenwechsel: alle Zähler in einer Abfrage
+        // (nur noch offene Abrechnungen zählen – ältere bezahlte können die Rückfrage noch tragen)
+        $z = zeile($db, "select (select count(*) from noten where autor_id = ? and rueckfrage = 'offen' and status in ('eingereicht', 'angenommen')) rueckfragen"
+            . (hat($n, 'admin') ? ", (select count(*) from anfragen where status = 'offen') anfragen" : '')
+            . (hat($n, 'redaktion') ? ", (select count(*) from noten where rueckfrage = 'beantwortet' and status in ('eingereicht', 'angenommen')) antworten" : ''),
+            [$n['id']]);
+        return ['anfragen' => (int) ($z['anfragen'] ?? 0), 'rueckfragen' => (int) $z['rueckfragen'], 'antworten' => (int) ($z['antworten'] ?? 0)];
     }
 
     public function kommentare(mixed $noteId = null): array
@@ -1614,16 +1624,11 @@ final class Honorare
     {
         $db = $this->db();
         brauche($this->ctx, 'admin');
-        $zaehle = fn ($s) => (int) wert($db, 'select count(*) from noten where status = ?', [$s]);
-        return [
-            'nutzer' => (int) wert($db, 'select count(*) from nutzer'),
-            'anfragen' => (int) wert($db, "select count(*) from anfragen where status = 'offen'"),
-            'entwuerfe' => (int) wert($db, 'select count(*) from positionen'),
-            'eingereicht' => $zaehle('eingereicht'),
-            'angenommen' => $zaehle('angenommen'),
-            'abgelehnt' => $zaehle('abgelehnt'),
-            'bezahlt' => $zaehle('bezahlt'),
-        ];
+        // in einer Abfrage statt sieben
+        $zaehle = fn ($s) => "(select count(*) from noten where status = '$s') $s";
+        $z = zeile($db, "select (select count(*) from nutzer) nutzer, (select count(*) from anfragen where status = 'offen') anfragen,
+            (select count(*) from positionen) entwuerfe, {$zaehle('eingereicht')}, {$zaehle('angenommen')}, {$zaehle('abgelehnt')}, {$zaehle('bezahlt')}");
+        return array_map('intval', $z);
     }
 
     /** Datenexport als JSON (ohne Passwörter, Sitzungen und Mail-Zugangsdaten) – enthält IBANs, vertraulich! */
@@ -1653,11 +1658,13 @@ final class Honorare
         brauche($this->ctx, 'admin');
         $e = mail_einstellungen_sicht($db);
         if ($e['adresse'] === '') $e['adresse_vorschlag'] = aktuelle_adresse();
+        $w = zeile($db, "select coalesce(sum(case when gesendet_am is null and versuche < 5 then 1 else 0 end), 0) offen,
+            coalesce(sum(case when gesendet_am is null and versuche >= 5 then 1 else 0 end), 0) fehlgeschlagen,
+            coalesce(sum(case when gesendet_am is not null then 1 else 0 end), 0) gesendet,
+            (select fehler from mails where fehler <> '' order by erstellt_am desc limit 1) letzter_fehler from mails");
         $e['warteschlange'] = [
-            'offen' => (int) wert($db, 'select count(*) from mails where gesendet_am is null and versuche < 5'),
-            'fehlgeschlagen' => (int) wert($db, 'select count(*) from mails where gesendet_am is null and versuche >= 5'),
-            'gesendet' => (int) wert($db, 'select count(*) from mails where gesendet_am is not null'),
-            'letzter_fehler' => (string) (wert($db, "select fehler from mails where fehler <> '' order by erstellt_am desc limit 1") ?: ''),
+            'offen' => (int) $w['offen'], 'fehlgeschlagen' => (int) $w['fehlgeschlagen'], 'gesendet' => (int) $w['gesendet'],
+            'letzter_fehler' => (string) ($w['letzter_fehler'] ?? ''),
         ];
         return $e;
     }
@@ -1676,22 +1683,32 @@ final class Honorare
     {
         $db = $this->db();
         brauche($this->ctx, 'admin');
-        $zaehle = fn ($s) => (int) wert($db, 'select count(*) from noten where status = ?', [$s]);
-        $summe = fn ($where, $p = []) => euro((int) wert($db, "select coalesce(sum(np.betrag_cent), 0) from note_positionen np join noten n on n.id = np.note_id where $where", $p));
         $seit = zeit_iso(time() - 7 * 86400);
-        $stufe = fn ($s) => (int) wert($db, 'select count(*) from protokoll where stufe = ? and zeit >= ?', [$s, $seit]);
+        $summe = fn ($where) => "(select coalesce(sum(np.betrag_cent), 0) from note_positionen np join noten n on n.id = np.note_id where $where)";
+        // alle Zahlen in einer Abfrage (bei der Datenbank auf einem anderen Rechner kostet jede Abfrage eine Runde)
+        $z = zeile($db, "select
+            (select count(*) from noten where status = 'eingereicht') zu_pruefen,
+            (select count(*) from noten where status = 'angenommen') zur_zahlung,
+            {$summe("n.status = 'angenommen'")} zur_zahlung_summe,
+            {$summe("n.status = 'bezahlt' and n.bezahlt_am >= ?")} bezahlt_jahr,
+            (select count(*) from anfragen where status = 'offen') anfragen,
+            (select count(*) from nutzer where aktiv = 1) konten,
+            (select count(*) from positionen) entwuerfe,
+            (select count(*) from protokoll where stufe = 'warnung' and zeit >= ?) warnungen,
+            (select count(*) from protokoll where stufe = 'fehler' and zeit >= ?) fehler,
+            (select count(*) from mails where gesendet_am is null and versuche < 5) mail_offen,
+            (select count(*) from mails where gesendet_am is null and versuche >= 5) mail_fehlgeschlagen",
+            [substr(heute_iso(), 0, 4) . '-01-01', $seit, $seit]);
         $sicherungen = sicherungen_liste();
         $mysql = ist_mysql($db);
         $e = mail_einstellungen($db);
         $version = @file_get_contents(__DIR__ . '/../version.txt');
         return [
             'zahlen' => [
-                'zu_pruefen' => $zaehle('eingereicht'), 'zur_zahlung' => $zaehle('angenommen'), 'zur_zahlung_summe' => $summe("n.status = 'angenommen'"),
-                'bezahlt_jahr' => $summe("n.status = 'bezahlt' and n.bezahlt_am >= ?", [substr(heute_iso(), 0, 4) . '-01-01']),
-                'anfragen' => (int) wert($db, "select count(*) from anfragen where status = 'offen'"),
-                'konten' => (int) wert($db, 'select count(*) from nutzer where aktiv = 1'),
-                'entwuerfe' => (int) wert($db, 'select count(*) from positionen'),
-                'warnungen' => $stufe('warnung'), 'fehler' => $stufe('fehler'),
+                'zu_pruefen' => (int) $z['zu_pruefen'], 'zur_zahlung' => (int) $z['zur_zahlung'], 'zur_zahlung_summe' => euro((int) $z['zur_zahlung_summe']),
+                'bezahlt_jahr' => euro((int) $z['bezahlt_jahr']),
+                'anfragen' => (int) $z['anfragen'], 'konten' => (int) $z['konten'], 'entwuerfe' => (int) $z['entwuerfe'],
+                'warnungen' => (int) $z['warnungen'], 'fehler' => (int) $z['fehler'],
             ],
             'system' => [
                 'datenbank' => ($mysql ? 'MySQL/MariaDB ' : 'SQLite ') . $db->getAttribute(PDO::ATTR_SERVER_VERSION),
@@ -1699,8 +1716,8 @@ final class Honorare
                 'version' => $version !== false ? trim($version) : '',
                 'mail' => [
                     'aktiv' => $e['aktiv'],
-                    'offen' => (int) wert($db, 'select count(*) from mails where gesendet_am is null and versuche < 5'),
-                    'fehlgeschlagen' => (int) wert($db, 'select count(*) from mails where gesendet_am is null and versuche >= 5'),
+                    'offen' => (int) $z['mail_offen'],
+                    'fehlgeschlagen' => (int) $z['mail_fehlgeschlagen'],
                 ],
                 'sicherungen' => count($sicherungen),
                 'letzte_sicherung' => $sicherungen[0] ?? null,

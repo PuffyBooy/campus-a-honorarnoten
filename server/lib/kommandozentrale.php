@@ -132,6 +132,14 @@ function server_status(PDO $db, bool $https): array
             : pruefpunkt('warnung', 'Verschlüsselung', 'Die Anfrage kam ohne https. Im Betrieb bitte nur über https öffnen.'),
         version_compare(PHP_VERSION, '8.1', '>=') ? pruefpunkt('ok', 'PHP', 'PHP ' . PHP_VERSION . '.')
             : pruefpunkt('fehler', 'PHP', 'PHP ' . PHP_VERSION . ' ist zu alt (mindestens 8.1).'),
+        // OPcache: ohne ihn liest PHP alle Programmdateien bei jeder Anfrage neu ein
+        is_array($opcache) && !empty($opcache['opcache_enabled'])
+            ? (!empty($opcache['cache_full'])
+                ? pruefpunkt('warnung', 'OPcache', 'An, aber voll – neue Programmdateien werden nicht mehr zwischengespeichert. Speicher für OPcache erhöhen (opcache.memory_consumption).')
+                : pruefpunkt('ok', 'OPcache', 'An – Trefferquote ' . str_replace('.', ',', (string) round((float) ($opcache['opcache_statistics']['opcache_hit_rate'] ?? 0), 1)) . ' %.'))
+            : pruefpunkt('warnung', 'OPcache', 'Aus oder nicht abfragbar – PHP liest die App bei jeder Anfrage neu ein, das kostet je Anfrage etwa 10–30 ms. '
+                . 'In den PHP-Einstellungen des Hosters einschalten (bei World4You im Kundenbereich bei den PHP-Einstellungen der Domain; '
+                . 'sonst in einer Datei .user.ini: opcache.enable=1).'),
         $speicherLimit === -1 || $speicherLimit >= 128 << 20 ? pruefpunkt('ok', 'Arbeitsspeicher', 'Grenze für PHP: ' . ini_get('memory_limit') . '.')
             : pruefpunkt('warnung', 'Arbeitsspeicher', 'Nur ' . ini_get('memory_limit') . ' für PHP – bei großen PDFs oder Sicherungen kann das knapp werden (empfohlen: 128M).'),
         $frei === false ? pruefpunkt('warnung', 'Speicherplatz', 'Der Hoster verrät den freien Speicherplatz nicht.')
@@ -186,6 +194,10 @@ function server_status(PDO $db, bool $https): array
             'opcache' => is_array($opcache) ? [
                 'an' => (bool) ($opcache['opcache_enabled'] ?? false),
                 'trefferquote' => round((float) ($opcache['opcache_statistics']['opcache_hit_rate'] ?? 0), 1),
+                'voll' => (bool) ($opcache['cache_full'] ?? false),
+                'belegt' => (int) ($opcache['memory_usage']['used_memory'] ?? 0),
+                'frei' => (int) ($opcache['memory_usage']['free_memory'] ?? 0),
+                'skripte' => (int) ($opcache['opcache_statistics']['num_cached_scripts'] ?? 0),
             ] : null,
             'erweiterungen' => array_combine(
                 $e = ['pdo_mysql', 'pdo_sqlite', 'mbstring', 'openssl', 'curl', 'json', 'zlib', 'intl'],
@@ -268,9 +280,20 @@ function leistungstest(PDO $db): array
     if ($ziel !== ':memory:') {
         $werte = [];
         try {
-            for ($i = 0; $i < 5; $i++) $werte[] = stoppuhr(fn () => oeffne_datenbank($ziel));
-            $e[] = testergebnis('Datenbank-Verbindung', array_sum($werte) / 5, [15, 60],
-                'Neu verbinden und Schema prüfen (Ø von 5, langsamste ' . round(max($werte)) . ' ms) – passiert bei jeder Anfrage.');
+            if (is_array($ziel)) {
+                // MySQL: eine neue Verbindung (Aufbau, Anmeldung, Einstellungen) gegen eine wiederverwendete
+                $neu = [];
+                for ($i = 0; $i < 3; $i++) $neu[] = stoppuhr(fn () => oeffne_mysql(['dauerhaft' => false] + $ziel));
+                for ($i = 0; $i < 5; $i++) $werte[] = stoppuhr(fn () => oeffne_mysql($ziel));
+                $runde = stoppuhr(function () use ($db) { for ($i = 0; $i < 5; $i++) wert($db, 'select 1'); }) / 5;
+                $e[] = testergebnis('Datenbank-Verbindung', array_sum($werte) / 5, [15, 60],
+                    'Wiederverwendete Verbindung Ø ' . round(array_sum($werte) / 5, 1) . ' ms, eine neue würde Ø ' . round(array_sum($neu) / 3, 1)
+                    . ' ms kosten. Jede Abfrage braucht eine Runde zur Datenbank: Ø ' . round($runde, 1) . ' ms.');
+            } else {
+                for ($i = 0; $i < 5; $i++) $werte[] = stoppuhr(fn () => oeffne_datenbank($ziel));
+                $e[] = testergebnis('Datenbank-Verbindung', array_sum($werte) / 5, [15, 60],
+                    'Datei öffnen und Aufbau prüfen (Ø von 5, langsamste ' . round(max($werte)) . ' ms) – passiert bei jeder Anfrage.');
+            }
         } catch (Throwable $f) {
             $e[] = testergebnis('Datenbank-Verbindung', null, [0, 0], '', $f->getMessage());
         }

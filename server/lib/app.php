@@ -68,7 +68,10 @@ function konfig_speichern(array $werte): void
 function datenbank(bool $neu = false): PDO
 {
     static $db = null;
-    if ($neu) $db = null;
+    if ($neu) {
+        $db = null;
+        schema_merker_vergessen(); // z. B. nach dem Einspielen einer Sicherung: Aufbau sicher prüfen
+    }
     return $db ??= oeffne_datenbank(konfiguration()['datenbank']);
 }
 

@@ -124,15 +124,19 @@ function api(): array
         $token = null;
         $nutzerId = schluessel_pruefen($db, $schluessel);
         if (!$nutzerId) return [401, ['fehler' => 'Der Schlüssel ist ungültig oder wurde zurückgezogen. Bitte im Profil einen neuen erstellen.']];
+        $kontext = anfrage_kontext($db, null); // Wartungsmodus und Schalter
+        $nutzer = nutzer_laden($db, $nutzerId);
     } else {
+        // Sitzung, Konto, Wartungsmodus, „Ansehen als“ … in einer Abfrage
         $token = isset($_COOKIE[COOKIE]) && is_string($_COOKIE[COOKIE]) ? $_COOKIE[COOKIE] : null;
-        $nutzerId = sitzung_pruefen($db, $token);
+        $kontext = anfrage_kontext($db, $token);
+        $nutzerId = $kontext['nutzer_id'];
+        $nutzer = nutzer_aus_zeile($kontext['zeile']);
     }
-    $nutzer = $nutzerId ? nutzer_laden($db, $nutzerId) : null;
     if ($nutzer && !$nutzer['aktiv']) $nutzer = null;
     if (!$nutzer && !in_array($name, Honorare::OEFFENTLICH, true)) return [401, ['fehler' => 'Bitte melde dich an.', 'abgemeldet' => true]];
     // Wartungsmodus: nur Admins arbeiten weiter, alle anderen sehen den Hinweis
-    $wartung = wartung_laden($db);
+    $wartung = $kontext['wartung'];
     if ($wartung['an'] && !ist_admin($nutzer) && !in_array($name, WARTUNG_ERLAUBT, true)) {
         return [503, ['fehler' => $wartung['text'], 'wartung' => $wartung['text']]];
     }
@@ -140,7 +144,7 @@ function api(): array
     // Admin sieht die App gerade als jemand anderes: nur lesen
     $ansichtVon = null;
     if (ist_admin($nutzer) && $token) {
-        $als = wert($db, 'select ansicht_als from sitzungen where token_hash = ?', [token_hash($token)]);
+        $als = $kontext['ansicht_als'];
         $ziel = $als ? nutzer_laden($db, (string) $als) : null;
         if ($ziel && $ziel['aktiv'] && !ist_admin($ziel)) {
             $ansichtVon = $nutzer;
@@ -194,6 +198,8 @@ function api(): array
     Messung::phase('sitzung');
     $ctx = new Ctx($db, $nutzer, $nutzerId ? $token : null);
     $ctx->ansichtVon = $ansichtVon;
+    $ctx->wartung = $wartung;
+    $ctx->redigierZaehler = $kontext['redigier_zaehler'];
     // Beim Aufruf genau so viele Argumente übergeben, wie die Funktion annimmt
     $methode = new ReflectionMethod(Honorare::class, $name);
     try {
