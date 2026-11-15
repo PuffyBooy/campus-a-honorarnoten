@@ -285,6 +285,19 @@ async function wartungSeite(pfad, text) {
   }));
 }
 
+// Artikel von campus-a.at / campus-a-college.at kurz nach dem Anmelden im Hintergrund holen (einmal je Konto):
+// beim Öffnen von „Mein Monat“ sind sie dann schon da, statt erst die Profilseiten abzufragen
+let artikelVorgeladen = null;
+function artikelVorladen(nutzer, pfad) {
+  if (!nutzer || nutzer.ansicht_von || artikelVorgeladen === nutzer.id || !nutzer.rollen.includes('autor')) return;
+  if (!nutzer.profil?.campus_profil && !nutzer.profil?.campus_a_profil) return;
+  artikelVorgeladen = nutzer.id;
+  if (pfad === 'leistungen') return; // lädt die Seite ohnehin selbst
+  const los = () => Promise.resolve(store.meineArtikel({ neu: false })).catch(() => {}); // gleiche Anfrage wie „Mein Monat“
+  if (window.requestIdleCallback) requestIdleCallback(los, { timeout: 4000 });
+  else setTimeout(los, 1500);
+}
+
 let breitenBeobachter = null;
 let nutzerVorrat = null; // zuletzt geprüfte Anmeldung (für schnelle Seitenwechsel)
 
@@ -462,6 +475,7 @@ async function render({ schnell = false } = {}) {
     if (lauf === renderZaehler) {
       zuletzt = { route: treffer.route, nutzer };
       wechselEnde();
+      artikelVorladen(nutzer, pfad);
     }
   } catch (e) {
     console.error(e);

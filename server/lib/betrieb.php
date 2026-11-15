@@ -10,7 +10,13 @@ const ERINNERUNG_TAGE = 3;      // Standard: Erinnerung an gespeicherte Leistung
 
 function wartung_laden(PDO $db): array
 {
-    $w = json_decode((string) wert($db, "select wert from einstellungen where schluessel = 'wartung'"), true);
+    return wartung_aus_wert(wert($db, "select wert from einstellungen where schluessel = 'wartung'"));
+}
+
+/** Wartungsmodus aus dem gespeicherten Wert (JSON) – auch für anfrage_kontext, das ihn gleich mitliest */
+function wartung_aus_wert(mixed $wert): array
+{
+    $w = json_decode((string) $wert, true);
     $w = is_array($w) ? $w : [];
     return ['an' => !empty($w['an']), 'text' => tr($w['text'] ?? '') ?: WARTUNG_TEXT, 'seit' => $w['seit'] ?? null, 'von' => $w['von'] ?? ''];
 }

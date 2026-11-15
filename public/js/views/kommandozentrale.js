@@ -279,7 +279,12 @@ export async function render(inhalt, { store, istDemo, neuLaden, istAktuell }) {
         ['Speicher dieser Anfrage', esc(`${groesse(s.php.speicher_jetzt)} (Spitze ${groesse(s.php.speicher_spitze)})`)],
         ['Max. Laufzeit', esc(s.php.max_execution_time ? `${s.php.max_execution_time} s` : 'unbegrenzt')],
         ['Upload / Anfrage', esc(`${s.php.upload_max_filesize} / ${s.php.post_max_size}`)],
-        ['OPcache', esc(s.php.opcache ? `${s.php.opcache.an ? 'an' : 'aus'}${s.php.opcache.an ? `, Trefferquote ${String(s.php.opcache.trefferquote).replace('.', ',')} %` : ''}` : 'nicht verfügbar')],
+        ['OPcache', esc(!s.php.opcache ? 'nicht verfügbar' : !s.php.opcache.an ? 'aus' : [
+          `an, Trefferquote ${String(s.php.opcache.trefferquote).replace('.', ',')} %`,
+          s.php.opcache.skripte ? `${s.php.opcache.skripte} Dateien` : '',
+          s.php.opcache.belegt != null ? `${groesse(s.php.opcache.belegt)} belegt, ${groesse(s.php.opcache.frei)} frei` : '',
+          s.php.opcache.voll ? 'VOLL' : '',
+        ].filter(Boolean).join(' · '))],
         ['Zeitzone', esc(s.php.zeitzone)],
         ['Erweiterungen', Object.entries(s.php.erweiterungen).map(([k, v]) => `<span class="badge ${v ? 'badge-bezahlt' : 'badge-abgelehnt'}">${esc(k)}</span>`).join(' ')],
       ])}</section>

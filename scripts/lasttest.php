@@ -97,21 +97,44 @@ $faelle = [
     ['Admin: protokoll', $admin, fn ($h) => $h->protokoll([])],
     ['Admin: protokoll (Suche)', $admin, fn ($h) => $h->protokoll(['suche' => 'Nummer 4711', 'stufe' => 'fehler'])],
     ['Admin: nutzerListe', $admin, fn ($h) => $h->nutzerListe()],
+    // weitere lesende Funktionen – vor allem, um Abfragen pro Eintrag zu finden (Spalte SQL)
+    ['Alle: aktuellerNutzer', $autor, fn ($h) => $h->aktuellerNutzer()],
+    ['Alle: navZaehler (Autor)', $autor, fn ($h) => $h->navZaehler()],
+    ['Alle: navZaehler (Redaktion)', $redaktion, fn ($h) => $h->navZaehler()],
+    ['Alle: navZaehler (Admin)', $admin, fn ($h) => $h->navZaehler()],
+    ['Alle: einstellungen', $autor, fn ($h) => $h->einstellungen()],
+    ['Autor: notenDiesenMonat', $autor, fn ($h) => $h->notenDiesenMonat()],
+    ['Autor: ablaufZeiten', $autor, fn ($h) => $h->ablaufZeiten()],
+    ['Redaktion: alleNoten', $redaktion, fn ($h) => $h->alleNoten()],
+    ['Redaktion: nachrichten', $redaktion, fn ($h) => $h->nachrichten($eineNote)],
+    ['Redaktion: kommentare', $redaktion, fn ($h) => $h->kommentare($eineNote)],
+    ['Buchhaltung: bezahlteNoten (Monat)', $kasse, fn ($h) => $h->bezahlteNoten(date('Y-m'))],
+    ['Buchhaltung: zahlungskonto', $kasse, fn ($h) => $h->zahlungskonto()],
+    ['Admin: anfragen', $admin, fn ($h) => $h->anfragen()],
+    ['Admin: registrierungslinks', $admin, fn ($h) => $h->registrierungslinks()],
+    ['Admin: loeschprotokoll', $admin, fn ($h) => $h->loeschprotokoll()],
+    ['Admin: mailEinstellungen', $admin, fn ($h) => $h->mailEinstellungen()],
+    ['Admin: anfrageAnalyse', $admin, fn ($h) => $h->anfrageAnalyse(24)],
 ];
-printf("%-38s %10s %12s\n", 'Funktion', 'Median ms', 'Antwort');
+// SQL: Datenbankabfragen pro Aufruf – wächst die Zahl mit der Datenmenge, wird pro Eintrag einzeln abgefragt
+// (bei einer entfernten Datenbank kostet jede Abfrage eine Runde übers Netz)
+printf("%-38s %10s %6s %12s\n", 'Funktion', 'Median ms', 'SQL', 'Antwort');
 $langsam = 0;
 foreach ($faelle as [$name, $wer, $fn]) {
     $zeiten = [];
     $groesse = 0;
+    $sql = 0;
     for ($i = 0; $i < 5; $i++) {
         $t = hrtime(true);
+        $vorher = Messung::$sql;
         $groesse = strlen(json_text(['daten' => $fn($als($wer))]));
+        $sql = Messung::$sql - $vorher;
         $zeiten[] = (hrtime(true) - $t) / 1e6;
     }
     sort($zeiten);
     $ms = $zeiten[2];
     if ($ms > 300) $langsam++;
-    printf("%-38s %10.1f %12s%s\n", $name, $ms, groesse_text($groesse), $ms > 300 ? '  ← über 300 ms' : '');
+    printf("%-38s %10.1f %6d %12s%s\n", $name, $ms, $sql, groesse_text($groesse), $ms > 300 ? '  ← über 300 ms' : '');
 }
 echo $langsam ? "\n$langsam Funktionen über 300 ms.\n" : "\nAlle Funktionen unter 300 ms.\n";
 if (!ist_mysql($db)) @unlink(konfiguration()['datenbank']);
