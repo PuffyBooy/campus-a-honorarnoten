@@ -932,9 +932,16 @@ test('Redigieren mitzählen: Knopf, Chrome-Erweiterung mit Schlüssel, Übersich
   assert.ok(u.verlauf.at(-1).anzahl >= 3);
   assert.match((await k.rita.aufruf('redigierUebersicht', '2026-13')).fehler, /Monat/);
 
+  // neuer Schlüssel (z. B. für Claude oder eine neu installierte Erweiterung): der alte gilt dann nicht mehr
+  const { schluessel: zweiter } = await rudi.ok('redigierSchluesselErstellen');
+  assert.notEqual(zweiter, schluessel);
+  assert.equal((await melden(schluessel, 'redigierStand', [])).status, 401, 'alter Schlüssel ungültig');
+  assert.equal((await melden(zweiter, 'redigierStand', [])).daten.anzahl, 3);
+  assert.equal((await rudi.ok('redigierSchluessel')).vorhanden, true);
+
   // Schlüssel zurückziehen, Zähler wieder aus
   await rudi.ok('redigierSchluesselWiderrufen');
-  assert.equal((await melden(schluessel)).status, 401);
+  assert.equal((await melden(zweiter)).status, 401);
   await k.admin.ok('einstellungenSpeichern', { ...basis, redigier_zaehler: false });
   assert.match((await rudi.aufruf('redigierStand')).fehler, /noch nicht eingeschaltet/);
   await k.admin.ok('nutzerLoeschen', (await k.admin.ok('nutzerListe')).find((n) => n.email === 'rudi@example.org').id);

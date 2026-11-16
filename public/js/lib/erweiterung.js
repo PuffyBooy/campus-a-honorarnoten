@@ -91,7 +91,10 @@ export async function erweiterungKarte(box, { store, istDemo }) {
     return;
   }
   const app = new URL('.', location.href).href;
-  const offen = box.querySelector('details[open]')?.dataset.teil; // nach dem Neuzeichnen offen lassen
+  // nach dem Neuzeichnen offen lassen, was offen war (beim ersten Mal: das Lesezeichen); ein neuer Schlüssel immer zeigen
+  const vorher = box.querySelectorAll('details[data-teil]');
+  const offen = new Set(vorher.length ? Array.from(box.querySelectorAll('details[data-teil][open]'), (d) => d.dataset.teil) : ['lesezeichen']);
+  if (frisch) offen.add('schluessel');
   const schluessel = frisch ?? 'DEIN-SCHLÜSSEL';
   const keinServer = istDemo ? '<p class="hinweisbox">Braucht die echte App mit Server – in der Demo geht nur das Lesezeichen.</p>' : '';
   box.innerHTML = `
@@ -99,7 +102,7 @@ export async function erweiterungKarte(box, { store, istDemo }) {
     <p>Statt selbst zu tippen: direkt aus dem CMS zählen, während der Artikel offen ist. Jeder Artikel zählt pro Monat nur einmal,
       die Redaktion sieht es sofort in „Redigieren live“.</p>
 
-    <details class="aufklapp" data-teil="lesezeichen" ${offen === 'lesezeichen' || !offen ? 'open' : ''}>
+    <details class="aufklapp" data-teil="lesezeichen" ${offen.has('lesezeichen') ? 'open' : ''}>
       <summary>Lesezeichen – Safari, Chrome, Firefox, iPhone</summary>
       <p>Ohne Schlüssel und ohne Installation. Ein Klick darauf im CMS öffnet ein kleines Fenster der App, das den Artikel zählt
         und sich selbst wieder schließt. (Du musst in diesem Browser in der App angemeldet sein.)</p>
@@ -109,7 +112,7 @@ export async function erweiterungKarte(box, { store, istDemo }) {
         diesen Code einfügen: <button type="button" class="link-knopf" id="ew-lz-kopieren">Code kopieren</button></p>
     </details>
 
-    <details class="aufklapp" data-teil="chrome" ${offen === 'chrome' ? 'open' : ''}>
+    <details class="aufklapp" data-teil="chrome" ${offen.has('chrome') ? 'open' : ''}>
       <summary>Chrome-Erweiterung – mit Tastenkürzel</summary>
       ${keinServer}
       <p>Symbol anklicken oder <kbd>Alt</kbd> + <kbd>Umschalt</kbd> + <kbd>R</kbd> – zählt im Hintergrund, ohne Fenster.</p>
@@ -117,7 +120,7 @@ export async function erweiterungKarte(box, { store, istDemo }) {
       ${ANLEITUNG_CHROME}
     </details>
 
-    <details class="aufklapp" data-teil="schluessel" ${offen === 'schluessel' ? 'open' : ''}>
+    <details class="aufklapp" data-teil="schluessel" ${offen.has('schluessel') ? 'open' : ''}>
       <summary>Claude, Kurzbefehle-App oder eigene Programme – mit Schlüssel</summary>
       ${keinServer}
       <p>Mit deinem persönlichen Schlüssel kann jedes Programm für dich zählen – z. B. Claude („Ich habe Artikel 4311 redigiert“),
@@ -166,8 +169,9 @@ export async function erweiterungKarte(box, { store, istDemo }) {
     ja: 'Neuen Schlüssel erstellen',
   });
   box.querySelector('#ew-neu')?.addEventListener('click', async (ev) => {
+    const knopf = ev.currentTarget; // nach dem Warten (Rückfrage) ist ev.currentTarget leer
     if (!await ersetzenOk()) return;
-    await mitSperre(ev.currentTarget, async () => {
+    await mitSperre(knopf, async () => {
       try {
         await neuerSchluessel();
         meldung('Neuer Schlüssel erstellt – jetzt kopieren, er wird nur einmal angezeigt.', 'erfolg');
@@ -178,9 +182,10 @@ export async function erweiterungKarte(box, { store, istDemo }) {
     });
   });
   box.querySelector('#ew-laden')?.addEventListener('click', async (ev) => {
+    const knopf = ev.currentTarget; // nach dem Warten (Rückfrage) ist ev.currentTarget leer
     // ein gerade erstellter Schlüssel wird mitgenommen, sonst braucht die Erweiterung einen neuen
     if (!frisch && !await ersetzenOk()) return;
-    await mitSperre(ev.currentTarget, async () => {
+    await mitSperre(knopf, async () => {
       try {
         const k = frisch ?? await neuerSchluessel();
         downloadBlob('redigier-zaehler.zip', await zipBauen(app, k));
@@ -192,8 +197,9 @@ export async function erweiterungKarte(box, { store, istDemo }) {
     });
   });
   box.querySelector('#ew-weg')?.addEventListener('click', async (ev) => {
+    const knopf = ev.currentTarget; // nach dem Warten (Rückfrage) ist ev.currentTarget leer
     if (!await bestaetigen({ titel: 'Schlüssel widerrufen?', html: '<p>Erweiterung, Claude und Kurzbefehle können danach nichts mehr zählen. Das Lesezeichen geht weiter.</p>', ja: 'Widerrufen', gefahr: true })) return;
-    await mitSperre(ev.currentTarget, async () => {
+    await mitSperre(knopf, async () => {
       try {
         await store.redigierSchluesselWiderrufen();
         frisch = null;
