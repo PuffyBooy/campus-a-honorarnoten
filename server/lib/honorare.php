@@ -70,6 +70,7 @@ function nutzer_aus_zeile(?array $z): ?array
         'hinweis_bestaetigt_am' => $z['hinweis_bestaetigt_am'] ?? null,
         'zwei_faktor' => !empty($z['zwei_faktor']),
         'neuigkeiten_gesehen' => $z['neuigkeiten_gesehen'] ?? null,
+        'tutorial_gesehen' => $z['tutorial_gesehen'] ?? null,
         'nummer_basis' => $z['nummer_basis'] ?? null,
         'benachrichtigungen' => (object) (json_decode($z['benachrichtigungen'] ?? '{}', true) ?: []),
     ];
@@ -117,6 +118,7 @@ function einstellungen_laden(PDO $db): array
     $e['rueckgabe_vorlagen'] = vorlagen_normalisieren($e['rueckgabe_vorlagen'] ?? null);
     $e['erinnerung_tage'] = max(0, min(31, (int) ($e['erinnerung_tage'] ?? ERINNERUNG_TAGE)));
     $e['redigier_zaehler'] = ($e['redigier_zaehler'] ?? false) === true;
+    $e['begruessung'] = is_string($e['begruessung'] ?? null) ? $e['begruessung'] : '';
     return $e;
 }
 
@@ -263,7 +265,7 @@ final class Honorare
         'aktuellerNutzer', 'anmelden', 'abmelden', 'zugangAnfragen', 'erstesPasswortSetzen', 'passwortAendern',
         'profilSpeichern', 'einstellungen', 'meineLeistungen', 'leistungSpeichern', 'leistungLoeschen', 'nachweisHochladen', 'nachweisLoeschen', 'nachweisLaden', 'meineArtikel',
         'naechsteNummer', 'nummerFestlegen', 'redigiertZaehlen', 'redigiertRueckgaengig', 'redigierStand', 'redigiertMelden', 'redigierUebersicht',
-        'redigierSchluessel', 'redigierSchluesselErstellen', 'redigierSchluesselWiderrufen', 'mailStatus', 'ping', 'anfrageAnalyse', 'pushSchluessel', 'pushAbonnieren', 'pushAbmelden', 'pushAbholen', 'pushTest', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
+        'redigierSchluessel', 'redigierSchluesselErstellen', 'redigierSchluesselWiderrufen', 'begruessungSpeichern', 'tutorialGesehen', 'mailStatus', 'ping', 'anfrageAnalyse', 'pushSchluessel', 'pushAbonnieren', 'pushAbmelden', 'pushAbholen', 'pushTest', 'notenDiesenMonat', 'abrechnungAbschicken', 'meineNoten', 'leistungenZurueckholen', 'abrechnungZurueckziehen',
         'alleNoten', 'redaktionListe', 'pruefInfo', 'ausgezahltImJahr', 'note', 'annehmen', 'ablehnen', 'betragKorrigieren', 'positionPruefen', 'kommentieren', 'kommentare', 'verlaufVon',
         'nachrichten', 'nachfragen', 'rueckfrageBeantworten', 'rueckfrageErledigt', 'navZaehler', 'ablaufZeiten', 'neuigkeitenGesehen', 'serverStatus', 'leistungstest', 'serverAktion', 'funktionstest', 'sicherungZurueckspielen', 'ansichtStarten', 'ansichtBeenden',
         'offeneZahlungen', 'zahlungsavis', 'zahlungskonto', 'zahlungskontoSpeichern', 'pdfMailen', 'bezahlteNoten', 'bezahlteNotenSeit', 'alsBezahltMarkieren', 'alleAlsBezahltMarkieren',
@@ -1132,6 +1134,14 @@ final class Honorare
         return true;
     }
 
+    /** Tour für neue Konten beendet oder übersprungen: nicht mehr von selbst zeigen */
+    public function tutorialGesehen(): bool
+    {
+        $n = ich($this->ctx);
+        q($this->db(), 'update nutzer set tutorial_gesehen = ? where id = ?', [jetzt(), $n['id']]);
+        return true;
+    }
+
     // ---------------------------------------------------------------- Redigieren mitzählen
     /** Nur mit Berechtigung „Redigieren“ und wenn der Admin den Zähler eingeschaltet hat */
     private function redigierer(): array
@@ -1429,15 +1439,16 @@ final class Honorare
         return (int) wert($this->db(), "select count(*) from anfragen where status = 'offen'");
     }
 
-    public function anfrageFreischalten(mixed $anfrageId = null, mixed $rollen = ['autor']): array
+    public function anfrageFreischalten(mixed $anfrageId = null, mixed $rollen = ['autor'], mixed $nachricht = ''): array
     {
         $db = $this->db();
         $admin = brauche($this->ctx, 'admin');
+        $nachricht = persoenliche_nachricht($nachricht);
         $r = rollen_normalisieren($rollen);
         pruefe($r, 'Bitte mindestens eine Rolle wählen.');
         $passwort = startpasswort();
         $hash = passwort_hash($passwort);
-        return transaktion($db, function () use ($db, $admin, $anfrageId, $r, $passwort, $hash) {
+        return transaktion($db, function () use ($db, $admin, $anfrageId, $r, $passwort, $hash, $nachricht) {
             $a = zeile($db, 'select * from anfragen where id = ?', [s($anfrageId)]);
             pruefe($a, 'Diese Anfrage gibt es nicht (mehr).', 404);
             pruefe($a['status'] === 'offen', 'Diese Anfrage wurde bereits bearbeitet.');
@@ -1445,7 +1456,8 @@ final class Honorare
             $id = konto_einfuegen($db, $a['vorname'], $a['nachname'], $a['email'], $r, $hash);
             q($db, "update anfragen set status = 'freigeschaltet', bearbeitet_am = ?, bearbeitet_von = ? where id = ?", [jetzt(), anzeigename($admin), $a['id']]);
             $this->log('info', 'konten', "Zugangsanfrage freigeschaltet: {$a['vorname']} {$a['nachname']} ({$a['email']})");
-            return zugang_melden($db, ['id' => $id, 'email' => $a['email'], 'vorname' => $a['vorname'], 'passwort' => $passwort]);
+            return zugang_melden($db, ['id' => $id, 'email' => $a['email'], 'vorname' => $a['vorname'], 'passwort' => $passwort,
+                'nachricht' => $nachricht, 'von' => anzeigename($admin)]);
         });
     }
 
@@ -1462,8 +1474,9 @@ final class Honorare
     public function nutzerAnlegen(mixed $daten = []): array
     {
         $db = $this->db();
-        brauche($this->ctx, 'admin');
+        $admin = brauche($this->ctx, 'admin');
         $d = is_array($daten) ? $daten : [];
+        $nachricht = persoenliche_nachricht($d['nachricht'] ?? '');
         $email = strtolower(tr($d['email'] ?? ''));
         pruefe(!leer($d['vorname'] ?? '') && !leer($d['nachname'] ?? ''), 'Bitte Vor- und Nachnamen angeben.');
         pruefe(ist_email($email), 'Bitte eine gültige E-Mail-Adresse angeben.');
@@ -1471,13 +1484,24 @@ final class Honorare
         pruefe($r, 'Bitte mindestens eine Rolle wählen.');
         $passwort = startpasswort();
         $hash = passwort_hash($passwort);
-        return transaktion($db, function () use ($db, $d, $email, $r, $passwort, $hash) {
+        return transaktion($db, function () use ($db, $d, $email, $r, $passwort, $hash, $nachricht, $admin) {
             pruefe(!wert($db, 'select 1 from nutzer where email = ?', [$email]), 'Für diese E-Mail-Adresse gibt es schon ein Konto.');
             $id = konto_einfuegen($db, s($d['vorname']), s($d['nachname']), $email, $r, $hash);
             q($db, "update anfragen set status = 'freigeschaltet', bearbeitet_am = ? where email = ? and status = 'offen'", [jetzt(), $email]);
             $this->log('info', 'konten', 'Konto angelegt: ' . tr($d['vorname']) . ' ' . tr($d['nachname']) . " ($email), Rollen: " . implode(', ', $r));
-            return zugang_melden($db, ['id' => $id, 'email' => $email, 'vorname' => tr($d['vorname']), 'passwort' => $passwort]);
+            return zugang_melden($db, ['id' => $id, 'email' => $email, 'vorname' => tr($d['vorname']), 'passwort' => $passwort,
+                'nachricht' => $nachricht, 'von' => anzeigename($admin)]);
         });
+    }
+
+    /** Standard-Nachricht für die Mails an neue Konten (vorausgefüllt beim Anlegen, Einladen und Freischalten) */
+    public function begruessungSpeichern(mixed $text = ''): string
+    {
+        brauche($this->ctx, 'admin');
+        $t = persoenliche_nachricht($text);
+        upsert($this->db(), 'einstellungen', ['schluessel' => 'begruessung', 'wert' => json_text($t)], ['schluessel']);
+        $this->log('info', 'einstellungen', $t === '' ? 'Standard-Nachricht für neue Konten gelöscht' : 'Standard-Nachricht für neue Konten gespeichert');
+        return $t;
     }
 
     public function nutzerListe(): array
@@ -1978,7 +2002,8 @@ final class Honorare
         $mail = $an !== '' && mail_einstellungen($db)['aktiv'];
         // gleich verschicken, damit der Admin sieht, ob es geklappt hat
         // geht gleich nach der Antwort hinaus; das Ergebnis fragt die Seite mit mailStatus ab
-        $mailId = $mail ? mail_einreihen($db, $an, mail_einladung($db, $link, $tage, $admin)) : null;
+        $nachricht = persoenliche_nachricht($d['nachricht'] ?? '');
+        $mailId = $mail ? mail_einreihen($db, $an, mail_einladung($db, $link, $tage, $admin, $nachricht)) : null;
         $this->log('info', 'konten', "Registrierungslink erstellt: $tage Tage, " . ($max === null ? 'beliebig oft' : "{$max}×") . ($an !== '' ? ", an $an" : ''));
         return ['link' => $link, 'mail' => $mail, 'mail_id' => $mailId, 'email' => $an, 'tage' => $tage, 'max' => $max];
     }
@@ -2206,6 +2231,14 @@ function email_geaendert_melden(PDO $db, string $vorname, string $alt, string $n
     if (!mail_einstellungen($db)['aktiv']) return false;
     foreach ([$alt, $neu] as $an) mail_einreihen($db, $an, mail_email_geaendert($db, $vorname, $alt, $neu));
     return true;
+}
+
+/** Persönliche Nachricht des Admins für die Zugangs- oder Einladungsmail (höchstens 2000 Zeichen) */
+function persoenliche_nachricht(mixed $text): string
+{
+    $t = trim(str_replace("\r\n", "\n", is_string($text) ? $text : ''));
+    pruefe(mb_strlen($t) <= 2000, 'Die Nachricht ist zu lang (höchstens 2000 Zeichen).');
+    return $t;
 }
 
 function zugang_melden(PDO $db, array $z, bool $neu = true): array

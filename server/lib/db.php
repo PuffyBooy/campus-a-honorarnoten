@@ -391,6 +391,11 @@ const MIGRATIONEN = [
       zuletzt_am  text
     );
     SQL,
+    // v25: Tutorial für neue Konten – wer schon angemeldet war, bekommt es nicht ungefragt
+    <<<'SQL'
+    alter table nutzer add column tutorial_gesehen text;
+    update nutzer set tutorial_gesehen = coalesce(letzter_login, erstellt_am) where letzter_login is not null;
+    SQL,
 ];
 
 // MySQL/MariaDB (z. B. bei World4You, wo SQLite fehlt): dasselbe Schema in einem Schritt. Spätere Änderungen
@@ -755,6 +760,11 @@ const MYSQL_MIGRATIONEN = [
       unique key api_schluessel_hash (hash),
       foreign key (nutzer_id) references nutzer(id) on delete cascade
     ) engine=InnoDB default charset=utf8mb4 collate=utf8mb4_unicode_ci;
+    SQL,
+    // v18: Tutorial für neue Konten – wer schon angemeldet war, bekommt es nicht ungefragt
+    <<<'SQL'
+    alter table nutzer add column tutorial_gesehen varchar(30) null;
+    update nutzer set tutorial_gesehen = coalesce(letzter_login, erstellt_am) where letzter_login is not null;
     SQL,
 ];
 

@@ -365,7 +365,15 @@ test('Buchhaltung: PDF an sich selbst mailen (als Anhang)', async () => {
 
 test('Link in der Zugangs-Mail meldet direkt an (einmal, danach eigenes Passwort)', async () => {
   const vorher = php.smtp.mails.length;
-  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Lina', nachname: 'Link', email: 'lina@example.org', rollen: ['autor'] });
+  // persönliche Nachricht des Admins steht in der Zugangs-Mail (Standard-Nachricht lässt sich speichern)
+  assert.match((await k.admin.aufruf('nutzerAnlegen', { vorname: 'Lina', nachname: 'Link', email: 'lina@example.org', rollen: ['autor'],
+    nachricht: 'x'.repeat(2001) })).fehler, /zu lang/);
+  assert.equal(await k.admin.ok('begruessungSpeichern', '  Willkommen im Team!\nBei Fragen: einfach melden.  '), 'Willkommen im Team!\nBei Fragen: einfach melden.');
+  assert.equal((await k.admin.ok('einstellungen')).begruessung, 'Willkommen im Team!\nBei Fragen: einfach melden.');
+  assert.equal((await k.rita.aufruf('begruessungSpeichern', 'x')).status, 403);
+  const z = await k.admin.ok('nutzerAnlegen', { vorname: 'Lina', nachname: 'Link', email: 'lina@example.org', rollen: ['autor'],
+    nachricht: 'Schön, dass du dabei bist, Lina!\nAlex' });
+  assert.equal(z.nachricht, 'Schön, dass du dabei bist, Lina!\nAlex');
   assert.match(z.link, /#\/link\/[\w-]{20,}$/);
   // die Antwort wartet nicht auf den Mailserver – die Mail geht gleich danach hinaus, die Seite fragt das Ergebnis ab
   assert.equal(z.mail, true);
@@ -376,12 +384,21 @@ test('Link in der Zugangs-Mail meldet direkt an (einmal, danach eigenes Passwort
   assert.ok(mail, 'Zugangs-Mail verschickt');
   assert.equal((await k.rita.aufruf('mailStatus', z.mail_id)).status, 403, 'nur für Admins');
   assert.ok(mail.html.includes(z.link.replace(/&/g, '&amp;')), 'der Knopf führt zum Anmeldelink');
+  assert.ok(mail.html.includes('Nachricht von Alex Admin:') && mail.html.includes('Schön, dass du dabei bist, Lina!<br />'), 'Nachricht in der Mail (HTML)');
+  assert.ok(mail.text.includes('Schön, dass du dabei bist, Lina!'), 'Nachricht in der Mail (Text)');
+  await k.admin.ok('begruessungSpeichern', '');
   const token = z.link.split('#/link/')[1];
   const lina = client();
   const n = await lina.ok('linkAnmelden', token);
   assert.equal(n.email, 'lina@example.org');
   assert.equal(n.muss_passwort_aendern, true, 'danach eigenes Passwort festlegen');
   assert.equal((await lina.ok('aktuellerNutzer')).email, 'lina@example.org');
+  // neues Konto: Tour noch nicht gesehen – nach dem Ende vermerkt
+  assert.equal((await lina.ok('aktuellerNutzer')).tutorial_gesehen, null);
+  assert.equal((await lina.aufruf('tutorialGesehen')).status, 403, 'erst nach dem eigenen Passwort');
+  assert.equal((await k.anna.ok('aktuellerNutzer')).tutorial_gesehen, null);
+  await k.anna.ok('tutorialGesehen');
+  assert.ok((await k.anna.ok('aktuellerNutzer')).tutorial_gesehen, 'Tour als gesehen vermerkt');
   assert.match((await client().aufruf('linkAnmelden', token)).fehler, /schon verwendet/);
   assert.equal((await client().aufruf('linkAnmelden', 'falsch')).status, 404);
   // neues Startpasswort: neuer Link, der alte gilt nicht mehr
