@@ -131,8 +131,9 @@ let zugangsdaten = null;
 function zugangsText(z) {
   return `Hallo ${z.vorname},\n\ndein Zugang zu den Anerkennungsprämien von campus a college und campus a ist bereit.\n\n`
     + `Mit diesem Link bist du direkt angemeldet (gilt einmal, 7 Tage):\n${z.link}\n\n`
+    + (z.nachricht ? `${z.nachricht}\n\n` : '')
     + `Oder anmelden mit\nE-Mail: ${z.email}\nStartpasswort: ${z.passwort}\n\n`
-    + 'Beim ersten Anmelden legst du dein eigenes Passwort fest.\n\nLiebe Grüße\ndeine Redaktion';
+    + 'Beim ersten Anmelden legst du dein eigenes Passwort fest. Danach zeigt dir eine kurze Tour, wie alles funktioniert.\n\nLiebe Grüße\ndeine Redaktion';
 }
 
 /**
@@ -220,13 +221,34 @@ function rollenAuswahl(vorauswahl = ['autor'], ohne = []) {
 
 const gewaehlteRollen = (el) => Array.from(el.querySelectorAll('[data-rolle]:checked'), (x) => x.dataset.rolle);
 
+/**
+ * Persönliche Nachricht für die Mail an neue Konten (Zugangsdaten oder Einladung). Vorausgefüllt mit der
+ * gespeicherten Standard-Nachricht; mit dem Häkchen wird der Text zur neuen Standard-Nachricht.
+ */
+function nachrichtFeld(praefix, standard = '') {
+  return `<div class="feld nachricht-feld">
+      <label for="${praefix}-nachricht">Persönliche Nachricht in der E-Mail <span class="optional">(optional)</span></label>
+      <textarea id="${praefix}-nachricht" name="nachricht" rows="4" maxlength="2000"
+        placeholder="z. B. Willkommen im Team! Bei Fragen melde dich jederzeit bei mir.">${esc(standard)}</textarea>
+      <label class="check klein"><input type="checkbox" name="als_standard"> Als Standard-Nachricht für alle neuen Konten merken</label>
+      <p class="hinweis">Steht in der Mail hervorgehoben unter der Begrüßung, mit deinem Namen.</p>
+    </div>`;
+}
+
+/** Nachricht aus dem Formular; mit Häkchen vorher als Standard speichern */
+async function nachrichtAus(store, el) {
+  const text = el.querySelector('[name=nachricht]')?.value ?? '';
+  if (el.querySelector('[name=als_standard]')?.checked) await store.begruessungSpeichern(text);
+  return text;
+}
+
 // Zuletzt erstellter Registrierungslink – der Link selbst ist nur jetzt sichtbar (gespeichert wird nur ein Hash)
 let neuerLink = null;
 const LINK_GUELTIG = { 1: '1 Tag', 3: '3 Tage', 7: '7 Tage', 14: '14 Tage', 30: '30 Tage' };
 
 /** Registrierungslinks: verschicken, wer ihn hat, legt sein Konto selbst an (begrenzte Zeit und Anzahl) */
 async function einladen(inhalt, { store, neuLaden, istDemo }) {
-  const links = await store.registrierungslinks();
+  const [links, einst] = await Promise.all([store.registrierungslinks(), store.einstellungen()]);
   const nutzbar = (l) => (l.max == null ? `${l.nutzungen} verwendet` : `${l.nutzungen} von ${l.max} verwendet`);
   inhalt.innerHTML = `
     ${neuerLink ? `<section class="karte zugangsdaten" role="status">
@@ -261,6 +283,7 @@ async function einladen(inhalt, { store, neuLaden, istDemo }) {
         <div class="feld"><label for="l-notiz">Notiz <span class="optional">(optional, nur für dich)</span></label>
           <input id="l-notiz" name="notiz" maxlength="200" placeholder="z. B. Neue Klasse 7B"></div>
       </div>
+      ${nachrichtFeld('l', einst.begruessung)}
       ${istDemo ? '<p class="klein">In der Demo werden keine E-Mails verschickt. Den Link kannst du hier kopieren und im selben Browser öffnen.</p>' : ''}
       <p class="feldfehler" role="alert"></p>
       <button type="submit" class="btn btn-primaer">Link erstellen</button>
@@ -292,7 +315,7 @@ async function einladen(inhalt, { store, neuLaden, istDemo }) {
       try {
         neuerLink = await store.registrierungslinkErstellen({
           tage: Number(form.tage.value), max: form.max.value === '' ? null : Number(form.max.value),
-          rollen: gewaehlteRollen(form), email: form.email.value, notiz: form.notiz.value,
+          rollen: gewaehlteRollen(form), email: form.email.value, notiz: form.notiz.value, nachricht: await nachrichtAus(store, form),
         });
         await neuLaden();
       } catch (e) {
@@ -309,10 +332,11 @@ async function einladen(inhalt, { store, neuLaden, istDemo }) {
 }
 
 async function anfragen(inhalt, { store, neuLaden }) {
-  const alle = await store.anfragen();
+  const [alle, einst] = await Promise.all([store.anfragen(), store.einstellungen()]);
   const offen = alle.filter((a) => a.status === 'offen');
   const erledigt = alle.filter((a) => a.status !== 'offen').slice(0, 30);
   inhalt.innerHTML = `
+    ${offen.length ? `<form class="karte" id="anfragen-nachricht" novalidate>${nachrichtFeld('a', einst.begruessung)}</form>` : ''}
     ${offen.length ? `<ul class="liste">${offen.map((a) => `
       <li class="karte anfrage" data-id="${esc(a.id)}">
         <div class="note-kopf"><h2>${esc(a.vorname)} ${esc(a.nachname)}</h2>
@@ -345,7 +369,7 @@ async function anfragen(inhalt, { store, neuLaden }) {
     if ('freischalten' in knopf.dataset) {
       await mitSperre(knopf, async () => {
         try {
-          zugangsdaten = await store.anfrageFreischalten(a.id, gewaehlteRollen(karte));
+          zugangsdaten = await store.anfrageFreischalten(a.id, gewaehlteRollen(karte), await nachrichtAus(store, inhalt.querySelector('#anfragen-nachricht')));
           meldung(`${a.vorname} ${a.nachname} ist freigeschaltet.`, 'erfolg');
           await neuLaden();
         } catch (e) {
@@ -374,7 +398,7 @@ async function versuche(fn, erfolg, neuLaden, { immerNeuLaden = false } = {}) {
 }
 
 async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
-  const liste = await store.nutzerListe();
+  const [liste, einst] = await Promise.all([store.nutzerListe(), store.einstellungen()]);
   inhalt.innerHTML = `
     <details class="karte aufklapp" id="neu-anlegen">
       <summary>+ Person direkt anlegen</summary>
@@ -387,6 +411,7 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
         <input id="n-email" name="email" type="email" inputmode="email" required>
         <p class="klein">Rollen:</p>
         ${rollenAuswahl()}
+        ${nachrichtFeld('n', einst.begruessung)}
         <p class="feldfehler" role="alert"></p>
         <button type="submit" class="btn btn-primaer">Konto anlegen</button>
       </form>
@@ -427,7 +452,7 @@ async function benutzer(inhalt, { store, nutzer: ich, neuLaden }) {
       try {
         zugangsdaten = await store.nutzerAnlegen({
           vorname: anlegen.vorname.value, nachname: anlegen.nachname.value,
-          email: anlegen.email.value, rollen: gewaehlteRollen(anlegen),
+          email: anlegen.email.value, rollen: gewaehlteRollen(anlegen), nachricht: await nachrichtAus(store, anlegen),
         });
         meldung('Konto angelegt.', 'erfolg');
         await neuLaden();

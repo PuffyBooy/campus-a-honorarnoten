@@ -849,3 +849,20 @@ body.nur-fenster .inhalt:has(.melden) { padding-top: .5rem; }
 .kopier-zeile input { flex: 1; min-width: 0; margin: 0; }
 .befehl-text { width: 100%; font-size: .78rem; white-space: pre-wrap; }
 #ew-karte h3 { margin: 1rem 0 .3rem; font-size: 1rem; }
+
+/* ---- Geführte Tour (neue Konten, „Hilfe“) */
+.tour { position: fixed; left: 0; right: 0; bottom: 0; z-index: 1000; display: flex; justify-content: center; padding: 0 12px 12px; pointer-events: none; }
+.tour-karte { pointer-events: auto; width: 100%; max-width: 520px; background: var(--flaeche); color: var(--text); border-radius: 14px;
+  box-shadow: 0 10px 40px rgb(0 0 0 / 30%); padding: 16px 18px 14px; border-top: 4px solid var(--marke); }
+.tour-karte h2 { margin: 2px 0 6px; font-size: 1.15rem; }
+.tour-karte p { margin: 0 0 10px; }
+.tour-schritt { margin: 0; color: var(--text-leise); }
+.tour-knoepfe { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; }
+/* erklärte Stelle: Rahmen und der Rest der Seite leicht abgedunkelt (der Schatten fängt keine Klicks ab) */
+.tour-ziel { position: relative; z-index: 900; outline: 3px solid var(--marke); outline-offset: 4px; border-radius: 8px;
+  box-shadow: 0 0 0 9999px rgb(0 0 0 / 35%); }
+body.tour-an .inhalt { padding-bottom: 240px; }
+.hilfe-schritte { padding-left: 1.25rem; }
+.hilfe-schritte li { margin: 0 0 .8rem; }
+.nachricht-feld { margin-top: 1rem; }
+.nachricht-feld textarea { width: 100%; }

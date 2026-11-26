@@ -44,15 +44,20 @@ function mail_bauen(array $t): array
     $randFarben = ['erfolg' => '#1a7f37', 'gefahr' => '#b42318', 'info' => FARBE];
 
     $html = '';
-    foreach ($t['absaetze'] ?? [] as $a) {
-        $html .= '<p class="m-text" style="margin:0 0 16px;' . m_stil(16) . '">' . nl2br(h($a)) . '</p>';
-    }
+    $kasten = '';
     if (!empty($t['hinweis'])) {
         [$text, $art] = $t['hinweis'] + [1 => 'info'];
-        $html .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 20px;"><tr>'
+        $kasten = '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 20px;"><tr>'
             . '<td class="m-kasten m-text" style="background:#f4f7f6;border-left:3px solid ' . ($randFarben[$art] ?? FARBE) . ';padding:12px 16px;'
             . m_stil(15) . '">' . nl2br(h($text)) . '</td></tr></table>';
     }
+    // 'hinweis_nach' => n: der Kasten steht nach dem n-ten Absatz (z. B. 1: gleich unter „Hallo …,“), sonst nach allen
+    $nach = isset($t['hinweis_nach']) ? (int) $t['hinweis_nach'] : count($t['absaetze'] ?? []);
+    foreach (array_values($t['absaetze'] ?? []) as $i => $a) {
+        if ($i === $nach) $html .= $kasten;
+        $html .= '<p class="m-text" style="margin:0 0 16px;' . m_stil(16) . '">' . nl2br(h($a)) . '</p>';
+    }
+    if ($nach >= count($t['absaetze'] ?? [])) $html .= $kasten;
     if (!empty($t['tabelle'])) {
         $html .= '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="margin:4px 0 22px;border-collapse:collapse;">';
         foreach ($t['tabelle'] as $zeile) {
@@ -120,8 +125,12 @@ function mail_bauen(array $t): array
 
     // Textfassung
     $text = $t['titel'] . "\n" . str_repeat('=', min(60, mb_strlen($t['titel']))) . "\n\n";
-    foreach ($t['absaetze'] ?? [] as $a) $text .= $a . "\n\n";
-    if (!empty($t['hinweis'])) $text .= '» ' . $t['hinweis'][0] . "\n\n";
+    $nach = isset($t['hinweis_nach']) ? (int) $t['hinweis_nach'] : count($t['absaetze'] ?? []);
+    foreach (array_values($t['absaetze'] ?? []) as $i => $a) {
+        if ($i === $nach && !empty($t['hinweis'])) $text .= '» ' . $t['hinweis'][0] . "\n\n";
+        $text .= $a . "\n\n";
+    }
+    if (!empty($t['hinweis']) && $nach >= count($t['absaetze'] ?? [])) $text .= '» ' . $t['hinweis'][0] . "\n\n";
     foreach ($t['tabelle'] ?? [] as $zeile) $text .= "{$zeile[0]}: {$zeile[1]}\n";
     if (!empty($t['tabelle'])) $text .= "\n";
     foreach ($t['positionen'] ?? [] as [$titel, $datum, $betrag]) $text .= "- $titel ($datum): $betrag\n";
@@ -348,16 +357,25 @@ function mail_anfrage_admin(PDO $db, array $a): array
     ]);
 }
 
+/** Persönliche Nachricht als hervorgehobener Kasten (Text mit Absätzen) */
+function nachricht_kasten(string $nachricht, string $von): ?array
+{
+    return $nachricht === '' ? null : ["Nachricht von $von:\n\n$nachricht", 'info'];
+}
+
 function mail_zugang(PDO $db, array $z, bool $neu = true): array
 {
     return mail_bauen([
+        'hinweis' => nachricht_kasten((string) ($z['nachricht'] ?? ''), (string) ($z['von'] ?? '')),
+        'hinweis_nach' => 1, // gleich unter „Hallo …,“
         'betreff' => $neu ? 'Dein Zugang zu den Anerkennungsprämien' : 'Dein neues Startpasswort für die Prämienabrechnungen',
         'vorschau' => $neu ? 'Dein Konto ist bereit – hier sind deine Zugangsdaten.' : 'Hier ist dein neues Startpasswort.',
         'titel' => $neu ? 'Willkommen bei den Anerkennungsprämien!' : 'Neues Startpasswort',
         'absaetze' => array_values(array_filter([
             "Hallo {$z['vorname']},",
             $neu ? 'dein Zugang zu den Anerkennungsprämien von campus a college und campus a ist bereit.' : 'für dein Konto wurde ein neues Startpasswort erstellt.',
-            'Mit dem Knopf unten bist du direkt angemeldet und legst ein eigenes Passwort fest' . ($neu ? '. Danach trägst du Adresse, IBAN und den Link zu deinem Profil ein.' : '.'),
+            'Mit dem Knopf unten bist du direkt angemeldet und legst ein eigenes Passwort fest' . ($neu ? '. Danach trägst du Adresse, IBAN und den Link zu deinem Profil ein – '
+                . 'und eine kurze Tour zeigt dir, wie alles funktioniert.' : '.'),
             'Falls der Knopf nicht mehr gilt: Anmelden geht auch mit deiner E-Mail-Adresse und dem Startpasswort.',
         ])),
         'tabelle' => [['E-Mail', $z['email']], ['Startpasswort', $z['passwort'], true]],
@@ -404,10 +422,12 @@ function mail_registriert_admin(PDO $db, array $n): array
     ]);
 }
 
-function mail_einladung(PDO $db, string $link, int $tage, array $von): array
+function mail_einladung(PDO $db, string $link, int $tage, array $von, string $nachricht = ''): array
 {
     $bis = $tage === 1 ? 'einen Tag' : "$tage Tage";
     return mail_bauen([
+        'hinweis' => nachricht_kasten($nachricht, anzeigename($von)),
+        'hinweis_nach' => 1,
         'betreff' => 'Einladung zu den Anerkennungsprämien',
         'vorschau' => 'Mit diesem Link legst du dein Konto selbst an.',
         'titel' => 'Du bist eingeladen',

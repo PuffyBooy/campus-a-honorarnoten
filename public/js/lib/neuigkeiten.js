@@ -2,6 +2,14 @@
 // Neue Einträge oben anfügen (id = Datum, bei mehreren am Tag mit Buchstaben).
 export const NEUIGKEITEN = [
   {
+    id: '2026-11-26a', datum: '2026-11-26', titel: 'Hilfe und geführte Tour',
+    punkte: [
+      ['', 'Oben im Menü gibt es jetzt „Hilfe“: eine geführte Tour durch die App, kurze Anleitungen für deine Aufgaben und häufige Fragen.'],
+      ['', 'Neue Konten bekommen die Tour nach dem ersten Einrichten automatisch.'],
+      ['admin', 'Beim Anlegen, Einladen und Freischalten kannst du eine persönliche Nachricht in die E-Mail schreiben – und sie als Standard für alle neuen Konten merken.'],
+    ],
+  },
+  {
     id: '2026-11-04b', datum: '2026-11-04', titel: 'Redigier-Zähler: mehr Wege zum automatischen Zählen', nur: 'redigier_zaehler',
     punkte: [
       ['redigieren', 'Mein Profil → „Automatisch zählen“: Lesezeichen „＋1 redigiert“ für jeden Browser (auch Safari und iPhone), die Chrome-Erweiterung oder ein persönlicher Schlüssel für Claude, Kurzbefehle und eigene Programme.'],

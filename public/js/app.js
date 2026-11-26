@@ -18,6 +18,8 @@ import * as neuSeite from './views/neu.js';
 import * as redigierenLive from './views/redigieren.js';
 import * as zaehlen from './views/zaehlen.js';
 import * as melden from './views/melden.js';
+import * as hilfe from './views/hilfe.js';
+import { tourLaeuft, tourStarten } from './lib/tour.js';
 import { sucheOeffnen } from './lib/suche.js';
 import { NEUESTE, ungesehen } from './lib/neuigkeiten.js';
 import { hinweisOffen, zustimmungHtml } from './lib/rechtliches.js';
@@ -60,6 +62,7 @@ const ROUTEN = [
   { pfad: 'admin/:tab', view: admin, rolle: ['admin'] },
   { pfad: 'profil', view: profil, rolle: ['autor', 'redaktion', 'buchhaltung', 'admin'] },
   { pfad: 'neu', view: neuSeite, rolle: ['autor', 'redaktion', 'buchhaltung', 'admin'] },
+  { pfad: 'hilfe', view: hilfe, rolle: ['autor', 'redaktion', 'buchhaltung', 'admin', 'redigieren'] },
 ];
 
 /** „Maria Muster“ -> „MM“ für den runden Knopf zum Profil */
@@ -175,6 +178,7 @@ async function renderNav(nutzer, pfad) {
   nav.innerHTML = `<div class="nav-links">${navLinks(nutzer, pfad)}</div>
     <div class="nav-konto">
       <button type="button" class="nav-suche" id="suche-oeffnen" title="Suchen (Strg + K)" aria-label="Suchen">🔍<span class="nav-suche-text"> Suchen</span></button>
+      <a href="#/hilfe" class="nav-suche nav-hilfe" id="hilfe-oeffnen" title="Hilfe und Tour"${pfad === 'hilfe' ? ' aria-current="page"' : ''}>?<span class="nav-suche-text"> Hilfe</span></a>
       <a href="#/profil" class="nav-user"${pfad === 'profil' ? ' aria-current="page"' : ''}
          title="Mein Profil · ${esc(nutzer.email)}"><span class="avatar" aria-hidden="true">${esc(initialen(nutzer))}</span>${esc(nutzer.vorname)} ${esc(nutzer.nachname)}</a>
       <button type="button" class="btn-link" id="abmelden">Abmelden</button>
@@ -476,6 +480,8 @@ async function render({ schnell = false } = {}) {
       zuletzt = { route: treffer.route, nutzer };
       wechselEnde();
       artikelVorladen(nutzer, pfad);
+      // neues Konto: nach dem Einrichten einmal die geführte Tour (danach über „Hilfe“)
+      if (!nutzer.tutorial_gesehen && !nutzer.ansicht_von && !tourLaeuft()) tourStarten({ nutzer, store, automatisch: true });
     }
   } catch (e) {
     console.error(e);

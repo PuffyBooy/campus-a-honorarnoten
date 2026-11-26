@@ -194,7 +194,8 @@ const anzeigename = (n) => `${n.vorname} ${n.nachname}`.trim() || n.email;
 function nutzerSicht(n) {
   if (!n) return null;
   const { passwort, zwei_faktor: zf, zwei_faktor_neu: zn, zwei_faktor_codes: zc, zwei_faktor_schritt: zs, ...rest } = n;
-  return { ...kopie(rest), zwei_faktor: Boolean(zf) };
+  // Tutorial: neue Konten haben null; die Beispielkonten der Demo gelten als „gesehen“ (Tour über „Hilfe“ startbar)
+  return { ...kopie(rest), zwei_faktor: Boolean(zf), tutorial_gesehen: rest.tutorial_gesehen === undefined ? 'demo' : rest.tutorial_gesehen };
 }
 
 // ------------------------------------------------------------------ Wartungsmodus (nur Admins kommen hinein)
@@ -250,7 +251,7 @@ export async function demoKontoFrisch(email) {
   }
   db.nutzer.push({
     id: `demo-neu-${id()}`, email, vorname: 'Nora', nachname: 'Neu', rollen: ['autor'], aktiv: true,
-    muss_passwort_aendern: true, passwort: await passwortHash(DEMO_PASSWORT), erstellt_am: jetzt(),
+    muss_passwort_aendern: true, tutorial_gesehen: null, passwort: await passwortHash(DEMO_PASSWORT), erstellt_am: jetzt(),
     profil: { strasse: '', plz_ort: '', kontoinhaber: '', iban: '', bic: '', campus_profil: '', campus_a_profil: '' },
   });
   speichern();
@@ -307,6 +308,7 @@ function kontoErstellen({ vorname, nachname, email, rollen }, passwortDaten) {
     rollen,
     aktiv: true,
     muss_passwort_aendern: true,
+    tutorial_gesehen: null,
     passwort: passwortDaten,
     profil: { strasse: '', plz_ort: '', kontoinhaber: `${trim(vorname)} ${trim(nachname)}`, iban: '', bic: '' },
     erstellt_am: jetzt(),
@@ -355,8 +357,9 @@ function anfrageHolen(anfrageId) {
 const erlaubteRollen = rollenNormalisieren;
 
 /** Anfrage freischalten -> Konto mit Startpasswort. Gibt E-Mail und Startpasswort zurück. */
-export async function anfrageFreischalten(anfrageId, rollen = ['autor']) {
+export async function anfrageFreischalten(anfrageId, rollen = ['autor'], nachricht = '') {
   const admin = brauche('admin');
+  const text = nachrichtPruefen(nachricht); // Demo: es geht keine E-Mail hinaus
   const a = anfrageHolen(anfrageId);
   rollen = erlaubteRollen(rollen);
   pruefe(rollen.length, 'Bitte mindestens eine Rolle wählen.');
@@ -366,7 +369,7 @@ export async function anfrageFreischalten(anfrageId, rollen = ['autor']) {
   const n = kontoErstellen({ ...a, rollen }, hash);
   Object.assign(a, { status: 'freigeschaltet', bearbeitet_am: jetzt(), bearbeitet_von: anzeigename(admin) });
   speichern();
-  return zugang(n, passwort);
+  return { ...zugang(n, passwort), nachricht: text };
 }
 
 export function anfrageAblehnen(anfrageId) {
@@ -377,8 +380,9 @@ export function anfrageAblehnen(anfrageId) {
 }
 
 /** Admin legt eine Person direkt an (ohne Anfrage) */
-export async function nutzerAnlegen({ vorname, nachname, email, rollen }) {
+export async function nutzerAnlegen({ vorname, nachname, email, rollen, nachricht = '' }) {
   brauche('admin');
+  const text = nachrichtPruefen(nachricht); // Demo: es geht keine E-Mail hinaus
   email = trim(email).toLowerCase();
   neuePersonPruefen({ vorname, nachname, email });
   rollen = erlaubteRollen(rollen ?? []);
@@ -390,7 +394,7 @@ export async function nutzerAnlegen({ vorname, nachname, email, rollen }) {
     .forEach((a) => Object.assign(a, { status: 'freigeschaltet', bearbeitet_am: jetzt() }));
   protokoll('info', 'konten', `Konto angelegt: ${anzeigename(n)} (${email}), Rollen: ${rollen.join(', ')}`);
   speichern();
-  return zugang(n, passwort);
+  return { ...zugang(n, passwort), nachricht: text };
 }
 
 /** Nach Login mit Startpasswort: eigenes Passwort festlegen */
@@ -583,8 +587,9 @@ export async function mitLinkRegistrieren(token, { vorname, nachname, email, pas
   return nutzerSicht(n);
 }
 
-export function registrierungslinkErstellen({ tage = 7, max = null, rollen = ['autor'], notiz = '', email = '' } = {}) {
+export function registrierungslinkErstellen({ tage = 7, max = null, rollen = ['autor'], notiz = '', email = '', nachricht = '' } = {}) {
   const admin = brauche('admin');
+  nachrichtPruefen(nachricht);
   tage = Number(tage);
   pruefe(LINK_TAGE.includes(tage), 'Bitte eine Gültigkeit wählen.');
   max = max === null || max === '' ? null : Number(max);
@@ -1400,6 +1405,27 @@ export function serverAktion() {
   return 'In der Demo gibt es keinen Server – die Aktion läuft nur auf dem echten Server.';
 }
 
+/** Persönliche Nachricht für die Mail an neue Konten */
+function nachrichtPruefen(text) {
+  const t = trim(String(text ?? '')).replace(/\r\n/g, '\n');
+  pruefe(t.length <= 2000, 'Die Nachricht ist zu lang (höchstens 2000 Zeichen).');
+  return t;
+}
+
+export function begruessungSpeichern(text = '') {
+  brauche('admin');
+  db.einstellungen.begruessung = nachrichtPruefen(text);
+  speichern();
+  return db.einstellungen.begruessung;
+}
+
+export function tutorialGesehen() {
+  const n = ich();
+  n.tutorial_gesehen = jetzt();
+  speichern();
+  return true;
+}
+
 export function neuigkeitenGesehen(nid) {
   const n = ich();
   pruefe(/^\d{4}-\d{2}-\d{2}[a-z]?$/.test(String(nid)), 'Ungültiger Eintrag.');
@@ -1586,6 +1612,7 @@ export function einstellungen() {
   e.rueckgabe_vorlagen = vorlagenNormalisieren(e.rueckgabe_vorlagen);
   e.erinnerung_tage ??= 3;
   e.redigier_zaehler ??= true; // in der Demo zum Ausprobieren an (auf dem echten Server zuerst aus)
+  e.begruessung ??= '';
   return e;
 }
 
